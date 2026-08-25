@@ -161,7 +161,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -169,7 +169,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -177,7 +177,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-15] = a[2,kr:kr+2]*b[kr:kr+2,0-15]
@@ -185,7 +185,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-15] = a[3,kr:kr+2]*b[kr:kr+2,0-15]
@@ -193,7 +193,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
 
             // Broadcast a[4,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 4) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 4) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[4,0-15] = a[4,kr:kr+2]*b[kr:kr+2,0-15]
@@ -1163,7 +1163,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -1171,7 +1171,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -1179,7 +1179,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-15] = a[2,kr:kr+2]*b[kr:kr+2,0-15]
@@ -1187,7 +1187,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-15] = a[3,kr:kr+2]*b[kr:kr+2,0-15]
@@ -2040,7 +2040,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -2048,7 +2048,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -2056,7 +2056,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-15] = a[2,kr:kr+2]*b[kr:kr+2,0-15]
@@ -2795,7 +2795,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2xlt16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -2803,7 +2803,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2xlt16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -3434,7 +3434,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1xlt16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -3944,7 +3944,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -3952,7 +3952,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -3960,7 +3960,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-15] = a[2,kr:kr+2]*b[kr:kr+2,0-15]
@@ -3968,7 +3968,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-15] = a[3,kr:kr+2]*b[kr:kr+2,0-15]
@@ -3976,7 +3976,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
 
             // Broadcast a[4,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 4) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 4) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[4,0-15] = a[4,kr:kr+2]*b[kr:kr+2,0-15]
@@ -4919,7 +4919,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -4927,7 +4927,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -4935,7 +4935,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-15] = a[2,kr:kr+2]*b[kr:kr+2,0-15]
@@ -4943,7 +4943,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-15] = a[3,kr:kr+2]*b[kr:kr+2,0-15]
@@ -5784,7 +5784,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -5792,7 +5792,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -5800,7 +5800,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x16)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-15] = a[2,kr:kr+2]*b[kr:kr+2,0-15]
@@ -6517,7 +6517,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -6525,7 +6525,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x16)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-15] = a[1,kr:kr+2]*b[kr:kr+2,0-15]
@@ -7126,7 +7126,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x16)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-15] = a[0,kr:kr+2]*b[kr:kr+2,0-15]
@@ -7642,7 +7642,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-31] = a[0,kr:kr+2]*b[kr:kr+2,0-31]
@@ -7651,7 +7651,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-31] = a[1,kr:kr+2]*b[kr:kr+2,0-31]
@@ -7660,7 +7660,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-31] = a[2,kr:kr+2]*b[kr:kr+2,0-31]
@@ -7669,7 +7669,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-31] = a[3,kr:kr+2]*b[kr:kr+2,0-31]
@@ -7678,7 +7678,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
 
             // Broadcast a[4,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 4) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 4) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[4,0-31] = a[4,kr:kr+2]*b[kr:kr+2,0-31]
@@ -8946,7 +8946,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-31] = a[0,kr:kr+2]*b[kr:kr+2,0-31]
@@ -8955,7 +8955,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-31] = a[1,kr:kr+2]*b[kr:kr+2,0-31]
@@ -8964,7 +8964,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-31] = a[2,kr:kr+2]*b[kr:kr+2,0-31]
@@ -8973,7 +8973,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-31] = a[3,kr:kr+2]*b[kr:kr+2,0-31]
@@ -10068,7 +10068,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x32)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-31] = a[0,kr:kr+2]*b[kr:kr+2,0-31]
@@ -10077,7 +10077,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x32)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-31] = a[1,kr:kr+2]*b[kr:kr+2,0-31]
@@ -10086,7 +10086,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x32)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-31] = a[2,kr:kr+2]*b[kr:kr+2,0-31]
@@ -11009,7 +11009,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x32)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-31] = a[0,kr:kr+2]*b[kr:kr+2,0-31]
@@ -11018,7 +11018,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x32)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-31] = a[1,kr:kr+2]*b[kr:kr+2,0-31]
@@ -11765,7 +11765,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x32)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-31] = a[0,kr:kr+2]*b[kr:kr+2,0-31]
@@ -12412,7 +12412,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-47] = a[0,kr:kr+2]*b[kr:kr+2,0-47]
@@ -12422,7 +12422,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-47] = a[1,kr:kr+2]*b[kr:kr+2,0-47]
@@ -12432,7 +12432,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-47] = a[2,kr:kr+2]*b[kr:kr+2,0-47]
@@ -12442,7 +12442,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-47] = a[3,kr:kr+2]*b[kr:kr+2,0-47]
@@ -12452,7 +12452,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
 
             // Broadcast a[4,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 4) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 4) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[4,0-47] = a[4,kr:kr+2]*b[kr:kr+2,0-47]
@@ -14030,7 +14030,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-47] = a[0,kr:kr+2]*b[kr:kr+2,0-47]
@@ -14040,7 +14040,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-47] = a[1,kr:kr+2]*b[kr:kr+2,0-47]
@@ -14050,7 +14050,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-47] = a[2,kr:kr+2]*b[kr:kr+2,0-47]
@@ -14060,7 +14060,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[3,0-47] = a[3,kr:kr+2]*b[kr:kr+2,0-47]
@@ -15410,7 +15410,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-47] = a[0,kr:kr+2]*b[kr:kr+2,0-47]
@@ -15420,7 +15420,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-47] = a[1,kr:kr+2]*b[kr:kr+2,0-47]
@@ -15430,7 +15430,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[2,0-47] = a[2,kr:kr+2]*b[kr:kr+2,0-47]
@@ -16557,7 +16557,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x48)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-47] = a[0,kr:kr+2]*b[kr:kr+2,0-47]
@@ -16567,7 +16567,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x48)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[1,0-47] = a[1,kr:kr+2]*b[kr:kr+2,0-47]
@@ -17483,7 +17483,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x48)
 
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-47] = a[0,kr:kr+2]*b[kr:kr+2,0-47]

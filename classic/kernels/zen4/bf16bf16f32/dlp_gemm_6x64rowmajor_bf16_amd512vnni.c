@@ -330,7 +330,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[0,kr:kr+2]
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 0) + (cs_a * kr))));
 
             b1 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 1)));
             b2 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 2)));
@@ -342,7 +342,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 1) + (cs_a * kr))));
 
             c_float_0p1 = _mm512_dpbf16_ps(c_float_0p1, a_bf16_0, b1);
             c_float_0p2 = _mm512_dpbf16_ps(c_float_0p2, a_bf16_0, b2);
@@ -354,7 +354,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 2) + (cs_a * kr))));
 
             c_float_1p1 = _mm512_dpbf16_ps(c_float_1p1, a_bf16_1, b1);
             c_float_1p2 = _mm512_dpbf16_ps(c_float_1p2, a_bf16_1, b2);
@@ -366,7 +366,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 3) + (cs_a * kr))));
 
             c_float_2p1 = _mm512_dpbf16_ps(c_float_2p1, a_bf16_0, b1);
             c_float_2p2 = _mm512_dpbf16_ps(c_float_2p2, a_bf16_0, b2);
@@ -378,7 +378,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[4,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 4) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 4) + (cs_a * kr))));
 
             c_float_3p1 = _mm512_dpbf16_ps(c_float_3p1, a_bf16_1, b1);
             c_float_3p2 = _mm512_dpbf16_ps(c_float_3p2, a_bf16_1, b2);
@@ -390,7 +390,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[5,kr:kr+2].
             a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 5) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 5) + (cs_a * kr))));
 
             c_float_4p1 = _mm512_dpbf16_ps(c_float_4p1, a_bf16_0, b1);
             c_float_4p2 = _mm512_dpbf16_ps(c_float_4p2, a_bf16_0, b2);
@@ -442,7 +442,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[0,kr:kr+2]
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 0) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 0) + (cs_a * kr))));
 
             b1 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 1)));
             b2 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 2)));
@@ -454,7 +454,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[1,kr:kr+2].
             a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 1) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 1) + (cs_a * kr))));
 
             c_float_0p1 = _mm512_dpbf16_ps(c_float_0p1, a_bf16_0, b1);
             c_float_0p2 = _mm512_dpbf16_ps(c_float_0p2, a_bf16_0, b2);
@@ -466,7 +466,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[2,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 2) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 2) + (cs_a * kr))));
 
             c_float_1p1 = _mm512_dpbf16_ps(c_float_1p1, a_bf16_1, b1);
             c_float_1p2 = _mm512_dpbf16_ps(c_float_1p2, a_bf16_1, b2);
@@ -478,7 +478,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[3,kr:kr+2].
             a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 3) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 3) + (cs_a * kr))));
 
             c_float_2p1 = _mm512_dpbf16_ps(c_float_2p1, a_bf16_0, b1);
             c_float_2p2 = _mm512_dpbf16_ps(c_float_2p2, a_bf16_0, b2);
@@ -490,7 +490,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[4,kr:kr+2].
             a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 4) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 4) + (cs_a * kr))));
 
             c_float_3p1 = _mm512_dpbf16_ps(c_float_3p1, a_bf16_1, b1);
             c_float_3p2 = _mm512_dpbf16_ps(c_float_3p2, a_bf16_1, b2);
@@ -502,7 +502,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[5,kr:kr+2].
             a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 5) + (cs_a * kr))));
+                dlp_load_unaligned_int32(a + (rs_a * 5) + (cs_a * kr))));
 
             c_float_4p1 = _mm512_dpbf16_ps(c_float_4p1, a_bf16_0, b1);
             c_float_4p2 = _mm512_dpbf16_ps(c_float_4p2, a_bf16_0, b2);

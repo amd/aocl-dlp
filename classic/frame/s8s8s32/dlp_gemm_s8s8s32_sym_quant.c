@@ -250,7 +250,8 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         md_t MR = 16;
 
         if (mtag_b == REORDERED) {
-            post_ops_attr.b_col_sum_vec = (int32_t*)(b + k);
+            post_ops_attr.b_col_sum_vec =
+                (int32_t*)(b + dlp_gemm_col_sum_byte_offset(k));
         } else if (mtag_b == PACK) {
             // Unreordered B not supported.
             return;
@@ -877,7 +878,8 @@ DLP_GEMM_5LOOP_UNIFIED(
                 // Only per thread C matrix is stored in temp buffer, so both
                 // per thread jc and ic start should be normalized to zero.
                 if (c_downscale < DLP_F32) {
-                    c_use_ic = c_use_jc + (rs_c_use * (ic - ic_start));
+                    c_use_ic = dlp_offset_or_null_f32(
+                        c_use_jc, (rs_c_use * (ic - ic_start)));
                 } else {
                     c_use_ic = c_use_jc + (rs_c_use * ic);
                 }
@@ -934,9 +936,10 @@ DLP_GEMM_5LOOP_UNIFIED(
                             &(lcntx->dlp_quant_kernel_hndl), mc0, nr0, kc0,
                             (void*)a_use, rs_a_use, cs_a_use, a_block_stride,
                             (void*)(b_use + (jr * kc0_updated)), rs_b_use,
-                            cs_b_use, 0, 0, (void*)(c_use_ic + jr), rs_c_use, 1,
-                            (void*)&alpha, (void*)&beta0, post_op_list,
-                            post_ops_attr, grp_post_ops_attr);
+                            cs_b_use, 0, 0,
+                            (void*)dlp_offset_or_null_f32(c_use_ic, jr),
+                            rs_c_use, 1, (void*)&alpha, (void*)&beta0,
+                            post_op_list, post_ops_attr, grp_post_ops_attr);
                     } else {
                         dlp_gemm_rowvar_s8s8s32os32_6x64m_sym_quant(
                             mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,

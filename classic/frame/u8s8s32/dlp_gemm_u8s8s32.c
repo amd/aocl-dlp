@@ -511,7 +511,8 @@ DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
                 // Only per thread C matrix is stored in temp buffer, so both
                 // per thread jc and ic start should be normalized to zero.
                 if (c_downscale < DLP_S32 || c_downscale == DLP_F32) {
-                    c_use_ic = c_use_jc + (rs_c_use * (ic - ic_start));
+                    c_use_ic = dlp_offset_or_null_s32(
+                        c_use_jc, (rs_c_use * (ic - ic_start)));
                 } else {
                     c_use_ic = c_use_jc + (rs_c_use * ic);
                 }
@@ -571,8 +572,8 @@ DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
                         &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
                         (uint8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
                         (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
-                        cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
-                        (void*)&alpha, (void*)&beta0, post_op_list,
+                        cs_b_use, 0, 0, dlp_offset_or_null_s32(c_use_ic, jr),
+                        rs_c_use, 1, (void*)&alpha, (void*)&beta0, post_op_list,
                         post_ops_attr);
                 }
             }

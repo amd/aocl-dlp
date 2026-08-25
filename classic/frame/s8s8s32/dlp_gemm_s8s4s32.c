@@ -238,7 +238,8 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
 
         // n == 1: the reorder emitted the tight s8 column followed by the
         // per-group column sums, exactly like s8s8 -- consumed directly.
-        post_ops_attr.b_col_sum_vec = (int32_t*)(b + k);
+        post_ops_attr.b_col_sum_vec =
+            (int32_t*)(b + dlp_gemm_col_sum_byte_offset(k));
 
         md_t ic_start, ic_end;
         thread_ic.n_way   = (thread_ic.n_way == 1) ? (thread->n_threads)
@@ -880,7 +881,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                 grp_post_ops_attr.grp_post_op_i = ic;
 
                 if (c_downscale < DLP_F32) {
-                    c_use_ic = c_use_jc + (rs_c_use * (ic - ic_start));
+                    c_use_ic = dlp_offset_or_null_f32(
+                        c_use_jc, (rs_c_use * (ic - ic_start)));
                 } else {
                     c_use_ic = c_use_jc + (rs_c_use * ic);
                 }
@@ -951,8 +953,9 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                     dlp_gemm_rowvar_s8s8s32os32_6x64m_sym_quant(
                         mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
                         a_block_stride, b_kernel, rs_b_use, cs_b_use,
-                        (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                        grp_post_ops_attr, post_op_list, post_ops_attr);
+                        dlp_offset_or_null_f32(c_use_ic, jr), rs_c_use, 1,
+                        alpha, beta0, grp_post_ops_attr, post_op_list,
+                        post_ops_attr);
 
                     post_ops_attr.b_sum_offset += NR;
                 }

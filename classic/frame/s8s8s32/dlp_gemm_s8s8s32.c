@@ -111,7 +111,7 @@ DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
 
         // pack B matrix if rs_b > 1
         if ((mtag_b == PACK)) {
-            mem_b_size_req = sizeof(int8_t) * k + sizeof(int32_t);
+            mem_b_size_req = dlp_gemm_col_sum_byte_offset(k) + sizeof(int32_t);
 
             if (pack_b_buffer_s8s8s32os32 == NULL) {
                 dlp_clsc_err_t ret_err;
@@ -120,7 +120,8 @@ DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
             }
 
             int32_t* pack_b_column_sum =
-                (int32_t*)(pack_b_buffer_s8s8s32os32 + (sizeof(int8_t) * k));
+                (int32_t*)(pack_b_buffer_s8s8s32os32
+                           + dlp_gemm_col_sum_byte_offset(k));
 
             *pack_b_column_sum = 0;
 
@@ -135,7 +136,8 @@ DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
             rs_b_use = 1;
             cs_b_use = 1;
         } else if (mtag_b == REORDERED) {
-            post_ops_attr.b_col_sum_vec = (int32_t*)(b + k);
+            post_ops_attr.b_col_sum_vec =
+                (int32_t*)(b + dlp_gemm_col_sum_byte_offset(k));
         }
 
         // Compute the IC loop thread range for the current thread.
@@ -573,7 +575,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
                 // Only per thread C matrix is stored in temp buffer, so both
                 // per thread jc and ic start should be normalized to zero.
                 if (c_downscale < DLP_S32 || c_downscale == DLP_F32) {
-                    c_use_ic = c_use_jc + (rs_c_use * (ic - ic_start));
+                    c_use_ic = dlp_offset_or_null_s32(
+                        c_use_jc, (rs_c_use * (ic - ic_start)));
                 } else {
                     c_use_ic = c_use_jc + (rs_c_use * ic);
                 }
@@ -632,8 +635,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
                         &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
                         (int8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
                         (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
-                        cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
-                        (void*)&alpha, (void*)&beta0, post_op_list,
+                        cs_b_use, 0, 0, dlp_offset_or_null_s32(c_use_ic, jr),
+                        rs_c_use, 1, (void*)&alpha, (void*)&beta0, post_op_list,
                         post_ops_attr);
                     post_ops_attr.b_sum_offset += NR;
                 }

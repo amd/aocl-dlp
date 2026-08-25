@@ -505,8 +505,8 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
             }
             if (mPartialPieces) {
                 (params->a) = (int8_t*)(params->a) + mFullPieces * params->psA;
-                (params->c) =
-                    (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
+                (params->c) = utils::offsetOrNull(
+                    (int32_t*)(params->c), mFullPieces * MR * params->rsC);
                 (params->grpKernelOpsAttr).grp_post_op_i =
                     og_grp_post_op_i + fringe_row_offset;
                 (params->kernelOpsAttr).post_op_c_i =
@@ -524,7 +524,7 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
                 ((params->k + VNNI_CONST - 1) / VNNI_CONST) * VNNI_CONST;
             params->b = (int8_t*)(params->b) + elementsToProcess * k_updated;
 
-            c_jr = (int32_t*)(c_jr) + elementsToProcess;
+            c_jr = utils::offsetOrNull(c_jr, elementsToProcess);
             (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
             (params->kernelOpsAttr).b_sum_offset += nFullpieces * 16;
             (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
@@ -561,8 +561,8 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
             }
             if (mPartialPieces) {
                 (params->a) = (int8_t*)(params->a) + mFullPieces * params->psA;
-                (params->c) =
-                    (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
+                (params->c) = utils::offsetOrNull(
+                    (int32_t*)(params->c), mFullPieces * MR * params->rsC);
                 (params->grpKernelOpsAttr).grp_post_op_i =
                     og_grp_post_op_i + fringe_row_offset;
                 (params->kernelOpsAttr).post_op_c_i =

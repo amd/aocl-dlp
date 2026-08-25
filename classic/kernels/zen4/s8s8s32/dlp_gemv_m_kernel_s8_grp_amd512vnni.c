@@ -150,10 +150,10 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     b_use += 64;
 
                     // Broadcast col0-col3 elements of A
-                    zmm4 = _mm512_set1_epi32(*(int32_t*)(a_use));
-                    zmm5 = _mm512_set1_epi32(*(int32_t*)(a_use + cs_a));
-                    zmm6 = _mm512_set1_epi32(*(int32_t*)(a_use + cs_a * 2));
-                    zmm7 = _mm512_set1_epi32(*(int32_t*)(a_use + cs_a * 3));
+                    zmm4 = _mm512_set1_epi32(dlp_load_unaligned_int32(a_use));
+                    zmm5 = _mm512_set1_epi32(dlp_load_unaligned_int32(a_use + cs_a));
+                    zmm6 = _mm512_set1_epi32(dlp_load_unaligned_int32(a_use + cs_a * 2));
+                    zmm7 = _mm512_set1_epi32(dlp_load_unaligned_int32(a_use + cs_a * 3));
 
                     zmm4 = _mm512_add_epi8(zmm4, vec_uint8);
                     zmm5 = _mm512_add_epi8(zmm5, vec_uint8);
@@ -213,7 +213,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     zmm3 = _mm512_maskz_loadu_epi16(k8, b_use + 3 * cs_b);
 
                     // Broadcast col0 elements of A
-                    zmm4 = _mm512_set1_epi32(*(int32_t*)(a_use));
+                    zmm4 = _mm512_set1_epi32(dlp_load_unaligned_int32(a_use));
                     zmm4 = _mm512_add_epi8(zmm4, vec_uint8);
 
                     zmm8  = _mm512_dpbusd_epi32(zmm8, zmm4, zmm0);

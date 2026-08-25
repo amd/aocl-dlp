@@ -136,7 +136,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x64_sym_quant)
 
             // Broadcast a[0,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -151,7 +151,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x64_sym_quant)
 
             // Broadcast a[1,kr:kr+4].
             a_int32_1 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -166,7 +166,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x64_sym_quant)
 
             // Broadcast a[2,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -181,7 +181,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x64_sym_quant)
 
             // Broadcast a[3,kr:kr+4].
             a_int32_1 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -196,7 +196,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x64_sym_quant)
 
             // Broadcast a[4,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 4) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 4) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -2273,7 +2273,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x64_sym_quant)
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             // Broadcast a[0,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr)));
             b0 = _mm512_shuffle_epi8(b0, dsmask);
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -2291,7 +2291,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x64_sym_quant)
 
             // Broadcast a[1,kr:kr+4].
             a_int32_1 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -2306,7 +2306,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x64_sym_quant)
 
             // Broadcast a[2,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -2321,7 +2321,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x64_sym_quant)
 
             // Broadcast a[3,kr:kr+4].
             a_int32_1 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -4089,7 +4089,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x64_sym_quant)
             b0 = _mm512_shuffle_epi8(b0, dsmask);
             // Broadcast a[0,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -4107,7 +4107,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x64_sym_quant)
 
             // Broadcast a[1,kr:kr+4].
             a_int32_1 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -4122,7 +4122,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x64_sym_quant)
 
             // Broadcast a[2,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -5591,7 +5591,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x64_sym_quant)
             b0 = _mm512_shuffle_epi8(b0, dsmask);
             // Broadcast a[0,kr:kr+4].
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -5609,7 +5609,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x64_sym_quant)
 
             // Broadcast a[1,kr:kr+4].
             a_int32_1 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -6759,7 +6759,7 @@ DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x64_sym_quant)
 
             // Broadcast a[0,kr]
             a_int32_0 = _mm512_set1_epi32(
-                *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);

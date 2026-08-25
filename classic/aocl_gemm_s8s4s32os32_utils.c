@@ -152,9 +152,9 @@ aocl_get_reorder_buf_size_s8s4s32os32(const char      order,
     md_t            KC      = lcntx_g.blksz.KC;
 
     if ((n == 1) && ((k % group_size) == 0) && ((KC % group_size) == 0)) {
-        // k s8 weights (k is a multiple of 4, so the int32 colsums that follow
-        // stay naturally aligned) + one int32 column sum per group.
-        return (msz_t)(sizeof(int8_t) * k)
+        // k s8 weights, padded so the int32 column sums that follow stay
+        // naturally aligned, + one int32 column sum per group.
+        return (msz_t)dlp_gemm_col_sum_byte_offset(k)
                + (msz_t)num_groups * sizeof(int32_t);
     }
 #endif
@@ -260,7 +260,7 @@ aocl_reorder_s8s4s32os32(const char      order,
     md_t KC = lcntx_g.blksz.KC;
     if ((n == 1) && ((k % group_size) == 0) && ((KC % group_size) == 0)) {
         int32_t* pack_b_column_sum =
-            (int32_t*)(reorder_buf_addr + (k * sizeof(int8_t)));
+            (int32_t*)(reorder_buf_addr + dlp_gemm_col_sum_byte_offset(k));
         const uint8_t* src = (const uint8_t*)input_buf_addr;
 
         for (iter_t k0 = 0; k0 < k; k0 += group_size) {
