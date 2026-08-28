@@ -140,7 +140,7 @@ DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
 DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     // Handle using DLP_GEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if (n == 1) {

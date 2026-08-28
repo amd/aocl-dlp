@@ -557,10 +557,6 @@
         reg, scale, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));          \
     reg = _mm512_add_ps(reg, zero_point);
 
-#ifdef DLP_GEMM_BF16_JIT
-#define CVT_STORE_F32_BF16_MASK(mask, reg, m_ind, n_ind)
-#define CVT_STORE_F32_BF16_MASK_AVX2(reg, mask, ptr)
-#else
 // Downscale store bf16 macro
 #define CVT_STORE_F32_BF16_MASK(mask, reg, m_ind, n_ind)                       \
     _mm256_mask_storeu_epi16((bfloat16*)post_ops_attr.buf_downscale            \
@@ -573,7 +569,6 @@
 #define CVT_STORE_F32_BF16_MASK_AVX2(reg, mask, ptr)                           \
     _mm256_mask_storeu_epi16(ptr, mask,                                        \
                              DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(reg)));
-#endif
 
 #define CVT_STORE_F32_BF16(reg, m_ind, n_ind)                                  \
     CVT_STORE_F32_BF16_MASK(mask_all1, reg, m_ind, n_ind);

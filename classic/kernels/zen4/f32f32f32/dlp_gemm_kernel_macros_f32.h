@@ -800,15 +800,11 @@
     scr = _mm512_cvtepi32_ps(_mm512_maskz_set1_epi32(                          \
         (mask), *((int32_t*)post_ops_list_temp->op_args1)));
 
-#ifdef DLP_GEMM_BF16_JIT
-#define CVT_STORE_F32_BF16_POST_OPS_MASK(ir, jr, reg, mask, m_ind, n_ind)
-#else
 // Downscale store bf16 macro
 #define CVT_STORE_F32_BF16_POST_OPS_MASK(ir, jr, reg, mask, m_ind, n_ind)      \
     _mm256_mask_storeu_epi16(((bfloat16*)b) + (rs_b * (ir + m_ind))            \
                                  + (cs_b * (jr + n_ind)),                      \
                              mask, DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(reg)))
-#endif
 
 // Downscale store s8 macro
 #define CVT_STORE_F32_S8_POST_OPS_MASK(reg, mask, m_ind, n_ind)                \

@@ -33,8 +33,6 @@
 #include "classic/dlp_simd_casts.h"
 #include "dlp_gemm_f32_kern_macros.h"
 
-#ifndef DLP_GEMM_BF16_JIT
-
 // 6xlt16 bf16s4f32of32 fringe kernel
 DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
 {
@@ -5973,4 +5971,3 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x48_DISABLE)
     }
 }
 // clang-format on
-#endif

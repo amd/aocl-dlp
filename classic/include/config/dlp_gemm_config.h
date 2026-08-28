@@ -32,11 +32,6 @@
 #include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 
-#define DLP_GEMM_BF16_MR 6
-#define DLP_GEMM_BF16_NR 64
-// num_f32_elems_per_zmm = zmm_width / sizeof( float )
-#define NUM_F32_ELEMS_PER_ZMM (64 / sizeof(float))
-
 void
 dlp_init_global_cntx();
 
@@ -268,15 +263,6 @@ dlp_gemm_get_packa_strides(dlp_gemm_cntx_t* lcntx, md_t* rs, md_t* cs);
 
 void
 dlp_gemm_get_packb_strides(dlp_gemm_cntx_t* lcntx, md_t* rs, md_t* cs);
-
-void
-dlp_gemm_set_jit_kernel(void* kernel_fp, md_t m_index, md_t n_index);
-
-void*
-dlp_gemm_get_jit_kernel(md_t m_index, md_t n_index);
-
-bool
-dlp_gemm_get_jit_kernels_generated();
 
 void
 dlp_gemm_mod_block_size_s16(

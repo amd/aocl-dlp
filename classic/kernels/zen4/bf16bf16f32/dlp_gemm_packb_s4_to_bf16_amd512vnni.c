@@ -34,21 +34,6 @@
 #include "classic/dlp_simd_casts.h"
 #include "dlp_gemm_f32_kern_macros.h"
 
-#ifdef DLP_GEMM_BF16_JIT
-
-void
-dlp_packsclb_nr64_bf16s4f32of32(bfloat16*            packb_bf16,
-                                const int8_t*        b,
-                                const md_t           NC,
-                                const md_t           KC,
-                                md_t*                rs_p,
-                                md_t*                cs_p,
-                                dlp_gemm_pre_op_attr pre_ops_attr)
-{
-    // This bf16 packB_s4_bf16 is Not supported for gcc<11.2
-}
-
-#else // DLP_GEMM_BF16_JIT
 /*
 input:__m512i containing 64 int8 elements
 output: two __m512 containing 16 f32 elements
@@ -980,5 +965,3 @@ dlp_packsclb_nr1_bf16s4f32of32(bfloat16*            packb_bf16,
         }
     }
 }
-
-#endif // DLP_GEMM_BF16_JIT

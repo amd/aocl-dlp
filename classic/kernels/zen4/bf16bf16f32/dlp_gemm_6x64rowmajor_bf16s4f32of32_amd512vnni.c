@@ -33,8 +33,6 @@
 #include "classic/dlp_simd_casts.h"
 #include "dlp_gemm_f32_kern_macros.h"
 
-#ifndef DLP_GEMM_BF16_JIT
-
 // 6x64 bf16 kernel
 DLP_GEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 {
@@ -2486,5 +2484,3 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
     }
 }
 // clang-format on
-
-#endif // DLP_GEMM_BF16_JIT

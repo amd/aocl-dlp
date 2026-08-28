@@ -83,18 +83,6 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-#ifdef DLP_GEMM_BF16_JIT
-    if (dlp_gemm_get_jit_kernels_generated() == FALSE) {
-        dlp_print_msg(" Could not generate bf16bf16f32of32 "
-                      " kernels using JIT.",
-                      __FILE__, __LINE__);
-        for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
-        }
-        goto err_hndl;
-    }
-#endif
-
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
 
@@ -427,17 +415,6 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-#ifdef DLP_GEMM_BF16_JIT
-    if (dlp_gemm_get_jit_kernels_generated() == FALSE) {
-        dlp_print_msg(" Could not generate bf16bf16f32of32 "
-                      " kernels using JIT.",
-                      __FILE__, __LINE__);
-        for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
-        }
-        goto err_hndl;
-    }
-#endif
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
 

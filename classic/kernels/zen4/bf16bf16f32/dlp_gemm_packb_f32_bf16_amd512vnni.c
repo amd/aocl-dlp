@@ -31,20 +31,6 @@
 #include <immintrin.h>
 #include <string.h>
 
-#ifdef DLP_GEMM_BF16_JIT
-void
-dlp_packb_mxp_nr64_f32obf16(bfloat16*    pack_b_buffer_f32obf16,
-                            const float* b,
-                            const md_t   rs_b,
-                            const md_t   cs_b,
-                            const md_t   NC,
-                            const md_t   KC,
-                            md_t*        rs_p,
-                            md_t*        cs_p)
-{
-    // f32obf16 is not supported for gcc<11.2
-}
-#else
 void
 dlp_packb_mxp_nr64_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
                                       const float* b,
@@ -1175,4 +1161,3 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
             _mm512_storeu_si512(pack_b_buffer + (kr * NR), a_reg[0]);
     }
 }
-#endif // DLP_GEMM_BF16_JIT

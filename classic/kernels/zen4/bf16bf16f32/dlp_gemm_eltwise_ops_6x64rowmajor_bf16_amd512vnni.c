@@ -31,15 +31,6 @@
 
 #include "dlp_gemm_f32_kern_macros.h"
 
-#ifdef DLP_GEMM_BF16_JIT
-
-DLP_GEMM_ELTWISE_OPS_KERNEL(bfloat16, float, bf16of32_6x64)
-{
-    // Not supported!
-}
-
-#else
-
 DLP_GEMM_ELTWISE_OPS_KERNEL(bfloat16, float, bf16of32_6x64)
 {
     // clang-format off
@@ -1981,5 +1972,3 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_OPS_DISABLE)
     }
 }
 // clang-format on
-
-#endif // DLP_GEMM_BF16_JIT

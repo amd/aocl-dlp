@@ -68,54 +68,6 @@ static dlp_gemm_eltwise_ops_cntx_t global_eltwise_ops_cntx_t_list
 static dlp_arch_t       global_dlp_gemmenable_arch       = DLP_ARCH_ERROR;
 static dlp_instr_pref_t global_dlp_gemmenable_instr_pref = DLP_INSTR_PREF_NONE;
 
-#ifdef DLP_GEMM_BF16_JIT
-// This bool indicates whether JIT kernel generation has been successful.
-static bool jit_kernels_generated = FALSE;
-bool
-dlp_gemm_get_jit_kernels_generated()
-{
-    return jit_kernels_generated;
-}
-#endif
-
-// This array is to store function pointers to jit generated kernels.
-DLP_ALIGN_PREFIX(64)
-static void* global_jit_kernels[DLP_GEMM_BF16_MR]
-                               [(DLP_GEMM_BF16_NR / NUM_F32_ELEMS_PER_ZMM)
-                                + 1] DLP_ALIGN_SUFFIX(64);
-
-// Buffer size is chosen in order to accommodate the
-// worst-case scenario for MR=6 and NR=64.
-// The buffersize is chosen using bruteforce method.
-#define DLP_JIT_REQ_OS_PAGE_SIZE 4096
-#define JIT_KERNEL_SIZE          (14 * DLP_JIT_REQ_OS_PAGE_SIZE)
-
-#ifdef DUMP_JIT_CODE
-// Funtion to Dump JIT generated kernel
-void
-dlp_gemm_dump_jit_code(
-    const void* code, int code_size, const char* code_name, int m, int n)
-{
-    if (code) {
-        static int counter = 0;
-#define MAX_FNAME_LEN 256
-        char fname[MAX_FNAME_LEN + 1];
-        // TODO (Roma): support prefix for code / linux perf dumps
-        snprintf(fname, MAX_FNAME_LEN, "dnnl_dump_cpu_%s_%dx%d.%d.bin",
-                 code_name, m, n, counter);
-        counter++;
-        FILE* fp = fopen(fname, "wb+");
-        // Failure to dump code is not fatal
-        if (fp) {
-            int unused = fwrite(code, code_size, 1, fp);
-            // UNUSED(unused);
-            fclose(fp);
-        }
-    }
-#undef MAX_FNAME_LEN
-}
-#endif
-
 static dlp_pthread_once_t once_check_dlp_gemm_func_map_init =
     DLP_PTHREAD_ONCE_INIT;
 
@@ -225,7 +177,6 @@ _dlp_gemm_cntx_init_func_map()
 #define UBMACRO(ID, FUNC_PTR) global_cntx_t_list[ID].unpackb_fun_ptr = FUNC_PTR;
 #define PBSMACRO(ID, FUNC_PTR)                                                 \
     global_cntx_t_list[ID].packsclb_fun_ptr = FUNC_PTR;
-#define JITMACRO(ID, FUNC_PTR) global_cntx_t_list[ID].jit_kernel = FUNC_PTR;
     // TODO: Default initialize with reference kernels so that kernel pointer
     //  will be valid even in case none of the zen optimized kernels are
     //  available. This scenario could happen if the addon was built using
@@ -249,40 +200,6 @@ _dlp_gemm_cntx_init_func_map()
         DLP_GEMM_PACKBMXP_FUNC_MAP_AVX512_VNNI_BF16
         DLP_GEMM_UNPACKB_FUNC_MAP_AVX512_VNNI_BF16
         DLP_GEMM_PACKSCLB_FUNC_MAP_AVX512_VNNI_BF16
-
-#ifdef DLP_GEMM_BF16_JIT
-        dlp_gemm_jit_inputs_t inputs;
-        inputs.alpha_scale = TRUE;
-        inputs.beta_scale  = DLP_BETA_GEN;
-
-        dlp_clsc_err_t err;
-
-        md_t num_N_vars = (DLP_GEMM_BF16_NR / NUM_F32_ELEMS_PER_ZMM) + 1;
-
-        jit_kernels_generated = TRUE;
-        for (iter_t m = 0; m < DLP_GEMM_BF16_MR; m++) {
-            for (iter_t n = 0; n < num_N_vars; n++) {
-                inputs.MR            = (m == 0) ? DLP_GEMM_BF16_MR : m;
-                inputs.NR            = n * 16;
-                inputs.m_loop        = (m == 0) ? TRUE : FALSE;
-                inputs.generate_mask = (n == 0) ? TRUE : FALSE;
-                global_jit_kernels[m][n] =
-                    dlp_malloc_page_aligned(JIT_KERNEL_SIZE, &err);
-                if (global_jit_kernels[m][n] != NULL) {
-                    dlp_gemm_get_jit_kernel_inplace(
-                        &inputs, global_jit_kernels[m][n], JIT_KERNEL_SIZE);
-#ifdef DUMP_JIT_CODE
-                    dlp_gemm_dump_jit_code(global_jit_kernels[m][n],
-                                           JIT_KERNEL_SIZE, "dlp_gemm",
-                                           inputs.MR, inputs.NR);
-#endif
-                } else {
-                    jit_kernels_generated = FALSE;
-                }
-            }
-        }
-
-#endif
 
         // If arch is updated at runtime, it is expeceted to be honoured.
         _DLP_GEMM_CNTX_UPD_FUNC_MAP_FOR_CONFIGURED_ARCH()
@@ -337,18 +254,6 @@ _dlp_gemm_cntx_init_func_map()
 #undef PBMXPMACRO
 #undef PAMACRO
 #undef KMACRO
-}
-
-void
-dlp_gemm_set_jit_kernel(void* kernel_fp, md_t m_index, md_t n_index)
-{
-    global_jit_kernels[m_index][n_index] = kernel_fp;
-}
-
-void*
-dlp_gemm_get_jit_kernel(md_t m_index, md_t n_index)
-{
-    return global_jit_kernels[m_index][n_index];
 }
 
 /* Defined further below; forward-declared so the table setters can clamp the
