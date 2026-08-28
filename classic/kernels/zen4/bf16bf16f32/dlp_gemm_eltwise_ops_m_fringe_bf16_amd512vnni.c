@@ -31,8 +31,6 @@
 
 #include "dlp_gemm_f32_kern_macros.h"
 
-#ifndef DLP_GEMM_BF16_JIT
-
 DLP_GEMM_ELTWISE_OPS_M_FRINGE_KERNEL(bfloat16, float, bf16of32_5x64)
 {
     // clang-format off
@@ -5439,5 +5437,3 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x64_OPS_DISABLE)
     }
 }
 // clang-format on
-
-#endif // DLP_GEMM_BF16_JIT

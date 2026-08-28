@@ -157,12 +157,6 @@ aocl_gemm_eltwise_ops_bf16obf16(const char      order,
         return;
     }
 
-#ifdef DLP_GEMM_BF16_JIT
-    dlp_print_msg("cannot perform the operation with gcc < 11.2", __FILE__,
-                  __LINE__);
-    return;
-#endif
-
     // Even though b matrix is typecasted to float*, actual load/store
     // and matrix traversal will happen as bfloat16* type. This typecast
     // is only to ensure code is reused.
@@ -291,12 +285,6 @@ aocl_gemm_eltwise_ops_f32obf16(const char      order,
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return;
     }
-
-#ifdef DLP_GEMM_BF16_JIT
-    dlp_print_msg("cannot perform the operation with gcc < 11.2", __FILE__,
-                  __LINE__);
-    return;
-#endif
 
     aocl_eltwise_ops_f32of32_base(order, transa, transb, m, n, a, lda,
                                   (float*)b, ldb, metadata, DLP_BF16);

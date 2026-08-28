@@ -74,12 +74,6 @@ aocl_gemm_s8s8s32obf16(const char      order,
         goto err_hndl;
     }
 
-#ifdef DLP_GEMM_BF16_JIT
-    dlp_print_msg("cannot perform s8s8s32obf16 gemm with gcc < 11.2", __FILE__,
-                  __LINE__);
-    goto err_hndl;
-#endif
-
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 

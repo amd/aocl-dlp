@@ -303,7 +303,7 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
 // B should always be packed.
 DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     // Handle using DLP_GEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if ((n == 1) || (m == 1)) {
@@ -972,7 +972,6 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 
 DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
-#if (!defined(DLP_GEMM_BF16_JIT))
     // Handle using DLP_GEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if ((n == 1) || (m == 1)) {
@@ -981,7 +980,6 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
             cs_c, alpha, beta, rntm, thread, lcntx, post_op_list, c_downscale);
         return;
     }
-#endif
     // DLP_BF16 fallback F32 context here is not the one corresponding to the
     // API but rather that of the underlying F32 kernel used. Hence any updates
     // to the API cntx via metadata will be nullified here.

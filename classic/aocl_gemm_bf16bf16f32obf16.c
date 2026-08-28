@@ -113,16 +113,6 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         goto err_hndl;
     }
 
-#ifdef DLP_GEMM_BF16_JIT
-    if (dlp_gemm_get_jit_kernels_generated() == FALSE) {
-        dlp_print_msg(" Could not generate bf16bf16f32obf16 "
-                      " kernels using JIT.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-#endif
-
     dlp_trans_t dlp_transa;
     dlp_trans_t dlp_transb;
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
@@ -487,7 +477,7 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         return;
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     /* While AOCL_DLP_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that
      * supports DLP_BF16/VNNI with only the ISA check the exeution could enter
      * tiny path and result in seg fault as the tiny path for DLP_BF16->FP32 is

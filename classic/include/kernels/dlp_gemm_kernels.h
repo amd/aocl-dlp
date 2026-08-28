@@ -33,16 +33,6 @@
 #include "classic/aocl_fp16_type.h"
 #include "dlp_gemm_post_ops.h"
 
-// Disable DLP_BF16 kernel in cases where compilers support other avx 512
-// features except DLP_BF16 ISA.
-#if (defined(DLP_GCC)                                                          \
-     && ((__GNUC__ < 11) || ((__GNUC__ == 11) && (__GNUC_MINOR__ < 2)))        \
-     && defined(DLP_KERNELS_ZEN4))
-#define DLP_GEMM_BF16_JIT
-#define BPREFETCH_JIT
-// #define DUMP_JIT_CODE
-#endif
-
 typedef void (*dlp_gemm_m_fringe_f32_ker_ft)(
     const md_t            k0,
     const float*          a,

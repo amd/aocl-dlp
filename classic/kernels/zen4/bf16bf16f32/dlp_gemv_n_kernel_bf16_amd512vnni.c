@@ -76,9 +76,6 @@
     xmm0 = _mm_add_ps(_mm256_extractf128_ps(ymm0, 0),                          \
                       _mm256_extractf128_ps(ymm0, 1));
 
-#ifdef DLP_GEMM_BF16_JIT
-DLP_GEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
-#else
 DLP_GEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     // clang-format off
@@ -774,4 +771,3 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
     }
 }
 // clang-format on
-#endif //  DLP_GEMM_BF16_JIT

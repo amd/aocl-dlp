@@ -253,8 +253,6 @@ generate_exclusion_patterns() {
 
         # External dependencies and generated code
         "*/xbyak/*"
-        "*/JIT/xbyak/*"
-        "*/JIT/*"
         "*/external/*"
         "*/third_party/*"
         "*/3rdparty/*"

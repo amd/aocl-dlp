@@ -83,14 +83,6 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-#ifdef DLP_GEMM_BF16_JIT
-    dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);
-    for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
-        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
-    }
-    goto err_hndl;
-#endif
-
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
 
@@ -336,13 +328,6 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-#ifdef DLP_GEMM_BF16_JIT
-    dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);
-    for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
-        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
-    }
-    goto err_hndl;
-#endif
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
 

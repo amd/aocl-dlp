@@ -80,7 +80,7 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         return; // A reorder not supported.
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(bfloat16)));
@@ -180,7 +180,7 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
         return; // A reorder not supported.
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(bfloat16)));
@@ -272,7 +272,7 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
     // loaded; and since k_dim needs to be at least 2, having n_dim at least 16
     // should give 2x16=32 elements, enough for 1 zmm register.The padding is
     // not rounded to NR (=64), since that would result in memory wastage.
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     md_t n_reorder;
     /*It is expected that while bf16 input is passed to AVX2 kernels,
       the unreorder/conversion of bf16->f32 is done, which expects the
@@ -363,7 +363,7 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         return; // A reorder not supported.
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     /*When AOCL_DLP_ENABLE_INSTRUCTIONS=AVX2, f32 kernels would be executed for
       bf16 input, for which re-ordered bf16 input is converted and unreordered
       to hold f32 values. The un-reorder/convert API considers the padded bf16
@@ -482,12 +482,6 @@ aocl_reorder_f32obf16(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-#ifdef DLP_GEMM_BF16_JIT
-    dlp_print_msg(" f32obf16 is not supported by JIT kernels.", __FILE__,
-                  __LINE__);
-    DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-    return;
-#endif
     // Check if avx512_bf16 ISA is supported, dlp_gemm matmul only works with
     // it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
@@ -629,7 +623,7 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         return; // A reorder not supported.
     }
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+#ifdef DLP_KERNELS_ZEN4
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(bfloat16)));

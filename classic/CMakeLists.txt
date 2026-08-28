@@ -38,7 +38,6 @@ set(CLASSIC_INCLUDES ${CLASSIC_INCLUDES} ${PROJECT_SOURCE_DIR}/src/include)
 
 # Add the frame subdirectory
 add_subdirectory(frame)
-add_subdirectory(JIT)
 add_subdirectory(kernels)
 add_subdirectory(config)
 
