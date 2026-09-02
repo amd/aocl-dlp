@@ -29,210 +29,13 @@
 #include "bf16bf16f32/dlp_gemm_reorder_bf16.h"
 #include "classic/aocl_bf16_type.h"
 #include "config/dlp_gemm_config.h"
+#include "gemm_utils/dlp_gemm_reorder_layout.h"
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "kernels/bf16bf16f32/dlp_gemm_pack_bf16.h"
 
 #ifdef DLP_ENABLE_OPENMP
 #include <omp.h>
 #endif
-
-void
-dlp_reorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b,
-                                            dlp_gemm_obj_t*  b_reorder,
-                                            dlp_rntm_t*      rntm,
-                                            dlp_gemm_cntx_t* lcntx)
-{
-    md_t NC = lcntx->blksz.NC;
-    md_t KC = lcntx->blksz.KC;
-    md_t NR = lcntx->blksz.NR;
-
-    // Extracting the matrix properties from the dlp_gemm object
-    md_t rs_b = b->rs;
-    md_t cs_b = b->cs;
-    md_t n    = b->width;
-    md_t k    = b->length;
-
-    md_t rs_b_reorder = rs_b;
-    md_t cs_b_reorder = cs_b;
-
-    // k needs to be a multiple of 2 so that it can be used with dpbf
-    // instruction. Padding is added in cases this condition is not
-    // satisfied, and therefore the k offset used for packed/reordered
-    // buffer needs to be updated.
-    md_t k_updated = k;
-    k_updated += (k_updated & 0x1);
-
-    md_t n_threads = rntm->num_threads;
-    n_threads      = (n_threads > 0) ? n_threads : 1;
-
-#ifdef DLP_ENABLE_OPENMP
-    _Pragma("omp parallel num_threads(n_threads)")
-    {
-        // Initialise a local thrinfo obj for work split across threads.
-        dlp_task_id_t thread_jc;
-        thread_jc.n_way   = n_threads;
-        thread_jc.work_id = omp_get_thread_num();
-#else
-    {
-        // Initialise a local thrinfo obj for work split across threads.
-        dlp_task_id_t thread_jc;
-        thread_jc.n_way   = 1;
-        thread_jc.work_id = 0;
-#endif
-        // Compute the JC loop thread range for the current thread.
-        md_t jc_start, jc_end;
-        dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
-
-        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
-            md_t nc0 = dlp_min((jc_end - jc), NC);
-
-            md_t jc_cur_loop     = jc;
-            md_t jc_cur_loop_rem = 0;
-            md_t n_sub_updated;
-
-            dlp_gemm_get_B_panel_reordered_start_offset_width(
-                jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
-                &n_sub_updated);
-
-            for (iter_t pc = 0; pc < k; pc += KC) {
-                md_t kc0 = dlp_min((k - pc), KC);
-
-                // k needs to be a multiple of 2 so that it can be used with
-                // dpbf instruction. Padding is added in cases this condition is
-                // not satisfied, and therefore the k offset used for
-                // packed/reordered buffer needs to be updated.
-                md_t kc0_updated = kc0;
-                kc0_updated += (kc0_updated & 0x1);
-
-                // The offsets are calculated in such a way that it resembles
-                // the reorder buffer traversal in single threaded reordering.
-                // The panel boundaries (KCxNC) remain as it is accessed in
-                // single thread, and as a consequence a thread with jc_start
-                // inside the panel cannot consider NC range for reorder. It
-                // has to work with NC' < NC, and the offset is calulated using
-                // prev NC panels spanning k dim + cur NC panel spaning pc loop
-                // cur iteration + (NC - NC') spanning current kc0 (<= KC).
-                //
-                // Eg: Consider the following reordered buffer diagram:
-                //          t1              t2
-                //          |               |
-                //          |           |..NC..|
-                //          |           |      |
-                //          |.NC. |.NC. |NC'|NC"
-                //     pc=0-+-----+-----+---+--+
-                //        KC|     |     |   |  |
-                //          |  1  |  3  |   5  |
-                //    pc=KC-+-----+-----+---st-+
-                //        KC|     |     |   |  |
-                //          |  2  |  4  | 6 | 7|
-                // pc=k=2KC-+-----+-----+---+--+
-                //          |jc=0 |jc=NC|jc=2NC|
-                //
-                // The numbers 1,2..6,7 denotes the order in which reordered
-                // KCxNC blocks are stored in memory, ie: block 1 followed by 2
-                // followed by 3, etc. Given two threads t1 and t2, and t2 needs
-                // to acces point st in the reorder buffer to write the data:
-                // The offset calulation logic will be:
-                // jc_cur_loop = 2NC, jc_cur_loop_rem = NC', pc = KC,
-                // n_sub_updated = NC, k = 2KC, kc0_updated = KC
-                //
-                // st = ( jc_cur_loop * k )    <traverse blocks 1,2,3,4>
-                //    + ( n_sub_updated * pc ) <traverse block 5>
-                //    + ( NC' * kc0_updated)   <traverse block 6>
-
-                dlp_packb_nr64_bf16bf16f32of32_reference(
-                    ((bfloat16*)b_reorder->storage.aligned_buffer)
-                        + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
-                        + (jc_cur_loop_rem * kc0_updated),
-                    (((bfloat16*)b->storage.aligned_buffer) + (rs_b * pc)
-                     + (jc * cs_b)),
-                    rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
-            }
-
-            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
-        }
-    }
-
-    b_reorder->rs   = rs_b_reorder;
-    b_reorder->cs   = cs_b_reorder;
-    b_reorder->mtag = REORDERED;
-}
-
-void
-dlp_unreorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b,
-                                              dlp_gemm_obj_t*  b_unreorder,
-                                              dlp_rntm_t*      rntm,
-                                              dlp_gemm_cntx_t* lcntx)
-{
-    md_t NC = lcntx->blksz.NC;
-    md_t KC = lcntx->blksz.KC;
-    md_t NR = lcntx->blksz.NR;
-
-    // Extracting the matrix properties from the dlp_gemm object
-    md_t rs_b = b->rs;
-    md_t cs_b = b->cs;
-    md_t n    = b->width;
-    md_t k    = b->length;
-
-    md_t k_updated = k;
-    k_updated += (k_updated & 0x1);
-
-    md_t n_threads = rntm->num_threads;
-    n_threads      = (n_threads > 0) ? n_threads : 1;
-
-#ifdef DLP_ENABLE_OPENMP
-    _Pragma("omp parallel num_threads(n_threads)")
-    {
-        // Initialise a local thrinfo obj for work split across threads.
-        dlp_task_id_t thread_jc;
-        thread_jc.n_way   = n_threads;
-        thread_jc.work_id = omp_get_thread_num();
-#else
-    {
-        // Initialise a local thrinfo obj for work split across threads.
-        dlp_task_id_t thread_jc;
-        thread_jc.n_way   = 1;
-        thread_jc.work_id = 0;
-#endif
-
-        // Compute the JC loop thread range for the current thread.
-        md_t jc_start, jc_end;
-        dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
-
-        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
-            md_t nc0 = dlp_min((jc_end - jc), NC);
-
-            md_t jc_cur_loop     = jc;
-            md_t jc_cur_loop_rem = 0;
-            md_t n_sub_updated;
-
-            dlp_gemm_get_B_panel_reordered_start_offset_width(
-                jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
-                &n_sub_updated);
-
-            for (iter_t pc = 0; pc < k; pc += KC) {
-                md_t kc0 = dlp_min((k - pc), KC);
-
-                // k needs to be a multiple of 2 so that it can be used with
-                // dpbf instruction. Padding is added in cases this condition is
-                // not satisfied, and therefore the k offset used for
-                // packed/reordered buffer needs to be updated.
-                md_t kc0_updated = kc0;
-                kc0_updated += (kc0_updated & 0x1);
-
-                dlp_unpackb_nr64_bf16bf16f32of32_reference(
-                    ((bfloat16*)b_unreorder->storage.aligned_buffer)
-                        + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
-                        + (jc_cur_loop_rem * kc0_updated),
-                    (((bfloat16*)b->storage.aligned_buffer) + (rs_b * pc)
-                     + (jc * cs_b)),
-                    nc0, kc0, rs_b, cs_b);
-            }
-
-            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
-        }
-    }
-}
 
 void
 dlp_reorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
@@ -378,6 +181,23 @@ dlp_unreorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
                                     dlp_rntm_t*      rntm,
                                     dlp_gemm_cntx_t* lcntx)
 {
+    // The vectorised unpacker cuts whatever width it is handed into 64-wide
+    // pieces plus a 48/32/16 remainder ladder. That inverts the packed layout
+    // only while the panel it sees is no wider than 64: with many threads each
+    // one gets an NR-wide slice and any NR <= 64 happens to work, but a single
+    // thread is handed the whole NC panel and a narrower NR would then be
+    // decoded in 64-wide pieces it was never packed in. Route anything but the
+    // native width to the width-agnostic reference until the kernel itself is
+    // generalised.
+    if (lcntx->blksz.NR != 64) {
+        dlp_reorder_ref_unreorderb(
+            b->storage.aligned_buffer, b_reorder->storage.aligned_buffer,
+            sizeof(bfloat16), 2, b->width, b->length, lcntx->blksz.NR,
+            dlp_get_packb_bf16bf16f32of32_min_NR(), lcntx->blksz.NC,
+            lcntx->blksz.KC, b->rs, b->cs, rntm->num_threads);
+        return;
+    }
+
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t NR = lcntx->blksz.NR;

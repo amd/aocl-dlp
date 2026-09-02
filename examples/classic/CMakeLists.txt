@@ -33,6 +33,8 @@ set(EXAMPLE_SOURCES
     simple_gemm_with_relu.c
     simple_gemm_with_mish.c
     matrix_reorder.c
+    matrix_unreorder.c
+    matrix_reorder_reference.c
     batch_gemm.c
     quantization.c
     simple_gemm_bf16s8.c

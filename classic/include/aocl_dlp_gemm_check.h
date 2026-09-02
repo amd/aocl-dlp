@@ -142,45 +142,56 @@
         AOCL_DLP_ERROR_CHECK(op_str, arg_pos, err_no);                         \
     }
 
-#define AOCL_DLP_UNREORDER_CHECK(op_str, order, mat_type, reorder_buf_addr,    \
-                                 output_buf_addr, k, n, ldb, err_no)           \
+#define AOCL_DLP_UNREORDER_CHECK(op_str, order, trans, mat_type,               \
+                                 reorder_buf_addr, output_buf_addr, k, n, ldb, \
+                                 err_no)                                       \
     {                                                                          \
         int32_t arg_pos = 0;                                                   \
         err_no          = DLP_CLSC_SUCCESS;                                    \
         bool col_stored = FALSE, row_stored = FALSE;                           \
+        bool notrans_b = FALSE, trans_b = FALSE;                               \
                                                                                \
         col_stored = (order == 'c') || (order == 'C');                         \
         row_stored = (order == 'r') || (order == 'R');                         \
+                                                                               \
+        notrans_b = (trans == 'n') || (trans == 'N');                          \
+        trans_b   = (trans == 't') || (trans == 'T');                          \
                                                                                \
         if ((order != 'r') && (order != 'R') && (order != 'c')                 \
             && (order != 'C')) {                                               \
             arg_pos = 1;                                                       \
             err_no  = DLP_CLSC_INVALID_ORDER;                                  \
+        } else if ((trans != 'n') && (trans != 'N') && (trans != 't')          \
+                   && (trans != 'T')) {                                        \
+            arg_pos = 2;                                                       \
+            err_no  = DLP_CLSC_INVALID_TRANSPOSE;                              \
         } else if ((mat_type != 'A') && (mat_type != 'B') && (mat_type != 'W') \
                    && (mat_type != 'a') && (mat_type != 'b')                   \
                    && (mat_type != 'w')) {                                     \
-            arg_pos = 2;                                                       \
+            arg_pos = 3;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_TYPE;                            \
         } else if (reorder_buf_addr == NULL) {                                 \
-            arg_pos = 3;                                                       \
-            err_no  = DLP_CLSC_NULL_POINTER;                                   \
-        } else if (output_buf_addr == NULL) {                                  \
             arg_pos = 4;                                                       \
             err_no  = DLP_CLSC_NULL_POINTER;                                   \
-        } else if ((k <= 0) || (k > DLP_MAX_GEMM_DIM)) {                       \
+        } else if (output_buf_addr == NULL) {                                  \
             arg_pos = 5;                                                       \
-            err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
+            err_no  = DLP_CLSC_NULL_POINTER;                                   \
+        } else if ((k <= 0) || (k > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 6;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (row_stored && (ldb < n)) {                                  \
+        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 7;                                                       \
+            err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
+        } else if (row_stored                                                  \
+                   && ((notrans_b && (ldb < n)) || (trans_b && (ldb < k)))) {  \
+            arg_pos = 8;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
-        } else if (col_stored && (ldb < k)) {                                  \
-            arg_pos = 7;                                                       \
+        } else if (col_stored                                                  \
+                   && ((notrans_b && (ldb < k)) || (trans_b && (ldb < n)))) {  \
+            arg_pos = 8;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if (ldb > DLP_MAX_GEMM_DIM) {                                   \
-            arg_pos = 7;                                                       \
+            arg_pos = 8;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         }                                                                      \
                                                                                \

@@ -30,9 +30,12 @@
 
 #include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
+#include "classic/dlp_errors.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_reorder_layout.h"
 #include "gemm_utils/dlp_gemm_utils.h"
+#include "kernels/u8s8s32/dlp_gemm_packb.h"
 #include "u8s8s32/dlp_gemm_reorder.h"
 
 msz_t
@@ -45,15 +48,8 @@ aocl_get_reorder_buf_size_u8s8s32os32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
-    // it.
-    if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
-        dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
-                      "cannot perform u8s8s32 gemm.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return 0; // Error.
-    }
+    // Size is layout arithmetic. Tuned reorder still requires AVX-512-VNNI;
+    // aocl_reorder_u8s8s32os32_reference does not.
 
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
@@ -69,9 +65,27 @@ aocl_get_reorder_buf_size_u8s8s32os32(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return 0; // A reorder not supported.
+        return 0; // Only B is supported.
+    }
+
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
+    err_no = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return 0;
+    }
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_l);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return 0;
+    }
+    if (!dlp_reorder_ref_blocks_legal(lcntx_l.blksz.NR,
+                                      dlp_get_packb_u8s8s32o32_min_NR(),
+                                      lcntx_l.blksz.KC, 4)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return 0;
     }
 
     // Extra space since packing does width in multiples of 16. The vnni
@@ -99,7 +113,12 @@ aocl_get_reorder_buf_size_u8s8s32os32(const char      order,
     md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 #endif
 
-    msz_t size_req = sizeof(int8_t) * k_reorder * n_reorder;
+    msz_t size_req = 0;
+    if (!dlp_reorder_size_bytes(k_reorder, n_reorder, (md_t)sizeof(int8_t), 0,
+                                &size_req)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_MATRIX_DIMENSION);
+        return 0;
+    }
 
     return size_req;
 }
@@ -181,6 +200,27 @@ aocl_reorder_u8s8s32os32(const char      order,
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
 
+    // Un-reorder reads these same block sizes back out of the metadata, so
+    // both directions have to apply it or the layouts will not match.
+    err_no = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_g, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    // packb hardcodes NR=64. A caller NR would only change the jc split, so
+    // unpack/reference at that NR would decode the wrong layout.
+    if (lcntx_g.blksz.NR != 64) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
+
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
@@ -194,4 +234,185 @@ aocl_reorder_u8s8s32os32(const char      order,
     b.length                 = k;
 
     dlp_reorderb_nr64_u8s8s32o32(&b, &b_reorder, &rntm_g, &lcntx_g);
+}
+
+void
+aocl_reorder_u8s8s32os32_reference(const char      order,
+                                   const char      trans,
+                                   const char      mat_type,
+                                   const int8_t*   input_buf_addr,
+                                   int8_t*         reorder_buf_addr,
+                                   const md_t      k,
+                                   const md_t      n,
+                                   const md_t      ldb,
+                                   dlp_metadata_t* metadata)
+{
+    DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
+
+    dlp_init_global_cntx();
+
+    dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
+    AOCL_DLP_REORDER_CHECK("u8s8s32os32_reference", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    dlp_trans_t dlp_trans;
+    dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
+
+    md_t rs_b = 0, cs_b = 0;
+    if ((order == 'r') || (order == 'R')) {
+        rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+    } else if ((order == 'c') || (order == 'C')) {
+        rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+    } else {
+        return;
+    }
+
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
+    dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
+
+    if (input_mat_type != B_MATRIX) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        return; // Only B is supported.
+    }
+
+    if (n == 1) {
+        if (rs_b == 1) {
+            memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(int8_t)));
+        } else {
+            for (iter_t k0 = 0; k0 < k; k0++) {
+                reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
+            }
+        }
+        return;
+    }
+
+    dlp_rntm_t rntm_g;
+    dlp_rntm_init_from_global(&rntm_g);
+
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
+    err_no = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_g, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR,
+                                      dlp_get_packb_u8s8s32o32_min_NR(),
+                                      lcntx_g.blksz.KC, 4)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
+
+    dlp_reorder_ref_reorderb(
+        reorder_buf_addr, input_buf_addr, sizeof(int8_t), 4, n, k,
+        lcntx_g.blksz.NR, dlp_get_packb_u8s8s32o32_min_NR(), lcntx_g.blksz.NC,
+        lcntx_g.blksz.KC, rs_b, cs_b, rntm_g.num_threads);
+}
+
+void
+aocl_unreorder_u8s8s32os32_reference(const char      order,
+                                     const char      trans,
+                                     const char      mat_type,
+                                     const int8_t*   reorder_buf_addr,
+                                     int8_t*         output_buf_addr,
+                                     const md_t      k,
+                                     const md_t      n,
+                                     const md_t      ldb,
+                                     dlp_metadata_t* metadata)
+{
+    DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
+
+    // Set MC, NC, KC, NR, MR.
+    dlp_init_global_cntx();
+
+    dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
+    AOCL_DLP_UNREORDER_CHECK("u8s8s32os32_reference", order, trans, mat_type,
+                             reorder_buf_addr, output_buf_addr, k, n, ldb,
+                             err_no);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
+    dlp_trans_t dlp_trans;
+    dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
+
+    md_t rs_b = 0, cs_b = 0;
+    dlp_reorder_plain_strides(order, dlp_trans, ldb, &rs_b, &cs_b);
+
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
+    dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
+
+    if (input_mat_type != B_MATRIX) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        return; // Only B is supported.
+    }
+
+    if (n == 1) {
+        if (rs_b == 1) {
+            memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(int8_t)));
+        } else {
+            for (iter_t k0 = 0; k0 < k; k0++) {
+                output_buf_addr[k0 * rs_b] = reorder_buf_addr[k0];
+            }
+        }
+        return;
+    }
+
+    // Initialize a local runtime with global settings if necessary. Note
+    // that in the case that a runtime is passed in, we make a local copy.
+    dlp_rntm_t rntm_g;
+    dlp_rntm_init_from_global(&rntm_g);
+
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
+
+    // The reordered buffer carries no header, so its blocking has to come
+    // from the caller. Anything supplied in metadata->block_params overrides
+    // the architecture defaults here, which is what makes the metadata the
+    // source of truth for NC, KC and NR.
+    err_no = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_g, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged or corrupted from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_g.blksz.MC, lcntx_g.blksz.NC, lcntx_g.blksz.KC,
+                 lcntx_g.blksz.MR, lcntx_g.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR,
+                                      dlp_get_packb_u8s8s32o32_min_NR(),
+                                      lcntx_g.blksz.KC, 4)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
+
+    dlp_reorder_ref_unreorderb(
+        output_buf_addr, reorder_buf_addr, sizeof(int8_t), 4, n, k,
+        lcntx_g.blksz.NR, dlp_get_packb_u8s8s32o32_min_NR(), lcntx_g.blksz.NC,
+        lcntx_g.blksz.KC, rs_b, cs_b, rntm_g.num_threads);
 }

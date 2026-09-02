@@ -33,20 +33,6 @@
 #include "runtime/dlp_runtime.h"
 
 void
-dlp_unpackb_nr64_s8_reference(int8_t*    b,
-                              int8_t*    unpack_b_buffer,
-                              const md_t NC,
-                              const md_t KC,
-                              md_t       rs_b,
-                              md_t       cs_b);
-
-void
-dlp_unreorderb_nr64_s8s8s32os32_reference(dlp_gemm_obj_t*  b,
-                                          dlp_gemm_obj_t*  b_reorder,
-                                          dlp_rntm_t*      rntm,
-                                          dlp_gemm_cntx_t* lcntx);
-
-void
 dlp_reorderb_nr64_s8s8s32o32(dlp_gemm_obj_t*  b,
                              dlp_gemm_obj_t*  b_reorder,
                              dlp_rntm_t*      rntm,

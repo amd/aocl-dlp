@@ -34,36 +34,6 @@
 #include "runtime/dlp_runtime.h"
 
 void
-dlp_packb_nr64_bf16bf16f32of32_reference(bfloat16*       pack_b,
-                                         const bfloat16* b,
-                                         const md_t      rs_b,
-                                         const md_t      cs_b,
-                                         const md_t      NC,
-                                         const md_t      KC,
-                                         md_t*           rs_p,
-                                         md_t*           cs_p);
-
-void
-dlp_unpackb_nr64_bf16bf16f32of32_reference(bfloat16*  b,
-                                           bfloat16*  unpack_b_buffer,
-                                           const md_t NC,
-                                           const md_t KC,
-                                           md_t       rs_b,
-                                           md_t       cs_b);
-
-void
-dlp_unreorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b_reorder,
-                                              dlp_gemm_obj_t*  b_unreorder,
-                                              dlp_rntm_t*      rntm,
-                                              dlp_gemm_cntx_t* lcntx);
-
-void
-dlp_reorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b,
-                                            dlp_gemm_obj_t*  b_reorder,
-                                            dlp_rntm_t*      rntm,
-                                            dlp_gemm_cntx_t* lcntx);
-
-void
 dlp_reorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
                                   dlp_gemm_obj_t*  b_reorder,
                                   dlp_rntm_t*      rntm,

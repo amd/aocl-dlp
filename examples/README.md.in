@@ -78,10 +78,3 @@ Examples using the classic AOCL-DLP API for low-precision GEMM operations:
 - Eltwise operations
 
 For detailed information about each example, see `classic/README.md`.
-
-## Support
-
-For issues, questions, or additional resources:
-- [AOCL-DLP Documentation](https://developer.amd.com/aocl/dlp/)
-- [API Reference](https://developer.amd.com/aocl/dlp/api/)
-- [Mathematical Foundations](https://developer.amd.com/aocl/dlp/math-primer/)

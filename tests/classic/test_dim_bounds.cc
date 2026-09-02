@@ -198,8 +198,8 @@ TEST(DimBounds, UnreorderRejectsOversizedLdb)
     std::vector<float> in(k * n + 4096, 1.0f), out(k * n + 4096, 0.0f);
     dlp_metadata_t     md = make_metadata();
 
-    aocl_unreorder_f32f32f32of32_reference('r', 'B', in.data(), out.data(), k,
-                                           n, kOverMax, &md);
+    aocl_unreorder_f32f32f32of32_reference('r', 'n', 'B', in.data(), out.data(),
+                                           k, n, kOverMax, &md);
 
     if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
         GTEST_SKIP() << "f32 unreorder not supported on this processor";

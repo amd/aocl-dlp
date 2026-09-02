@@ -1,0 +1,48 @@
+# Reference reorder / un-reorder size coverage.
+#
+# test_reorder_ref_yaml expands each (dtype, k, n, order) into a named gtest
+# so --gtest_list_tests and coverage reports show every size. Blocking
+# (NR / NC / KC) is still swept inside each case; illegal NR or KC for a
+# dtype is skipped, not failed.
+#
+# k and n straddle packing granularities (16/32/64), k-padding edges, and
+# widths past one NC panel. max_elems keeps 20000-wide n paired with modest k.
+
+reorder_ref_tests:
+  - name: size_grid
+    dtypes:
+      - { name: f32,  min_nr: 1,  k_factor: 1 }
+      - { name: bf16, min_nr: 16, k_factor: 2 }
+      - { name: s8,   min_nr: 16, k_factor: 4 }
+      - { name: u8s8, min_nr: 16, k_factor: 4 }
+      - { name: fp16, min_nr: 32, k_factor: 1 }
+    orders: [r, c]
+    trans: "n"
+    k: [20, 21, 24, 32, 33, 48, 64, 65, 127, 128, 256, 512, 513,
+        1024, 2048, 4096, 4097, 8192, 20000]
+    n: [20000, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 96,
+        65, 64, 48, 33, 32, 24, 21, 20]
+    max_elems: 4000000
+    col_major_max_elems: 65536
+    nr: [8, 16, 24, 32, 48, 64]
+    nc_mul: [1, 2, 4]
+    kc: [512, 1024, 2048, 4096]
+
+  # Tight transposed plain-B: ldb follows trans as well as order
+  # (row-major + t => ldb >= k). Keep this set small; size_grid covers trans n.
+  - name: trans_t
+    dtypes:
+      - { name: f32,  min_nr: 1,  k_factor: 1 }
+      - { name: bf16, min_nr: 16, k_factor: 2 }
+      - { name: s8,   min_nr: 16, k_factor: 4 }
+      - { name: u8s8, min_nr: 16, k_factor: 4 }
+      - { name: fp16, min_nr: 32, k_factor: 1 }
+    orders: [r, c]
+    trans: "t"
+    k: [20, 21, 32, 33, 64, 65]
+    n: [20, 21, 32, 64, 65, 96]
+    max_elems: 20000
+    col_major_max_elems: 20000
+    nr: [16, 32, 64]
+    nc_mul: [1]
+    kc: [512]

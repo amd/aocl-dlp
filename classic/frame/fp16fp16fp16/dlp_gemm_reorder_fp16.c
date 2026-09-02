@@ -29,6 +29,7 @@
 #include "fp16fp16fp16/dlp_gemm_reorder_fp16.h"
 #include "classic/aocl_fp16_type.h"
 #include "config/dlp_gemm_config.h"
+#include "gemm_utils/dlp_gemm_reorder_layout.h"
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "kernels/fp16fp16fp16/dlp_gemm_pack_fp16.h"
 
@@ -123,11 +124,27 @@ dlp_reorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
 }
 
 void
-dlp_unreorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
-                                   dlp_gemm_obj_t*  b_reorder,
-                                   dlp_rntm_t*      rntm,
-                                   dlp_gemm_cntx_t* lcntx)
+dlp_unreorderb_f16f16f16of16(dlp_gemm_obj_t*  b,
+                             dlp_gemm_obj_t*  b_reorder,
+                             dlp_rntm_t*      rntm,
+                             dlp_gemm_cntx_t* lcntx)
 {
+    // Same split as bf16: the native width goes to the vectorised path,
+    // everything else to the width-agnostic reference. The tuned unpacker
+    // infers its chunk width from the panel it is handed rather than from NR,
+    // so it only inverts the packed layout at the native width. With many
+    // threads each one gets an NR-wide slice and a narrower NR can look
+    // correct, but a single thread is handed the whole NC panel and the
+    // assumed width surfaces. Drop this guard once the kernel takes NR.
+    if (lcntx->blksz.NR != 128) {
+        dlp_reorder_ref_unreorderb(
+            b->storage.aligned_buffer, b_reorder->storage.aligned_buffer,
+            sizeof(float16), 1, b->width, b->length, lcntx->blksz.NR,
+            dlp_get_packb_fp16_min_NR(), lcntx->blksz.NC, lcntx->blksz.KC,
+            b->rs, b->cs, rntm->num_threads);
+        return;
+    }
+
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t NR = lcntx->blksz.NR;

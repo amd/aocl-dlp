@@ -60,10 +60,12 @@ cd build
 4. **simple_gemm_with_bias.c** - Matrix multiplication with bias addition
 5. **simple_gemm_with_relu.c** - Matrix multiplication with ReLU activation
 6. **matrix_reorder.c** - Example of matrix reordering for optimized computation
-7. **batch_gemm.c** - Batch matrix multiplication
-8. **quantization.c** - Example of quantized inference
-9. **post_ops_combinations.c** - Multiple post-operations in sequence
-10. **eltwise_ops.c** - Element-wise operations without GEMM
+7. **matrix_unreorder.c** - Recovering the original matrix from its reordered form
+8. **matrix_reorder_reference.c** - Portable reference pack and unpack of B
+9. **batch_gemm.c** - Batch matrix multiplication
+10. **quantization.c** - Example of quantized inference
+11. **post_ops_combinations.c** - Multiple post-operations in sequence
+12. **eltwise_ops.c** - Element-wise operations without GEMM
 
 ## Requirements
 
@@ -75,9 +77,3 @@ cd build
 
 - Some examples require specific CPU features (such as AVX512-VNNI or AVX512-DLP_BF16)
 - The examples will gracefully handle cases where the required hardware features are not available
-
-## Additional Resources
-
-- [AOCL-DLP Documentation](https://developer.amd.com/aocl/dlp/)
-- [Mathematical Foundations](https://developer.amd.com/aocl/dlp/math-primer/)
-- [API Reference](https://developer.amd.com/aocl/dlp/api/)

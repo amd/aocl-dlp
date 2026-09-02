@@ -293,6 +293,9 @@ Reordering Functions
 .. doxygenfunction:: aocl_reorder_u8s8s32os32
    :project: aocl-dlp
 
+.. doxygenfunction:: aocl_reorder_u8s8s32os32_reference
+   :project: aocl-dlp
+
 .. doxygenfunction:: aocl_reorder_bf16bf16f32of32
    :project: aocl-dlp
 
@@ -300,6 +303,9 @@ Reordering Functions
    :project: aocl-dlp
 
 .. doxygenfunction:: aocl_reorder_s8s8s32os32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_reorder_s8s8s32os32_reference
    :project: aocl-dlp
 
 .. doxygenfunction:: aocl_reorder_u8s4s32os32
@@ -315,6 +321,9 @@ Reordering Functions
    :project: aocl-dlp
 
 .. doxygenfunction:: aocl_reorder_f16f16f16of16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_reorder_f16f16f16of16_reference
    :project: aocl-dlp
 
 .. doxygenfunction:: aocl_get_reorder_buf_size_f16f16f16of16
@@ -347,7 +356,13 @@ Unreordering Functions
 .. doxygenfunction:: aocl_unreorder_s8s8s32os32_reference
    :project: aocl-dlp
 
+.. doxygenfunction:: aocl_unreorder_u8s8s32os32_reference
+   :project: aocl-dlp
+
 .. doxygenfunction:: aocl_unreorder_f16f16f16of16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_unreorder_f16f16f16of16_reference
    :project: aocl-dlp
 
 

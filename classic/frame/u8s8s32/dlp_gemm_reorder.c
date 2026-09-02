@@ -28,9 +28,11 @@
 
 #include "u8s8s32/dlp_gemm_reorder.h"
 #include "config/dlp_gemm_config.h"
+#include "gemm_utils/dlp_gemm_reorder_layout.h"
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "kernels/u8s8s32/dlp_gemm_packa.h"
 #include "kernels/u8s8s32/dlp_gemm_packb.h"
+#include "s8s8s32/dlp_gemm_reorder_s8.h"
 
 #ifdef DLP_ENABLE_OPENMP
 #include <omp.h>

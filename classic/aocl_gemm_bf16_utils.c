@@ -33,7 +33,9 @@
 #include "classic/aocl_gemm_interface_apis.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_reorder_layout.h"
 #include "gemm_utils/dlp_gemm_utils.h"
+#include "kernels/bf16bf16f32/dlp_gemm_pack_bf16.h"
 
 void
 aocl_reorder_bf16bf16f32of32_reference(const char      order,
@@ -75,12 +77,13 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return; // A reorder not supported.
+        return; // Only B is supported.
     }
 
-#ifdef DLP_KERNELS_ZEN4
+    // n == 1 is a vector: GEMV wants it unreordered, and the size API
+    // allocates k elements with no NR/k_factor pad.
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(bfloat16)));
@@ -91,7 +94,6 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         }
         return;
     }
-#endif
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.
     dlp_rntm_t rntm_g;
@@ -121,24 +123,22 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         return;
     }
 
-    // Create dummy b_reorder obj.
-    dlp_gemm_obj_t b_reorder;
-    b_reorder.storage.aligned_buffer = reorder_buf_addr;
+    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR,
+                                      dlp_get_packb_bf16bf16f32of32_min_NR(),
+                                      lcntx_g.blksz.KC, 2)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
 
-    // Create dummy original b obj;
-    dlp_gemm_obj_t b;
-    b.storage.aligned_buffer = (void*)input_buf_addr;
-    b.rs                     = rs_b;
-    b.cs                     = cs_b;
-    b.width                  = n;
-    b.length                 = k;
-
-    dlp_reorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g,
-                                                &lcntx_g);
+    dlp_reorder_ref_reorderb(
+        reorder_buf_addr, input_buf_addr, sizeof(bfloat16), 2, n, k,
+        lcntx_g.blksz.NR, dlp_get_packb_bf16bf16f32of32_min_NR(),
+        lcntx_g.blksz.NC, lcntx_g.blksz.KC, rs_b, cs_b, rntm_g.num_threads);
 }
 
 void
 aocl_unreorder_bf16bf16f32of32_reference(const char      order,
+                                         const char      trans,
                                          const char      mat_type,
                                          const bfloat16* reorder_buf_addr,
                                          bfloat16*       output_buf_addr,
@@ -153,34 +153,30 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
     dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_DLP_UNREORDER_CHECK("bf16bf16f32of32_reference", order, mat_type,
-                             reorder_buf_addr, output_buf_addr, k, n, ldb,
-                             err_no);
+    AOCL_DLP_UNREORDER_CHECK("bf16bf16f32of32_reference", order, trans,
+                             mat_type, reorder_buf_addr, output_buf_addr, k, n,
+                             ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
     }
 
-    md_t rs_b = 0, cs_b = 0;
+    dlp_trans_t dlp_trans;
+    dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
 
-    // Check for the validity of strides.
-    if ((order == 'r') || (order == 'R')) {
-        rs_b = ldb;
-        cs_b = 1;
-    } else if ((order == 'c') || (order == 'C')) {
-        rs_b = 1;
-        cs_b = ldb;
-    }
+    md_t rs_b = 0, cs_b = 0;
+    dlp_reorder_plain_strides(order, dlp_trans, ldb, &rs_b, &cs_b);
 
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return; // A reorder not supported.
+        return; // Only B is supported.
     }
 
-#ifdef DLP_KERNELS_ZEN4
+    // n == 1 is a vector: GEMV wants it unreordered, and the size API
+    // allocates k elements with no NR/k_factor pad.
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(bfloat16)));
@@ -191,7 +187,6 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
         }
         return;
     }
-#endif
 
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.
@@ -222,20 +217,17 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
         return;
     }
 
-    // create dummy b_reorder obj.
-    dlp_gemm_obj_t b_reorder;
-    b_reorder.storage.aligned_buffer = (void*)reorder_buf_addr;
+    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR,
+                                      dlp_get_packb_bf16bf16f32of32_min_NR(),
+                                      lcntx_g.blksz.KC, 2)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
 
-    // create dummy b obj.
-    dlp_gemm_obj_t b;
-    b.storage.aligned_buffer = (void*)output_buf_addr;
-    b.rs                     = rs_b;
-    b.cs                     = cs_b;
-    b.width                  = n;
-    b.length                 = k;
-
-    dlp_unreorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g,
-                                                  &lcntx_g);
+    dlp_reorder_ref_unreorderb(
+        output_buf_addr, reorder_buf_addr, sizeof(bfloat16), 2, n, k,
+        lcntx_g.blksz.NR, dlp_get_packb_bf16bf16f32of32_min_NR(),
+        lcntx_g.blksz.NC, lcntx_g.blksz.KC, rs_b, cs_b, rntm_g.num_threads);
 }
 
 msz_t
@@ -262,9 +254,28 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return 0; // A reorder not supported.
+        return 0; // Only B is supported.
+    }
+
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32));
+    err_no =
+        dlp_gemm_upd_cntx_with_metadata(BF16BF16F32OF32, &lcntx_l, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return 0;
+    }
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_l);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return 0;
+    }
+    if (!dlp_reorder_ref_blocks_legal(lcntx_l.blksz.NR,
+                                      dlp_get_packb_bf16bf16f32of32_min_NR(),
+                                      lcntx_l.blksz.KC, 2)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return 0;
     }
 
     // Extra space since packing does width in multiples of 16. The bf16
@@ -294,7 +305,12 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
     md_t n_reorder = dlp_make_multiple_of_n(n, 16);
     md_t k_reorder = dlp_make_multiple_of_n(k, 2);
 #endif
-    msz_t size_req = sizeof(int16_t) * k_reorder * n_reorder;
+    msz_t size_req = 0;
+    if (!dlp_reorder_size_bytes(k_reorder, n_reorder, (md_t)sizeof(int16_t), 0,
+                                &size_req)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_MATRIX_DIMENSION);
+        return 0;
+    }
 
     return size_req;
 }
@@ -573,6 +589,7 @@ aocl_reorder_f32obf16(const char      order,
 
 void
 aocl_unreorder_bf16bf16f32of32(const char      order,
+                               const char      trans,
                                const char      mat_type,
                                const bfloat16* reorder_buf_addr,
                                bfloat16*       output_buf_addr,
@@ -597,7 +614,7 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
     dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_DLP_UNREORDER_CHECK("bf16bf16f32of32", order, mat_type,
+    AOCL_DLP_UNREORDER_CHECK("bf16bf16f32of32", order, trans, mat_type,
                              reorder_buf_addr, output_buf_addr, k, n, ldb,
                              err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
@@ -605,23 +622,18 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
         return; // Error.
     }
 
-    md_t rs_b = 0, cs_b = 0;
+    dlp_trans_t dlp_trans;
+    dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
 
-    // Check for the validity of strides.
-    if ((order == 'r') || (order == 'R')) {
-        rs_b = ldb;
-        cs_b = 1;
-    } else if ((order == 'c') || (order == 'C')) {
-        rs_b = 1;
-        cs_b = ldb;
-    }
+    md_t rs_b = 0, cs_b = 0;
+    dlp_reorder_plain_strides(order, dlp_trans, ldb, &rs_b, &cs_b);
 
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return; // A reorder not supported.
+        return; // Only B is supported.
     }
 #ifdef DLP_KERNELS_ZEN4
     if (n == 1) {

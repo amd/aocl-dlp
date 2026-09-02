@@ -61,9 +61,9 @@ dlp_reorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
                                  dlp_gemm_cntx_t* lcntx);
 
 void
-dlp_unreorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
-                                   dlp_gemm_obj_t*  b_reorder,
-                                   dlp_rntm_t*      rntm,
-                                   dlp_gemm_cntx_t* lcntx);
+dlp_unreorderb_f16f16f16of16(dlp_gemm_obj_t*  b,
+                             dlp_gemm_obj_t*  b_reorder,
+                             dlp_rntm_t*      rntm,
+                             dlp_gemm_cntx_t* lcntx);
 
 #endif // DLP_GEMM_REORDER_FP16_H

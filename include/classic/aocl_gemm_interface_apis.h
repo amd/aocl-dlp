@@ -44,7 +44,10 @@
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
  * @param[in,out] metadata Metadata for the post-operations.
- * @return Size of the buffer in bytes.
+ * @return Size of the buffer in bytes. This is layout arithmetic and does
+ * not require the ISA used by the matching tuned reorder; a zero return
+ * with DLP_CLSC_NOT_SUPPORTED means the arguments were rejected, not that
+ * the processor is missing an ISA.
  */
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
@@ -175,6 +178,17 @@ aocl_reorder_u8s8s32os32(const char      order,
                          const md_t      n,
                          const md_t      ldb,
                          dlp_metadata_t* metadata);
+/// @brief Portable C reorder of B. Honours metadata->block_params.
+DLP_CLASSIC_EXPORT void
+aocl_reorder_u8s8s32os32_reference(const char      order,
+                                   const char      trans,
+                                   const char      mat_type,
+                                   const int8_t*   input_buf_addr,
+                                   int8_t*         reorder_buf_addr,
+                                   const md_t      k,
+                                   const md_t      n,
+                                   const md_t      ldb,
+                                   dlp_metadata_t* metadata);
 /// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_bf16bf16f32of32(const char      order,
@@ -208,6 +222,17 @@ aocl_reorder_s8s8s32os32(const char      order,
                          const md_t      n,
                          const md_t      ldb,
                          dlp_metadata_t* metadata);
+/// @brief Portable C reorder of B. Honours metadata->block_params.
+DLP_CLASSIC_EXPORT void
+aocl_reorder_s8s8s32os32_reference(const char      order,
+                                   const char      trans,
+                                   const char      mat_type,
+                                   const int8_t*   input_buf_addr,
+                                   int8_t*         reorder_buf_addr,
+                                   const md_t      k,
+                                   const md_t      n,
+                                   const md_t      ldb,
+                                   dlp_metadata_t* metadata);
 /// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_u8s4s32os32(const char      order,
@@ -241,6 +266,18 @@ aocl_reorder_f16f16f16of16(const char      order,
                            const md_t      n,
                            const md_t      ldb,
                            dlp_metadata_t* metadata);
+/// @brief Portable C reorder of B. Does not require AVX-512-FP16.
+/// Honours metadata->block_params.
+DLP_CLASSIC_EXPORT void
+aocl_reorder_f16f16f16of16_reference(const char      order,
+                                     const char      trans,
+                                     const char      mat_type,
+                                     const float16*  input_buf_addr,
+                                     float16*        reorder_buf_addr,
+                                     const md_t      k,
+                                     const md_t      n,
+                                     const md_t      ldb,
+                                     dlp_metadata_t* metadata);
 DLP_CLASSIC_EXPORT void
 aocl_reorder_f32f16f32of32(const char      order,
                            const char      trans,
@@ -345,19 +382,85 @@ aocl_reorder_f32obf16(const char      order,
                       dlp_metadata_t* metadata);
 
 /**
+ * @defgroup unreorder Un-reorder APIs
+ *
+ * An un-reorder API is the exact inverse of the matching aocl_reorder_* API:
+ * it takes a buffer that aocl_reorder_<type>() produced and writes the
+ * original B matrix back out in plain row-major or column-major form. The
+ * round trip is bit-exact, so no floating point tolerance is needed when
+ * comparing against the matrix that was reordered.
+ *
+ * This is useful when the reordered buffer is the only copy of the weights
+ * that is still live, for example to serialise weights back out, to hand
+ * them to another library, or to inspect them while debugging.
+ *
+ * Typical usage:
+ * @code
+ * // 1. Reorder B once and keep the packed buffer.
+ * msz_t buf_sz = aocl_get_reorder_buf_size_bf16bf16f32of32('r', 'n', 'B',
+ *                                                          k, n, NULL);
+ * bfloat16* b_reordered = (bfloat16*)malloc(buf_sz);
+ * aocl_reorder_bf16bf16f32of32('r', 'n', 'B', b, b_reordered, k, n, ldb,
+ *                              NULL);
+ *
+ * // 2. Run as many GEMMs as needed with mem_format_b = 'R'.
+ *
+ * // 3. Recover B. trans selects the output storage (need not match the
+ * //    reorder call). output_buf is strided by ldb; the API never allocates.
+ * bfloat16* b_recovered = (bfloat16*)malloc(k * ldb * sizeof(bfloat16));
+ * dlp_metadata_t md;
+ * memset(&md, 0, sizeof(md));
+ * aocl_unreorder_bf16bf16f32of32('r', 'n', 'B', b_reordered, b_recovered, k,
+ *                                n, ldb, &md);
+ * if (md.error_hndl.error_code != DLP_CLSC_SUCCESS) { ... }
+ * @endcode
+ *
+ * The reordered buffer carries no header describing how it was produced, so
+ * the caller must pass the same @p order, @p k, @p n and blocking that were
+ * used for the reorder. @p trans and @p ldb describe the output storage and
+ * need not match the reorder call. Passing a different order, k, n or
+ * blocking silently decodes the buffer with the wrong layout.
+ *
+ * Functions carrying the @c _reference suffix are plain C implementations.
+ * They run on any processor regardless of the ISA the reorder used, and are
+ * the correctness oracle for the tuned variants. Size them with the matching
+ * aocl_get_reorder_buf_size_* call, which is also ISA-independent. The
+ * reorder/un-reorder variants without the suffix may require a specific ISA
+ * and will set DLP_CLSC_NOT_SUPPORTED in @p metadata when it is unavailable.
+ *
+ * @{
+ */
+
+/**
  * @brief Converts a reordered matrix back to its original format.
- * @param[in] order Memory layout (row-major or column-major).
- * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
- * matrix B).
- * @param[in] reorder_buf_addr Pointer to the reordered matrix buffer.
- * @param[out] output_buf_addr Pointer to the output matrix buffer.
- * @param[in] k Number of rows in the matrix.
- * @param[in] n Number of columns in the matrix.
- * @param[in] ldb Leading dimension of the matrix.
- * @param[in,out] metadata Metadata for the post-operations.
+ *
+ * @param[in] order Memory layout to write @p output_buf_addr in: 'r' or 'R'
+ * for row-major, 'c' or 'C' for column-major. Must match the order used when
+ * the buffer was reordered.
+ * @param[in] trans Output transpose: 'n'/'N' writes logical B, 't'/'T'
+ * writes B stored as its transpose. Independent of the trans used to pack.
+ * @param[in] mat_type Type of the matrix. Only 'B' is supported; passing 'A'
+ * sets DLP_CLSC_NOT_SUPPORTED in @p metadata and writes nothing.
+ * @param[in] reorder_buf_addr Reordered matrix buffer, as produced by the
+ * matching aocl_reorder_* call.
+ * @param[out] output_buf_addr Destination for the recovered matrix. The
+ * caller owns this buffer. Size it from @p order and @p trans: at least
+ * @p k * @p ldb elements for row-major no-transpose or column-major
+ * transpose, and @p n * @p ldb otherwise.
+ * @param[in] k Number of rows of the original matrix.
+ * @param[in] n Number of columns of the original matrix.
+ * @param[in] ldb Leading dimension of @p output_buf_addr, not of the
+ * reordered buffer. Row-major: >= @p n if @p trans is 'n', >= @p k if 't'.
+ * Column-major: >= @p k if @p trans is 'n', >= @p n if 't'.
+ * @param[in,out] metadata Optional, may be NULL. On return
+ * metadata->error_hndl.error_code reports success or the reason for failure.
+ * If metadata->block_params is set, NC, KC and NR are taken from there
+ * instead of the architecture defaults, in which case they must match the
+ * blocking that was used to produce @p reorder_buf_addr.
  */
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_bf16bf16f32of32(const char      order,
+                               const char      trans,
                                const char      mat_type,
                                const bfloat16* reorder_buf_addr,
                                bfloat16*       output_buf_addr,
@@ -365,9 +468,10 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
                                const md_t      n,
                                const md_t      ldb,
                                dlp_metadata_t* metadata);
-/// @brief Converts a reordered matrix back to its original layout.
+/// @brief Inverse of aocl_reorder_bf16bf16f32of32(), in portable C.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_bf16bf16f32of32_reference(const char      order,
+                                         const char      trans,
                                          const char      mat_type,
                                          const bfloat16* reorder_buf_addr,
                                          bfloat16*       output_buf_addr,
@@ -375,9 +479,10 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
                                          const md_t      n,
                                          const md_t      ldb,
                                          dlp_metadata_t* metadata);
-/// @brief Converts a reordered matrix back to its original layout.
+/// @brief Inverse of aocl_reorder_f32f32f32of32(), in portable C.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_f32f32f32of32_reference(const char      order,
+                                       const char      trans,
                                        const char      mat_type,
                                        const float*    reorder_buf_addr,
                                        float*          output_buf_addr,
@@ -385,9 +490,10 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
                                        const md_t      n,
                                        const md_t      ldb,
                                        dlp_metadata_t* metadata);
-/// @brief Converts a reordered matrix back to its original layout.
+/// @brief Inverse of aocl_reorder_s8s8s32os32(), in portable C.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_s8s8s32os32_reference(const char      order,
+                                     const char      trans,
                                      const char      mat_type,
                                      const int8_t*   reorder_buf_addr,
                                      int8_t*         output_buf_addr,
@@ -395,9 +501,35 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
                                      const md_t      n,
                                      const md_t      ldb,
                                      dlp_metadata_t* metadata);
+/// @brief Inverse of aocl_reorder_u8s8s32os32(), in portable C.
+DLP_CLASSIC_EXPORT void
+aocl_unreorder_u8s8s32os32_reference(const char      order,
+                                     const char      trans,
+                                     const char      mat_type,
+                                     const int8_t*   reorder_buf_addr,
+                                     int8_t*         output_buf_addr,
+                                     const md_t      k,
+                                     const md_t      n,
+                                     const md_t      ldb,
+                                     dlp_metadata_t* metadata);
+/// @brief Inverse of aocl_reorder_f16f16f16of16(), in portable C. Unlike
+/// aocl_unreorder_f16f16f16of16() this does not require AVX-512-FP16.
+DLP_CLASSIC_EXPORT void
+aocl_unreorder_f16f16f16of16_reference(const char      order,
+                                       const char      trans,
+                                       const char      mat_type,
+                                       const float16*  reorder_buf_addr,
+                                       float16*        output_buf_addr,
+                                       const md_t      k,
+                                       const md_t      n,
+                                       const md_t      ldb,
+                                       dlp_metadata_t* metadata);
 /// @brief Converts a reordered matrix back to its original layout.
+/// Requires AVX-512-FP16; use aocl_unreorder_f16f16f16of16_reference()
+/// on processors without it.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_f16f16f16of16(const char      order,
+                             const char      trans,
                              const char      mat_type,
                              const float16*  reorder_buf_addr,
                              float16*        output_buf_addr,
@@ -405,6 +537,7 @@ aocl_unreorder_f16f16f16of16(const char      order,
                              const md_t      n,
                              const md_t      ldb,
                              dlp_metadata_t* metadata);
+/** @} */
 
 /**
  * @brief Performs GEMM (General Matrix Multiplication) with support

@@ -60,9 +60,11 @@
 #ifdef DLP_CLASSIC_ARCH_64
 /** @brief Matrix buffer size type (64-bit on 64-bit platforms). */
 typedef uint64_t msz_t;
+#define DLP_MSZ_MAX UINT64_MAX
 #else
 /** @brief Matrix buffer size type (32-bit on 32-bit platforms). */
 typedef uint32_t msz_t;
+#define DLP_MSZ_MAX UINT32_MAX
 #endif
 
 #ifdef __cplusplus

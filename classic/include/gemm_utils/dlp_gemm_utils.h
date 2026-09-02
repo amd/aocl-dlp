@@ -86,6 +86,31 @@ dlp_gemm_col_sum_byte_offset(md_t k)
                                   (md_t)sizeof(int32_t));
 }
 
+// GEMM's s8 path treats packed B as unsigned and compensates with
+// 128 * column_sum, stored after the panel. n is padded to 16 and k to 4,
+// matching aocl_get_reorder_buf_size_s8s8s32os32 / the tuned packer.
+DLP_INLINE void
+dlp_reorder_s8_write_col_sums(
+    int8_t* pack_b, const int8_t* b, md_t k, md_t n, md_t rs_b, md_t cs_b)
+{
+    const md_t k_updated = dlp_make_multiple_of_n(k, 4);
+    const md_t n_updated = dlp_make_multiple_of_n(n, 16);
+    int32_t*   sums      = (int32_t*)(pack_b
+                               + ((size_t)sizeof(int8_t) * (size_t)n_updated
+                                  * (size_t)k_updated));
+
+    for (iter_t idx = 0; idx < n_updated; idx++) {
+        sums[idx] = 0;
+    }
+    for (iter_t j = 0; j < n; j++) {
+        int32_t acc = 0;
+        for (iter_t i = 0; i < k; i++) {
+            acc += (int32_t)b[(i * rs_b) + (j * cs_b)];
+        }
+        sums[j] = acc * 128;
+    }
+}
+
 // Read the four A elements that make up one VNNI dot-product group as a single
 // int32 suitable for _mm512_set1_epi32. A is walked at element granularity, so
 // a group boundary lands on an arbitrary byte for s8 and on an even byte for
@@ -220,6 +245,21 @@ DLP_INLINE bool
 dlp_is_notrans(dlp_trans_t trans)
 {
     return (bool)(trans == DLP_NO_TRANSPOSE);
+}
+
+// (rs, cs) for walking a plain B stored with the given order, trans and ldb.
+// The packed buffer is always logical k x n; trans only affects this walk.
+DLP_INLINE void
+dlp_reorder_plain_strides(
+    char order, dlp_trans_t trans, md_t ldb, md_t* rs_b, md_t* cs_b)
+{
+    if ((order == 'r') || (order == 'R')) {
+        *rs_b = dlp_is_notrans(trans) ? ldb : 1;
+        *cs_b = dlp_is_notrans(trans) ? 1 : ldb;
+    } else {
+        *rs_b = dlp_is_notrans(trans) ? 1 : ldb;
+        *cs_b = dlp_is_notrans(trans) ? ldb : 1;
+    }
 }
 
 DLP_INLINE bool
