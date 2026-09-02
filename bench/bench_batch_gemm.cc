@@ -208,6 +208,11 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
         // prepared_args_.backend_metadata
         this->batch_prepare_metadata(prepared_args_);
 
+        // Trial-execute once so missing classic APIs and runtime/ISA rejects
+        // are skipped at registration (same as GEMM bench / GTest), not
+        // reported as a warmup or measured-loop ERROR.
+        m_probe_status = this->batch_gemm(prepared_args_);
+
         // Calculate total operations for GFLOPS
         total_flops_ = 0;
         for (std::size_t g = 0; g < groups_.size(); ++g) {
@@ -221,6 +226,8 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
         }
     }
 
+    UALError probeStatus() const { return m_probe_status; }
+
     // Benchmark execution
     void run(benchmark::State& state)
     {
@@ -232,7 +239,11 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
             for (iter_t i = 0; i < 5; ++i) {
                 UALError status = this->batch_gemm(prepared_args_);
                 if (status != UALError::UAL_SUCCESS) {
-                    state.SkipWithError("Warmup batch_gemm failed");
+                    if (const char* reason = ualRejectionMessage(status)) {
+                        state.SkipWithError(reason);
+                    } else {
+                        state.SkipWithError("Warmup batch_gemm failed");
+                    }
                     return;
                 }
             }
@@ -289,6 +300,7 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
     std::vector<BatchGroup> groups_;
     PreparedBatchGemmArgs   prepared_args_;
     double                  total_flops_;
+    UALError                m_probe_status = UALError::UAL_SUCCESS;
 };
 
 // Typedef for DLP backend
@@ -334,6 +346,19 @@ registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
             // Create fixture ONCE per benchmark
             auto fixture =
                 std::make_unique<OptimizedBatchGemmBenchmarkDlp>(config);
+
+            const auto probe_status = fixture->probeStatus();
+            if (probe_status != UALError::UAL_SUCCESS) {
+                if (const char* reason = ualRejectionMessage(probe_status)) {
+                    std::cerr << "Skipping (" << reason << "): " << config.name
+                              << std::endl;
+                } else {
+                    std::cerr << "Skipping (probe failed; status="
+                              << static_cast<int>(probe_status)
+                              << "): " << config.name << std::endl;
+                }
+                continue;
+            }
 
             // Capture raw pointer (fixture lifetime managed by static vector)
             auto* fixture_ptr = fixture.get();

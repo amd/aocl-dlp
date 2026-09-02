@@ -233,11 +233,10 @@ class OptimizedGemmBenchmark : public ConcreteUAL
         // Pre-build all backend state
         plan_->prepare();
 
-        // Trial-execute ONCE at setup so that configurations the kernel
-        // REJECTS (e.g. an unsupported tuning-knob combination) are detected
-        // here and SKIPPED at registration — instead of surfacing as a
-        // benchmark ERROR ("GEMM operation failed") in the hot loop. This
-        // mirrors the GTest harness, which skips such cases.
+        // Trial-execute ONCE at setup so rejections are SKIPPED at
+        // registration instead of a benchmark ERROR in the hot loop.
+        // Covers missing classic APIs (UAL_NO_MATCHING_API), runtime/ISA
+        // rejects (UAL_NOT_SUPPORTED), and invalid tuning knobs.
         plan_->setBuffers(A_, B_, C_);
         m_probe_status = plan_->execute();
     }
@@ -274,7 +273,11 @@ class OptimizedGemmBenchmark : public ConcreteUAL
             const auto t1     = std::chrono::steady_clock::now();
 
             if (status != UALError::UAL_SUCCESS) {
-                state.SkipWithError("GEMM operation failed");
+                if (const char* reason = ualRejectionMessage(status)) {
+                    state.SkipWithError(reason);
+                } else {
+                    state.SkipWithError("GEMM operation failed");
+                }
                 return;
             }
 
@@ -468,9 +471,14 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
         // GTest).
         const auto probe_status = fixture->probeStatus();
         if (probe_status != UALError::UAL_SUCCESS) {
-            std::cerr << "Skipping (probe failed; status="
-                      << static_cast<int>(probe_status) << "): " << config.name
-                      << std::endl;
+            if (const char* reason = ualRejectionMessage(probe_status)) {
+                std::cerr << "Skipping (" << reason << "): " << config.name
+                          << std::endl;
+            } else {
+                std::cerr << "Skipping (probe failed; status="
+                          << static_cast<int>(probe_status)
+                          << "): " << config.name << std::endl;
+            }
             continue; // fixture destructed here; not registered
         }
 

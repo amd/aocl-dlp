@@ -1429,7 +1429,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
         }
 
         default:
-            return UALError::UAL_NOT_SUPPORTED;
+            // No aocl_batch_gemm_* for this (a,b,c,acc) tuple.
+            return UALError::UAL_NO_MATCHING_API;
     }
 
     // Check metadata for errors (e.g., ISA not supported)
@@ -2224,7 +2225,8 @@ UalDlp::batch_gemm(const PreparedBatchGemmArgs& prepared)
         }
 
         default:
-            return UALError::UAL_NOT_SUPPORTED;
+            // No aocl_batch_gemm_* for this (a,b,c,acc) tuple.
+            return UALError::UAL_NO_MATCHING_API;
     }
 
     // Error checking

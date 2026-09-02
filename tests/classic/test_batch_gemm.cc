@@ -1980,6 +1980,10 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
 
         // Skip test if ISA not supported (e.g., AVX512_BF16 for BF16,
         // AVX512_VNNI for INT8)
+        if (status_dlp == UALError::UAL_NO_MATCHING_API) {
+            GTEST_SKIP()
+                << "No classic aocl_batch_gemm_* API for this type combination";
+        }
         if (status_dlp == UALError::UAL_NOT_SUPPORTED) {
             GTEST_SKIP()
                 << "DLP batch_gemm not supported for this configuration "
