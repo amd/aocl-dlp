@@ -162,8 +162,13 @@ gemm_tests:
       dist: "uniform"
       force_int_distribution: false
     tolerances:
-      relative: 1.0e-1
-      absolute: 1.0e-1
+      # Multiplier of 2.0 gives absTol = ε_fp16 × √K × 2 ≈ 0.011 at K=32,
+      # accommodating the 1–2 ULP variation produced by native FP16 FMA
+      # (vfmadd231ph on Venice/Granite Rapids) vs. the F32-based reference.
+      # The old value of 1e-1 required sub-ULP accuracy, which is impossible
+      # to guarantee between independent correct implementations.
+      relative: 2.0
+      absolute: 2.0
 
   # --------------------------------------------------------------------------
   # u8 x s8 across ALL supported outputs
