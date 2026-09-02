@@ -337,7 +337,9 @@ RefUalPlan::execute()
 
         bool result = ualRef.gemm(A, B, tempC_f32, m_acc_type, m_alpha, m_beta);
         if (!result) {
-            return UALError::UAL_FAILURE;
+            // Params were already validated; gemm() false means no ref
+            // kernel for this (a,b,c,acc) combo.
+            return UALError::UAL_NO_MATCHING_API;
         }
 
         applyPostOps(tempC_f32);
@@ -543,10 +545,11 @@ RefUalPlan::execute()
     // FP16 path: GEMM natively in FP16, post-ops in F32 intermediate
     if ((aType == MatrixType::fp16 && bType == MatrixType::fp16)
         && hasPostOps) {
-        bool result = ualRef.checkValidGemmParams(A, B, C, hasPostOps)
-                      && ualRef.gemm(A, B, C, m_acc_type, m_alpha, m_beta);
-        if (!result) {
+        if (!ualRef.checkValidGemmParams(A, B, C, hasPostOps)) {
             return UALError::UAL_FAILURE;
+        }
+        if (!ualRef.gemm(A, B, C, m_acc_type, m_alpha, m_beta)) {
+            return UALError::UAL_NO_MATCHING_API;
         }
 
         md_t   M = C.getEffectiveRows();
@@ -565,10 +568,11 @@ RefUalPlan::execute()
     }
 
     // Simple path: no post-ops or no f32 intermediate needed
-    bool result = ualRef.checkValidGemmParams(A, B, C, hasPostOps)
-                  && ualRef.gemm(A, B, C, m_acc_type, m_alpha, m_beta);
-    if (!result) {
+    if (!ualRef.checkValidGemmParams(A, B, C, hasPostOps)) {
         return UALError::UAL_FAILURE;
+    }
+    if (!ualRef.gemm(A, B, C, m_acc_type, m_alpha, m_beta)) {
+        return UALError::UAL_NO_MATCHING_API;
     }
 
     if (hasPostOps) {

@@ -814,8 +814,9 @@ DlpUalPlan::prepare()
             break;
 
         default:
-            // Unknown type combo - dispatch will remain null, execute()
-            // will return UAL_FAILURE
+            // Unknown type combo: there is no classic aocl_gemm_* for this
+            // (a,b,c,acc) tuple. Leave dispatch null; execute() returns
+            // UAL_NO_MATCHING_API so GTest skips instead of failing.
             break;
     }
 
@@ -835,8 +836,12 @@ DlpUalPlan::execute()
         return UALError::UAL_FAILURE;
     }
     if (!m_dispatch) {
-        m_last_error_code = DLP_CLSC_FAILURE;
-        return UALError::UAL_FAILURE;
+        // No classic API for this type combination (YAML/cartesian can
+        // invent tuples such as u8×s8→f32 with acc=f32). Distinct from
+        // UAL_NOT_SUPPORTED, which means an existing API was rejected
+        // at runtime (ISA, etc.).
+        m_last_error_code = DLP_CLSC_INVALID_DATA_TYPE;
+        return UALError::UAL_NO_MATCHING_API;
     }
 
     // Reset error state before dispatch

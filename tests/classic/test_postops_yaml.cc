@@ -235,6 +235,11 @@ TEST_F(PostOpsYamlTest, PostOpsWithGemmTest)
         UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
         // Skip test if ISA not supported (e.g., AVX512_VNNI for INT8)
+        if (dlp_status == UALError::UAL_NO_MATCHING_API
+            || ref_status == UALError::UAL_NO_MATCHING_API) {
+            GTEST_SKIP()
+                << "No classic aocl_gemm_* API for this type combination";
+        }
         if (dlp_status == UALError::UAL_NOT_SUPPORTED
             || ref_status == UALError::UAL_NOT_SUPPORTED) {
             GTEST_SKIP() << "GEMM not supported on this processor "

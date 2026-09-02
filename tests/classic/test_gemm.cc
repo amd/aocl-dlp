@@ -1407,9 +1407,16 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         const auto* dlp_plan = dynamic_cast<const DlpUalPlan*>(test_plan.get());
         const dlp_clsc_err_t dlp_execute_error =
             dlp_plan ? dlp_plan->lastErrorCode() : DLP_CLSC_FAILURE;
+        if (test_status == UALError::UAL_NO_MATCHING_API) {
+            GTEST_SKIP() << "No classic aocl_gemm_* API for this (a,b,c,acc) "
+                            "combination:"
+                         << printConfigDetails(config_);
+        }
         if (test_status == UALError::UAL_NOT_SUPPORTED) {
             GTEST_SKIP()
-                << "UAL under test GEMM not supported for this configuration";
+                << "UAL under test GEMM not supported for this configuration "
+                   "(implementation rejected an existing API, e.g. ISA):"
+                << printConfigDetails(config_);
         }
 
         bool test_result = (test_status == UALError::UAL_SUCCESS);

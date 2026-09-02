@@ -194,9 +194,25 @@ enum class UALError
     UAL_FAILURE,          /**< General failure occurred */
     UAL_POSTOPS_MISMATCH, /**< Post-operations mismatch occurred */
     UAL_CAST_ERROR,       /**< Casting error occurred */
-    UAL_NOT_SUPPORTED,    /**< Operation or feature not supported */
+    UAL_NOT_SUPPORTED,    /**< Existing API rejected at runtime (e.g. ISA) */
+    UAL_NO_MATCHING_API,  /**< No classic aocl_gemm_* for this type combo */
     UAL_ERROR_MAX         /**< Maximum error code value (for bounds checking) */
 };
+
+/** Skip/reject reason for harness and bench. nullptr if it is a hard failure.
+ */
+inline const char*
+ualRejectionMessage(UALError e)
+{
+    switch (e) {
+        case UALError::UAL_NO_MATCHING_API:
+            return "no matching classic API for this type combination";
+        case UALError::UAL_NOT_SUPPORTED:
+            return "existing API rejected at runtime (e.g. ISA)";
+        default:
+            return nullptr;
+    }
+}
 
 /**
  * @class IUal
