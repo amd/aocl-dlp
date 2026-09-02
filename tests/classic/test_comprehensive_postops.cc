@@ -285,7 +285,11 @@ TEST_F(ComprehensivePostOpsTest, PostOpsWithGemmIntegrationTest)
                         microTest.configurePlan(*dlp_plan);
                         dlp_plan->prepare();
                         dlp_status = dlp_plan->executeWith(A, B, C_dlp);
-                        // Skip test if ISA not supported
+                        if (dlp_status == UALError::UAL_NO_MATCHING_API) {
+                            GTEST_SKIP()
+                                << "No classic aocl_gemm_* API for this type "
+                                   "combination";
+                        }
                         if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
                             GTEST_SKIP() << "DLP GEMM not supported on this "
                                             "processor (ISA not available)";
@@ -392,7 +396,10 @@ TEST_F(ComprehensivePostOpsTest, BackwardCompatibilityTest)
         plan->prepare();
         UALError status = plan->executeWith(A, B, C);
 
-        // Skip test if ISA not supported
+        if (status == UALError::UAL_NO_MATCHING_API) {
+            GTEST_SKIP()
+                << "No classic aocl_gemm_* API for this type combination";
+        }
         if (status == UALError::UAL_NOT_SUPPORTED) {
             GTEST_SKIP() << "DLP GEMM not supported on this processor "
                          << "(ISA not available)";
