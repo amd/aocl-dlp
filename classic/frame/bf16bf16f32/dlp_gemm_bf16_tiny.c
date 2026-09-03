@@ -227,7 +227,7 @@ DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         if (lcntx->dlp_pack_kernel_hndl.pack_b_hndl.kernel_base != NULL) {
             dlp_execute_packb_kernel(lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
                                      (void*)b, (void*)pack_b_buffer_bf16, n, k,
-                                     rs_b, cs_b, &rs_b_use, &cs_b_use);
+                                     rs_b, cs_b, &rs_b_use, &cs_b_use, NULL);
         } else {
             ((pack_bf16)lcntx->packb_fun_ptr)(pack_b_buffer_bf16, b, rs_b, cs_b,
                                               n, k, &rs_b_use, &cs_b_use);

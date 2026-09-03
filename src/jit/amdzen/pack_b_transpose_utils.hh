@@ -34,7 +34,7 @@
 // Shared in-register 16x16 32-bit-lane transpose for the column-major pack-B
 // JIT generators.
 //
-// Both the F32 and the BF16 column-major packers read SIMD-width columns from a
+// The F32, BF16, and INT8 column-major packers read SIMD-width columns from a
 // column-major source and need the same transpose to turn "16 columns of N
 // 32-bit lanes" into "16 rows of 16 lanes". The transpose is pure data movement
 // over 32-bit lanes, so it is dtype-agnostic:
@@ -42,6 +42,8 @@
 //   * BF16 : each lane is one bf16 K-pair (two consecutive bf16 packed into a
 //            dword), so a 16x16 dword transpose yields the vdpbf16ps K-pair
 //            layout directly.
+//   * INT8 : each lane is one VNNI K-quad (four consecutive int8 packed into a
+//            dword), so the same transpose yields the vpdpbusd panel layout.
 //
 // Only the loads (dtype-specific) and the stores (dtype-specific strides /
 // masking) live in the individual generators; the permutation math is shared

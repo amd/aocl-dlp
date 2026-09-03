@@ -642,6 +642,7 @@ struct packKernelInfo
     DataType              src_type;
     DataType              dst_type;
     bool                  isColMajor;
+    bool                  accColSum;
 
     packKernelInfo()
         : panel_dim(0)
@@ -650,6 +651,7 @@ struct packKernelInfo
         , src_type(DataType::invalid)
         , dst_type(DataType::invalid)
         , isColMajor(false)
+        , accColSum(false)
     {
     }
 
@@ -658,13 +660,15 @@ struct packKernelInfo
                    kernelInstrPreference _kInstPref,
                    DataType              _src_type   = DataType::invalid,
                    DataType              _dst_type   = DataType::invalid,
-                   bool                  _isColMajor = false)
+                   bool                  _isColMajor = false,
+                   bool                  _accColSum  = false)
         : panel_dim(_panel_dim)
         , k_factor(_k_factor)
         , kInstPref(_kInstPref)
         , src_type(_src_type)
         , dst_type(_dst_type)
         , isColMajor(_isColMajor)
+        , accColSum(_accColSum)
     {
     }
 
@@ -678,7 +682,8 @@ struct packKernelInfo
     {
         return (panel_dim == rhs.panel_dim) && (k_factor == rhs.k_factor)
                && (kInstPref == rhs.kInstPref) && (src_type == rhs.src_type)
-               && (dst_type == rhs.dst_type) && (isColMajor == rhs.isColMajor);
+               && (dst_type == rhs.dst_type) && (isColMajor == rhs.isColMajor)
+               && (accColSum == rhs.accColSum);
     }
 
     bool operator!=(const packKernelInfo& rhs) const { return !(*this == rhs); }

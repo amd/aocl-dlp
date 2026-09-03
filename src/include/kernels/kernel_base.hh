@@ -357,6 +357,11 @@ struct packBParams : public kernelParams
     alignas(32) std::array<std::array<int32_t, 8>,
                            MAX_PACK_AVX2_BLOCKS> nMaskPerBlock{};
 
+    // S8-generated INT8 pack kernels require this pointer and add
+    // 128 * sum_k B[k, n] into col_sum[n]. F32, BF16, and U8-generated
+    // kernels leave it null and emit no column-sum instructions.
+    int32_t* col_sum;
+
     packBParams()
         : src(nullptr)
         , dst(nullptr)
@@ -372,6 +377,7 @@ struct packBParams : public kernelParams
         , kMaskArray{ 0, 0, 0, 0, 0, 0, 0, 0 }
         , nFringeMaskPerBlock{}
         , nMaskPerBlock{}
+        , col_sum(nullptr)
     {
     }
 
@@ -391,6 +397,7 @@ struct packBParams : public kernelParams
         , kMaskArray{ 0, 0, 0, 0, 0, 0, 0, 0 }
         , nFringeMaskPerBlock{}
         , nMaskPerBlock{}
+        , col_sum(nullptr)
     {
     }
 
@@ -409,6 +416,7 @@ struct packBParams : public kernelParams
         , kMaskArray(other.kMaskArray)
         , nFringeMaskPerBlock(other.nFringeMaskPerBlock)
         , nMaskPerBlock(other.nMaskPerBlock)
+        , col_sum(other.col_sum)
     {
     }
 
@@ -427,9 +435,11 @@ struct packBParams : public kernelParams
         , kMaskArray(other.kMaskArray)
         , nFringeMaskPerBlock(other.nFringeMaskPerBlock)
         , nMaskPerBlock(other.nMaskPerBlock)
+        , col_sum(other.col_sum)
     {
-        other.src = nullptr;
-        other.dst = nullptr;
+        other.src     = nullptr;
+        other.dst     = nullptr;
+        other.col_sum = nullptr;
     }
 
     packBParams& operator=(const packBParams& other)
@@ -449,6 +459,7 @@ struct packBParams : public kernelParams
             kMaskArray          = other.kMaskArray;
             nFringeMaskPerBlock = other.nFringeMaskPerBlock;
             nMaskPerBlock       = other.nMaskPerBlock;
+            col_sum             = other.col_sum;
         }
         return *this;
     }
@@ -470,16 +481,19 @@ struct packBParams : public kernelParams
             kMaskArray          = other.kMaskArray;
             nFringeMaskPerBlock = other.nFringeMaskPerBlock;
             nMaskPerBlock       = other.nMaskPerBlock;
+            col_sum             = other.col_sum;
             other.src           = nullptr;
             other.dst           = nullptr;
+            other.col_sum       = nullptr;
         }
         return *this;
     }
 
     ~packBParams()
     {
-        src = nullptr;
-        dst = nullptr;
+        src     = nullptr;
+        dst     = nullptr;
+        col_sum = nullptr;
     }
 };
 

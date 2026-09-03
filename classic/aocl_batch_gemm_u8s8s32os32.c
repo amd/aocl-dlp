@@ -36,6 +36,78 @@
 #include "logging/dlp_gemm_logger.h"
 #include "threading/dlp_gemm_thread_decor_openmp.h"
 
+// Mark only groups skipped after an error. Successful batches pass
+// first_group == group_count, avoiding the previous full metadata pre-pass.
+static inline void
+dlp_batch_mark_remaining_groups_failed(md_t             first_group,
+                                       md_t             group_count,
+                                       dlp_metadata_t** metadata)
+{
+    for (iter_t gc_i = first_group; gc_i < group_count; gc_i++) {
+        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_FAILURE);
+    }
+}
+
+static dlp_clsc_err_t
+dlp_batch_prepare_u8s8_cntx(dlp_gemm_cntx_t* cntx, dlp_metadata_t* metadata)
+{
+    dlp_clsc_err_t err =
+        dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, cntx, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        return err;
+    }
+
+    // A batch decorator divides the runtime pool among the GEMMs in a group,
+    // so there is no single call-wide thread count to compare with nt_hint.
+    // Match the BF16 batch contract and reject only malformed hint values.
+    err = dlp_gemm_validate_hints(cntx);
+    if (err != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "GEMM hints must be zero (unset) or positive, got "
+                 "m_hint: %ld nt_hint: %ld\n",
+                 (cntx->gemm_kernel_hints).m_hint,
+                 (cntx->gemm_kernel_hints).nt_hint);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+    }
+    return err;
+}
+
+static dlp_clsc_err_t
+dlp_batch_init_u8s8_packb(kernel_datatype_t k_dtype,
+                          md_t              n,
+                          md_t              k,
+                          md_t              rs_b,
+                          md_t              cs_b,
+                          dlp_gemm_cntx_t*  cntx,
+                          dlp_metadata_t*   metadata)
+{
+    cntx->dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(k_dtype, n, k, rs_b, cs_b, cntx);
+
+    if ((cntx->blksz.NR > 1)
+        && (cntx->dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL)) {
+        return DLP_CLSC_INVALID_JIT_KERNEL;
+    }
+
+    dlp_upd_pack_strides(k_dtype, cntx);
+
+    dlp_clsc_err_t err = dlp_gemm_validate_metadata_with_lcntx(metadata, cntx);
+    if (err != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged or corrupted from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 cntx->blksz.MC, cntx->blksz.NC, cntx->blksz.KC, cntx->blksz.MR,
+                 cntx->blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+    }
+    return err;
+}
+
 void
 aocl_batch_gemm_u8s8s32os32(const char*      order,
                             const char*      transa,
@@ -61,6 +133,8 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
                                         transb, m, n, k, alpha, a, lda, b, ldb,
                                         beta, c, ldc, group_count, group_size,
                                         mem_format_a, mem_format_b, metadata);
+
+    md_t first_unprocessed_group = group_count;
 
     DLP_GEMM_START_LOGGER();
     BATCH_DLP_GEMM_WRITE_LOGGER(
@@ -91,6 +165,7 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
     for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+        first_unprocessed_group = gc_i + 1;
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
@@ -223,6 +298,12 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
 
+        err = dlp_batch_prepare_u8s8_cntx(&lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
         // All the g_sz inputs in a given group will have the same matrix
@@ -238,6 +319,14 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         // not attempt to execute the kernel, and return an error instead.
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
+        err =
+            dlp_batch_init_u8s8_packb(DLP_KERNEL_U8S8S32OS32, n_local, k_local,
+                                      rs_b, cs_b, &lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -261,6 +350,8 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
+    dlp_batch_mark_remaining_groups_failed(first_unprocessed_group, group_count,
+                                           metadata);
     DLP_GEMM_STOP_LOGGER();
 }
 
@@ -289,6 +380,8 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
                                         transb, m, n, k, alpha, a, lda, b, ldb,
                                         beta, c, ldc, group_count, group_size,
                                         mem_format_a, mem_format_b, metadata);
+
+    md_t first_unprocessed_group = group_count;
 
     DLP_GEMM_START_LOGGER();
     BATCH_DLP_GEMM_WRITE_LOGGER(
@@ -319,6 +412,7 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
     for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+        first_unprocessed_group = gc_i + 1;
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
@@ -450,6 +544,12 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
 
+        err = dlp_batch_prepare_u8s8_cntx(&lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
         // All the g_sz inputs in a given group will have the same matrix
@@ -465,6 +565,13 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         // not attempt to execute the kernel, and return an error instead.
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
+        err = dlp_batch_init_u8s8_packb(DLP_KERNEL_U8S8S32OS8, n_local, k_local,
+                                        rs_b, cs_b, &lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -488,6 +595,8 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
+    dlp_batch_mark_remaining_groups_failed(first_unprocessed_group, group_count,
+                                           metadata);
     DLP_GEMM_STOP_LOGGER();
 }
 
@@ -516,6 +625,8 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
                                         transb, m, n, k, alpha, a, lda, b, ldb,
                                         beta, c, ldc, group_count, group_size,
                                         mem_format_a, mem_format_b, metadata);
+
+    md_t first_unprocessed_group = group_count;
 
     DLP_GEMM_START_LOGGER();
     BATCH_DLP_GEMM_WRITE_LOGGER(
@@ -546,6 +657,7 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
     for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+        first_unprocessed_group = gc_i + 1;
 
         md_t g_sz = group_size[gc_i];
 
@@ -678,6 +790,12 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
 
+        err = dlp_batch_prepare_u8s8_cntx(&lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
         // All the g_sz inputs in a given group will have the same matrix
@@ -693,6 +811,14 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         // not attempt to execute the kernel, and return an error instead.
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
+        err =
+            dlp_batch_init_u8s8_packb(DLP_KERNEL_U8S8S32OF32, n_local, k_local,
+                                      rs_b, cs_b, &lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -716,6 +842,8 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
+    dlp_batch_mark_remaining_groups_failed(first_unprocessed_group, group_count,
+                                           metadata);
     DLP_GEMM_STOP_LOGGER();
 }
 
@@ -745,6 +873,8 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
                                         beta, c, ldc, group_count, group_size,
                                         mem_format_a, mem_format_b, metadata);
 
+    md_t first_unprocessed_group = group_count;
+
     DLP_GEMM_START_LOGGER();
     BATCH_DLP_GEMM_WRITE_LOGGER(
         "u8s8s32obf16", order, transa, transb, group_count, group_size, m, n, k,
@@ -773,6 +903,7 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
     for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+        first_unprocessed_group = gc_i + 1;
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
@@ -899,6 +1030,12 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
 
+        err = dlp_batch_prepare_u8s8_cntx(&lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
         // All the g_sz inputs in a given group will have the same matrix
@@ -914,6 +1051,14 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         // not attempt to execute the kernel, and return an error instead.
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
+        err =
+            dlp_batch_init_u8s8_packb(DLP_KERNEL_U8S8S32OBF16, n_local, k_local,
+                                      rs_b, cs_b, &lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -937,6 +1082,8 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
+    dlp_batch_mark_remaining_groups_failed(first_unprocessed_group, group_count,
+                                           metadata);
     DLP_GEMM_STOP_LOGGER();
 }
 
@@ -966,6 +1113,8 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
                                         beta, c, ldc, group_count, group_size,
                                         mem_format_a, mem_format_b, metadata);
 
+    md_t first_unprocessed_group = group_count;
+
     DLP_GEMM_START_LOGGER();
     BATCH_DLP_GEMM_WRITE_LOGGER(
         "u8s8s32ou8", order, transa, transb, group_count, group_size, m, n, k,
@@ -994,6 +1143,7 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
     for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+        first_unprocessed_group = gc_i + 1;
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
@@ -1126,6 +1276,12 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
 
+        err = dlp_batch_prepare_u8s8_cntx(&lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
         // All the g_sz inputs in a given group will have the same matrix
@@ -1141,6 +1297,13 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         // not attempt to execute the kernel, and return an error instead.
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
+        err = dlp_batch_init_u8s8_packb(DLP_KERNEL_U8S8S32OU8, n_local, k_local,
+                                        rs_b, cs_b, &lcntx_l, metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -1164,5 +1327,7 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
+    dlp_batch_mark_remaining_groups_failed(first_unprocessed_group, group_count,
+                                           metadata);
     DLP_GEMM_STOP_LOGGER();
 }

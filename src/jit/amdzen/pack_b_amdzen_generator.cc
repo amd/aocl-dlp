@@ -31,6 +31,8 @@
 #include "bf16_pack_b_generator.hh"
 #include "f32_col_major_pack_b_generator.hh"
 #include "f32_pack_b_generator.hh"
+#include "int8_col_major_pack_b_generator.hh"
+#include "int8_pack_b_generator.hh"
 #include "jit_generator_utils.hh"
 #include "jit_register/jit_register.hh"
 #include "traits.hh"
@@ -600,10 +602,258 @@ jitAmdZenPackBBF16::clone()
 }
 
 // ===========================================================================
+// INT8 pack-B orchestrator (jitAmdZenPackBINT8)
+// ===========================================================================
+
+jitAmdZenPackBINT8::jitAmdZenPackBINT8()
+    : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::u8s8s32os32,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32of32,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32of16,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32obf16,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32ou8,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32os8,
+                         dlp::kernel_frame::kernelDatatype::s8s8s32os32,
+                         dlp::kernel_frame::kernelDatatype::s8s8s32of32,
+                         dlp::kernel_frame::kernelDatatype::s8s8s32of16,
+                         dlp::kernel_frame::kernelDatatype::s8s8s32obf16,
+                         dlp::kernel_frame::kernelDatatype::s8s8s32ou8,
+                         dlp::kernel_frame::kernelDatatype::s8s8s32os8 })
+    , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni,
+                             dlp::cpu_utils::isaFeature::avx512f,
+                             dlp::cpu_utils::isaFeature::avx512bw })
+    , kType(utils::kernelInstrType::none)
+    , numElemsPerReg(1)
+    , NR(0)
+    , isColMajor_(false)
+    , accColSum_(false)
+{
+}
+
+jitAmdZenPackBINT8::~jitAmdZenPackBINT8()
+{
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
+    }
+    kernelCodeBlocks.clear();
+}
+
+void
+jitAmdZenPackBINT8::setGeneratorKernelMetaInfo(
+    dlp::kernel_frame::kernelInstrPreference kInstPref)
+{
+    kType = utils::kernelInstrType::none;
+    switch (kInstPref) {
+        // INT8 pack-B requires AVX-512-VNNI. The generic AVX-512 ZMM
+        // preference maps to the 32x ZMM backend; actual VNNI availability
+        // is enforced via required ISA features (avx512vnni).
+        case dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour: {
+            kType = utils::kernelInstrType::avx512_zmm_32_reg;
+            numElemsPerReg =
+                traits::ArchitectureTraits<
+                    utils::kernelInstrType::avx512_zmm_32_reg>::regBytes
+                / sizeof(int8_t);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+dlp::jit::jitGeneratorError
+jitAmdZenPackBINT8::generateAllKernels(
+    const dlp::jit::packBJitGeneratorContext& jI)
+{
+    setGeneratorKernelMetaInfo(jI.kI.kInstPref);
+
+    if (kType == utils::kernelInstrType::none) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    }
+
+    NR          = jI.kI.panel_dim;
+    isColMajor_ = jI.kI.isColMajor;
+    accColSum_  = jI.kI.accColSum;
+
+    if (kType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    }
+    if (jI.kI.k_factor != K_FACTOR) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    // Fringe ladder (same shape as BF16). kernelWidth = simdWidth / K_FACTOR
+    // = 64 int8 lanes / 4 = 16 n per ZMM.
+    //
+    //   index 0            -> lt-block kernel (width = kernelWidth, useMask)
+    //   index i in [1..nf] -> looped kernel of width i*kernelWidth
+    //                         (i == nf is the main full-NR kernel)
+    const md_t kernelWidth = static_cast<md_t>(numElemsPerReg) / K_FACTOR;
+
+    if (kernelWidth <= 0 || NR <= 0 || (NR % kernelWidth) != 0) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    }
+
+    const int numFull    = static_cast<int>(NR / kernelWidth);
+    const int numKernels = numFull + 1;
+    kernelCodeBlocks.resize(numKernels, nullptr);
+
+    utils::packBGeneratorParams genParams(NR, K_FACTOR, kType,
+                                          /*useMask=*/false, /*numMaskRegs=*/0);
+    genParams.accColSum = accColSum_;
+
+    for (int ki = 0; ki < numKernels; ++ki) {
+        const bool useMask = (ki == 0);
+        const md_t width   = useMask ? kernelWidth
+                                     : static_cast<md_t>(ki) * kernelWidth;
+
+        genParams.NR          = width;
+        genParams.useMask     = useMask;
+        genParams.numMaskRegs = useMask ? 1 : 0;
+        genParams.nLoop       = (ki == numFull);
+
+        dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::success;
+
+        if (isColMajor_) {
+            auto gen =
+                std::make_unique<PackBcodeGenerator::jitPackBINT8ColMajor<
+                    utils::kernelInstrType::avx512_zmm_32_reg>>();
+            err = gen->generateKernel(genParams);
+            if (err == dlp::jit::jitGeneratorError::success) {
+                gen->ready();
+                kernelCodeBlocks[ki] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
+            }
+        } else {
+            auto gen = std::make_unique<PackBcodeGenerator::jitPackBINT8<
+                utils::kernelInstrType::avx512_zmm_32_reg>>();
+            err      = gen->generateKernel(genParams);
+            if (err == dlp::jit::jitGeneratorError::success) {
+                gen->ready();
+                kernelCodeBlocks[ki] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
+            }
+        }
+
+        if (err != dlp::jit::jitGeneratorError::success) {
+            codeGenerators.clear();
+            kernelCodeBlocks.clear();
+            return err;
+        }
+
+        DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+            kernelCodeBlocks[ki], utils::JIT_KERNEL_SIZE,
+            isColMajor_ ? "jit_int8_pack_b_col_major"
+                        : "jit_int8_pack_b_row_major",
+            0, width, useMask, ki);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+std::vector<dlp::kernel_frame::kernelDatatype>&
+jitAmdZenPackBINT8::getKernelDatatypes()
+{
+    return mKernelDatatypes;
+}
+
+std::vector<dlp::cpu_utils::isaFeature>&
+jitAmdZenPackBINT8::getIsaFeaturesRequired()
+{
+    return mIsaFeaturesRequired;
+}
+
+dlp::kernels::kernelError
+jitAmdZenPackBINT8::executeKernel(dlp::kernels::kernelParams* _params)
+{
+    if (kernelCodeBlocks.empty()) {
+        return dlp::kernels::kernelError::error;
+    }
+
+    auto* params = static_cast<dlp::kernels::packBParams*>(_params);
+    if (accColSum_) {
+        if (params->col_sum == nullptr) {
+            return dlp::kernels::kernelError::badInputParams;
+        }
+    }
+
+    const md_t kernelWidth = static_cast<md_t>(numElemsPerReg) / K_FACTOR;
+    const md_t n_total     = params->n;
+
+    // A source n-step is one int8 element row-major, or cs_src elements
+    // column-major. The packed panel rounds K up to a multiple of 4
+    // (INT8 packs K-quads); a width-W panel occupies KC_updated * W bytes.
+    const md_t srcColStrideBytes = isColMajor_ ? params->cs_src * sizeof(int8_t)
+                                               : sizeof(int8_t);
+    const md_t KC_updated =
+        (params->k + (K_FACTOR - 1)) & ~static_cast<md_t>(K_FACTOR - 1);
+    const md_t dstPanelBytesPerW = KC_updated * sizeof(int8_t);
+
+    auto advance = [&](md_t width) {
+        params->src =
+            static_cast<char*>(params->src) + width * srcColStrideBytes;
+        params->dst =
+            static_cast<char*>(params->dst) + width * dstPanelBytesPerW;
+        if (accColSum_) {
+            params->col_sum += width;
+        }
+    };
+    auto runKernel = [&](int idx) {
+        auto kernel =
+            reinterpret_cast<utils::jit_pack_b_kernel>(kernelCodeBlocks[idx]);
+        DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+        kernel(params);
+    };
+
+    const int numFull = static_cast<int>(NR / kernelWidth);
+
+    const md_t n_full_pieces_limit = (n_total / NR) * NR;
+    if (n_full_pieces_limit > 0) {
+        params->n_full_pieces_limit = n_full_pieces_limit;
+        params->n_partial           = 0;
+        runKernel(numFull);
+        advance(n_full_pieces_limit);
+    }
+
+    md_t n_partial = n_total - n_full_pieces_limit;
+
+    const md_t baseW = (n_partial / kernelWidth) * kernelWidth;
+    if (baseW > 0) {
+        runKernel(static_cast<int>(baseW / kernelWidth));
+        advance(baseW);
+        n_partial -= baseW;
+    }
+
+    if (n_partial > 0) {
+        if (isColMajor_) {
+            params->n_partial = n_partial;
+        } else {
+            params->nFringeMaskPerBlock[0] =
+                static_cast<uint32_t>((1u << n_partial) - 1);
+        }
+        runKernel(0);
+    }
+
+    // cs_dst is 64 (one VNNI ZMM), not NR/4. See jitPackBINT8::generateKernel.
+    params->rs_dst = NR * K_FACTOR;
+    params->cs_dst = 64;
+
+    return dlp::kernels::kernelError::success;
+}
+
+std::unique_ptr<dlp::jit::packBJitGenerator>
+jitAmdZenPackBINT8::clone()
+{
+    return std::make_unique<jitAmdZenPackBINT8>();
+}
+
+// ===========================================================================
 // Static registration of pack-B JIT generators (all datatypes).
 // ===========================================================================
 
 DLP_REGISTER_STATIC_PACKB_JIT_GENERATOR(jitAmdZenPackBFP32, "f32_pack_b");
 DLP_REGISTER_STATIC_PACKB_JIT_GENERATOR(jitAmdZenPackBBF16, "bf16_pack_b");
+DLP_REGISTER_STATIC_PACKB_JIT_GENERATOR(jitAmdZenPackBINT8, "int8_pack_b");
 
 } // namespace amdzen::gen

@@ -454,9 +454,9 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                               dlp_gemm_post_op_attr         post_ops_attr,
                               dlp_gemm_grp_post_op_attr     grp_post_ops_attr);
 
-// Packs B with the JIT pack-B kernel. The caller must only invoke this with a
-// valid (non-NULL) handle; the kernel ladder covers the full NR panel plus the
-// fringe / lt16 cascade for every n, so there is no in-band failure to report.
+// S8-generated INT8 kernels require col_sum and accumulate
+// 128 * sum_k B[k, n] into it. F32, BF16, and U8-generated kernels pass NULL
+// and do not emit column-sum instructions.
 void
 dlp_execute_packb_kernel(dlp_pack_info_hndl_t kernel_hndl,
                          void*                src,
@@ -466,7 +466,8 @@ dlp_execute_packb_kernel(dlp_pack_info_hndl_t kernel_hndl,
                          md_t                 rs_src,
                          md_t                 cs_src,
                          md_t*                rs_dst,
-                         md_t*                cs_dst);
+                         md_t*                cs_dst,
+                         int32_t*             col_sum);
 
 void
 dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,

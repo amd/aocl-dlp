@@ -29,6 +29,7 @@ set(EXAMPLE_SOURCES
     multi_instance_gemm_u8s8.c
     simple_gemm_bf16.c
     simple_gemm_s8.c
+    simple_gemm_u8s8_12x32.c
     simple_gemm_with_bias.c
     simple_gemm_with_relu.c
     simple_gemm_with_mish.c

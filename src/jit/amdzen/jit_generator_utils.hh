@@ -645,19 +645,23 @@ struct packBGeneratorParams
     // full-NR kernel (packs every NR panel in one call); false for fringe
     // kernels, which pack a single panel and skip the loop scaffolding.
     bool nLoop;
+    // Generate-time: emit fused s8s8 col-sum. False for F32/BF16/u8s8.
+    bool accColSum;
 
     packBGeneratorParams(md_t            _NR,
                          md_t            _K_FACTOR,
                          kernelInstrType _kType,
                          bool            _useMask     = false,
                          int             _numMaskRegs = 0,
-                         bool            _nLoop       = true)
+                         bool            _nLoop       = true,
+                         bool            _accColSum   = false)
         : NR(_NR)
         , K_FACTOR(_K_FACTOR)
         , kType(_kType)
         , useMask(_useMask)
         , numMaskRegs(_numMaskRegs)
         , nLoop(_nLoop)
+        , accColSum(_accColSum)
     {
     }
 

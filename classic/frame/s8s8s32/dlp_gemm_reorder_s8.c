@@ -38,10 +38,10 @@
 #endif
 
 void
-dlp_reorderb_nr64_s8s8s32o32(dlp_gemm_obj_t*  b,
-                             dlp_gemm_obj_t*  b_reorder,
-                             dlp_rntm_t*      rntm,
-                             dlp_gemm_cntx_t* lcntx)
+dlp_reorderb_s8s8s32o32(dlp_gemm_obj_t*  b,
+                        dlp_gemm_obj_t*  b_reorder,
+                        dlp_rntm_t*      rntm,
+                        dlp_gemm_cntx_t* lcntx)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -111,49 +111,17 @@ dlp_reorderb_nr64_s8s8s32o32(dlp_gemm_obj_t*  b,
                 // used for packed/reordered buffers needs to be updated.
                 md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
-                // The offsets are calculated in such a way that it resembles
-                // the reorder buffer traversal in single threaded reordering.
-                // The panel boundaries (KCxNC) remain as it is accessed in
-                // single thread, and as a consequence a thread with jc_start
-                // inside the panel cannot consider NC range for reorder. It
-                // has to work with NC' < NC, and the offset is calulated using
-                // prev NC panels spanning k dim + cur NC panel spaning pc loop
-                // cur iteration + (NC - NC') spanning current kc0 (<= KC).
-                //
-                // Eg: Consider the following reordered buffer diagram:
-                //          t1              t2
-                //          |               |
-                //          |           |..NC..|
-                //          |           |      |
-                //          |.NC. |.NC. |NC'|NC"
-                //     pc=0-+-----+-----+---+--+
-                //        KC|     |     |   |  |
-                //          |  1  |  3  |   5  |
-                //    pc=KC-+-----+-----+---st-+
-                //        KC|     |     |   |  |
-                //          |  2  |  4  | 6 | 7|
-                // pc=k=2KC-+-----+-----+---+--+
-                //          |jc=0 |jc=NC|jc=2NC|
-                //
-                // The numbers 1,2..6,7 denotes the order in which reordered
-                // KCxNC blocks are stored in memory, ie: block 1 followed by 2
-                // followed by 3, etc. Given two threads t1 and t2, and t2 needs
-                // to acces point st in the reorder buffer to write the data:
-                // The offset calulation logic will be:
-                // jc_cur_loop = 2NC, jc_cur_loop_rem = NC', pc = KC,
-                // n_sub_updated = NC, k = 2KC, kc0_updated = KC
-                //
-                // st = ( jc_cur_loop * k )    <traverse blocks 1,2,3,4>
-                //    + ( n_sub_updated * pc ) <traverse block 5>
-                //    + ( NC' * kc0_updated)   <traverse block 6>
-                ((packb_s32_s8)lcntx->packb_fun_ptr)(
+                int8_t* pack_dst =
                     (((int8_t*)b_reorder->storage.aligned_buffer)
                      + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
-                     + (jc_cur_loop_rem * kc0_updated)),
-                    pack_b_column_sum + jc,
-                    (((int8_t*)b->storage.aligned_buffer) + (rs_b * pc)
-                     + jc * cs_b),
-                    rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
+                     + (jc_cur_loop_rem * kc0_updated));
+                const int8_t* pack_src = (((int8_t*)b->storage.aligned_buffer)
+                                          + (rs_b * pc) + jc * cs_b);
+
+                dlp_execute_packb_kernel(
+                    lcntx->dlp_pack_kernel_hndl.pack_b_hndl, (void*)pack_src,
+                    (void*)pack_dst, nc0, kc0, rs_b, cs_b, &rs_b_reorder,
+                    &cs_b_reorder, pack_b_column_sum + jc);
             }
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }

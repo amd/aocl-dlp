@@ -258,9 +258,15 @@ UalDlp::reorder(const Matrix&          in,
                 effective_cols, &meta);
         }
     } else if (in.getMatrixType() == MatrixType::s8) {
-        // For s8, select sym_quant or standard reorder based on GEMM context
+        // B is s8 for both integer APIs. Select the layout from A's type:
+        // S8S8 carries column sums, while U8S8 does not.
         if (sym_quant) {
             alloc_bytes = aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, &meta);
+        } else if (A_type == MatrixType::u8) {
+            alloc_bytes = aocl_get_reorder_buf_size_u8s8s32os32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
                 effective_cols, &meta);
@@ -380,6 +386,15 @@ UalDlp::reorder(const Matrix&          in,
         case MatrixType::s8:
             if (sym_quant) {
                 aocl_reorder_s8s8s32os32_sym_quant(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const int8_t*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<int8_t*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    &meta);
+            } else if (A_type == MatrixType::u8) {
+                aocl_reorder_u8s8s32os32(
                     layout, in.isTransposed() ? 't' : 'n', 'B',
                     reinterpret_cast<const int8_t*>(
                         in.getMatrixData().getMatrixPtr()),

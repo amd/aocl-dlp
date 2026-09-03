@@ -38,6 +38,7 @@
 #   odd / fringe dimensions ......... api_smoke_f32_odd_dims,
 #             api_smoke_bf16_odd_dims, api_smoke_bf16_odd_dims_reorder,
 #             api_smoke_s8s8_odd_dims
+#   INT8 pack-B non-default NR ...... api_smoke_int8_pack_b_12x32
 # ============================================================================
 
 gemm_tests:
@@ -541,6 +542,36 @@ gemm_tests:
     tolerances:
       relative: 100.0
       absolute: 50.0
+
+  # --------------------------------------------------------------------------
+  # INT8 pack-B with a non-default kernel tile (12x32). transB covers the
+  # col-major JIT packer; mtagB none is rewritten to PACK inside GEMM.
+  # --------------------------------------------------------------------------
+  - name: "api_smoke_int8_pack_b_12x32"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false, true]
+    m: [12]
+    n: [40]
+    k: [17]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    blocking:
+      MR: 12
+      NR: 32
+      MC: 144
+      NC: 1024
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
 
   # --------------------------------------------------------------------------
   # Remaining elementwise activations on a single tiny f32 shape

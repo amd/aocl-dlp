@@ -260,7 +260,7 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
                             (void*)(((bfloat16*)b) + (rs_b * pc) + (jc * cs_b)),
                             (void*)(((bfloat16*)pack_b_buffer_bf16)
                                     + (n_sub_updated * pc)),
-                            nc0, kc0, rs_b, cs_b, &rs_b_use, &cs_b_use);
+                            nc0, kc0, rs_b, cs_b, &rs_b_use, &cs_b_use, NULL);
                     } else {
                         ((pack_bf16)lcntx->packb_fun_ptr)(
                             ((bfloat16*)pack_b_buffer_bf16)
@@ -515,7 +515,7 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                             (void*)(pack_b_buffer_bf16
                                     + (jc_packb_start * kc0_updated)),
                             (jc_packb_end - jc_packb_start), kc0, rs_b, cs_b,
-                            &rs_b_use, &cs_b_use);
+                            &rs_b_use, &cs_b_use, NULL);
                     } else {
                         ((pack_bf16)lcntx->packb_fun_ptr)(
                             pack_b_buffer_bf16 + (jc_packb_start * kc0_updated),

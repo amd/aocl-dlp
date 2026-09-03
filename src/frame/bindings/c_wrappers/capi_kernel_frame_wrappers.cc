@@ -479,6 +479,30 @@ dlp_get_packb_kernelInfo_by_dtype(kernelDatatype                 kDType,
                 kDType);
     }
 
+    else if (kDType == kernelDatatype::u8s8s32os32
+             || kDType == kernelDatatype::u8s8s32of32
+             || kDType == kernelDatatype::u8s8s32of16
+             || kDType == kernelDatatype::u8s8s32obf16
+             || kDType == kernelDatatype::u8s8s32ou8
+             || kDType == kernelDatatype::u8s8s32os8) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmPackBInfoForInputFastPath<dlp::de::gemmU8S8DEBackend>(
+                nc, cs_src, n, k, mr_hint, nr_hint, blksz_set_mask, gemm_hints,
+                kDType);
+    }
+
+    else if (kDType == kernelDatatype::s8s8s32os32
+             || kDType == kernelDatatype::s8s8s32of32
+             || kDType == kernelDatatype::s8s8s32of16
+             || kDType == kernelDatatype::s8s8s32obf16
+             || kDType == kernelDatatype::s8s8s32ou8
+             || kDType == kernelDatatype::s8s8s32os8) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmPackBInfoForInputFastPath<dlp::de::gemmS8DEBackend>(
+                nc, cs_src, n, k, mr_hint, nr_hint, blksz_set_mask, gemm_hints,
+                kDType);
+    }
+
     return dlp::kernel_frame::packKernelInfo();
 }
 
@@ -569,13 +593,15 @@ dlp_execute_packb_kernel(dlp_pack_info_hndl_t kernel_hndl,
                          md_t                 rs_src,
                          md_t                 cs_src,
                          md_t*                rs_dst,
-                         md_t*                cs_dst)
+                         md_t*                cs_dst,
+                         int32_t*             col_sum)
 {
     if (kernel_hndl.kernel_base == nullptr) {
         return;
     }
 
     packBParams packBParamsIn(src, dst, n, k, rs_src, cs_src);
+    packBParamsIn.col_sum = col_sum;
 
     kernelBase* kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
     kB->operator()(std::addressof(packBParamsIn));

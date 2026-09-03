@@ -1273,6 +1273,41 @@ class gemmU8S8DEBackend final : public iDEBackend
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
+        [[maybe_unused]] md_t                           nc,
+        md_t                                            cs_src,
+        [[maybe_unused]] md_t                           n,
+        [[maybe_unused]] md_t                           k,
+        [[maybe_unused]] md_t                           mr_hint,
+        md_t                                            nr_hint,
+        [[maybe_unused]] md_t                           blksz_set_mask,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints)
+        override final
+    {
+        // INT8 pack-B JIT is AVX-512-VNNI only. Without VNNI the frame keeps
+        // the C packer (same VNNI-4 layout, NR from lcntx).
+        if (!isAvx512Vnni) {
+            return kernel_frame::INVALID_PACK_KERNEL_INFO;
+        }
+
+        bool colMajor = (cs_src != 1);
+
+        // INT8 fuses four consecutive K elements per lane (vpdpbusd); the
+        // packed panel is laid out in K-quads, hence k_factor = 4. B is s8
+        // for both u8s8 and s8s8; do not pack as u8.
+        constexpr md_t k_factor = 4;
+
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+        }
+
+        return dlp::kernel_frame::packKernelInfo(
+            nr_hint, k_factor, kInstPref, kernel_frame::DataType::s8,
+            kernel_frame::DataType::s8, colMajor, /*accColSum=*/false);
+    }
 };
 
 class gemmS8DEBackend final : public iDEBackend
@@ -1465,6 +1500,41 @@ class gemmS8DEBackend final : public iDEBackend
             mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
+        [[maybe_unused]] md_t                           nc,
+        md_t                                            cs_src,
+        [[maybe_unused]] md_t                           n,
+        [[maybe_unused]] md_t                           k,
+        [[maybe_unused]] md_t                           mr_hint,
+        md_t                                            nr_hint,
+        [[maybe_unused]] md_t                           blksz_set_mask,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints)
+        override final
+    {
+        // INT8 pack-B JIT is AVX-512-VNNI only. Without VNNI the frame keeps
+        // the C packer (same VNNI-4 layout, NR from lcntx).
+        if (!isAvx512Vnni) {
+            return kernel_frame::INVALID_PACK_KERNEL_INFO;
+        }
+
+        bool colMajor = (cs_src != 1);
+
+        // INT8 fuses four consecutive K elements per lane (vpdpbusd); the
+        // packed panel is laid out in K-quads, hence k_factor = 4. B is s8
+        // for both u8s8 and s8s8; do not pack as u8.
+        constexpr md_t k_factor = 4;
+
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+        }
+
+        return dlp::kernel_frame::packKernelInfo(
+            nr_hint, k_factor, kInstPref, kernel_frame::DataType::s8,
+            kernel_frame::DataType::s8, colMajor, /*accColSum=*/true);
     }
 };
 

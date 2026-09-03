@@ -154,7 +154,8 @@ dlp_reorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
                                 + (jc_cur_loop * k_updated)
                                 + (n_sub_updated * pc)
                                 + (jc_cur_loop_rem * kc0_updated)),
-                        nc0, kc0, rs_b, cs_b, &rs_b_reorder, &cs_b_reorder);
+                        nc0, kc0, rs_b, cs_b, &rs_b_reorder, &cs_b_reorder,
+                        NULL);
                 } else {
                     ((pack_bf16)lcntx->packb_fun_ptr)(
                         ((bfloat16*)b_reorder->storage.aligned_buffer)

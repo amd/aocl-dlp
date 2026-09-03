@@ -334,7 +334,7 @@ DLP_GEMV(float, float, float, f32f32f32of32)
                         (void*)(b + (rs_b * pc) + (cs_b * jc)),
                         (void*)(pack_b_buffer_f32f32f32of32
                                 + (n_sub_updated * pc)),
-                        nc0, kc0, rs_b, cs_b, &rs_b_use, &cs_b_use);
+                        nc0, kc0, rs_b, cs_b, &rs_b_use, &cs_b_use, NULL);
                 }
                 b_use = pack_b_buffer_f32f32f32of32;
             } else {
@@ -566,7 +566,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                         (void*)(pack_b_buffer_f32f32f32of32
                                 + (jc_packb_start * kc0)),
                         (jc_packb_end - jc_packb_start), kc0, rs_b, cs_b,
-                        &rs_b_use, &cs_b_use);
+                        &rs_b_use, &cs_b_use, NULL);
                 } else {
                     dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
                 }

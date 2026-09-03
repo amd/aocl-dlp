@@ -1892,7 +1892,7 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::gemmJitGeneratorContext& jI)
     // Convert kernelInstrPreference to kernelType
     setGeneratorKernelMetaInfo(jI.kI.kInstPref);
 
-    int8_t processBlockSize = getProcessBlockSize();
+    int processBlockSize = getProcessBlockSize();
 
     // Verify AVX512_VNNI support is available
     if (kType == utils::kernelInstrType::none) {
@@ -2226,7 +2226,6 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
         int32_t* cPtr           = static_cast<int32_t*>(params->c);
         int32_t* c_jr           = cPtr;
         int32_t* c_ir           = cPtr;
-        md_t     rsB            = params->rsB;
         md_t     og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
 
         md_t n = params->n;
@@ -2245,7 +2244,12 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
             params->c = c_jr;
             params->n = elementsToProcess;
 
-            params->rsB = (nFullpieces * rsB) / vnniGroupSize;
+            // Packed INT8 B is consecutive 64-byte VNNI ZMMs per 16-n block.
+            // After loading nFullpieces ZMMs, advance one K-quad by
+            // nFullpieces * 16 n * vnniGroupSize bytes. The previous
+            // (nFullpieces * rsB) / vnniGroupSize form equals that only when
+            // rsB == NR * vnniGroupSize and NR == 64 (the classic packer).
+            params->rsB = nFullpieces * numElemsPerReg * vnniGroupSize;
 
             // Match the kernel generation pattern: nr_var corresponds to
             // number of registers used nr_var=0: mask kernel,
@@ -2792,7 +2796,6 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
         int32_t* cPtr = static_cast<int32_t*>(params->c);
         int32_t* c_jr = cPtr;
         int32_t* c_ir = cPtr;
-        md_t     rsB  = params->rsB;
 
         md_t n = params->n;
         md_t m = params->m;
@@ -2810,7 +2813,12 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
         // Process complete registers first (if any)
         if (nFullpieces > 0) {
             md_t elementsToProcess = nFullpieces * numElemsPerReg;
-            params->rsB            = (nFullpieces * rsB) / VNNI_CONST;
+            // Packed INT8 B is consecutive 64-byte VNNI ZMMs per 16-n block.
+            // After loading nFullpieces ZMMs, advance one K-quad by
+            // nFullpieces * 16 n * VNNI_CONST bytes. The previous
+            // (nFullpieces * rsB) / VNNI_CONST form equals that only when
+            // rsB == NR * VNNI_CONST and NR == 64 (the classic packer).
+            params->rsB = nFullpieces * numElemsPerReg * VNNI_CONST;
 
             params->a = aPtr;
             params->c = c_jr;

@@ -499,25 +499,18 @@ round_trip_all_shapes(const char* label,
     }
 }
 
-// The reference reorder/un-reorder pair must follow whatever blocking the
-// decision engine hands it, not the compiled-in default. This drives the
-// round trip again with NR, KC and NC supplied through the metadata so that a
-// kernel that silently assumed the default width fails here.
+// Reorder/un-reorder must follow whatever blocking the decision engine hands
+// them, not the compiled-in default. This drives the round trip again with NR,
+// KC and NC supplied through metadata so that a kernel which silently assumes
+// the default width fails here.
 //
 // NC must stay a multiple of NR, which the metadata validator enforces.
 // Does the reorder actually lay B out at the width it was handed?
 //
-// Not every dtype can. bf16 packs through a JIT kernel generated for the
-// context's NR and honours any width, but only where that kernel exists; on a
-// processor without it, and on int8 and fp16 always, packing falls to an
-// intrinsic that takes its width from the panel it is given and ignores NR
-// entirely. Such a reorder quietly emits its native width, so sweeping NR
-// against it asserts a capability the reorder does not have -- which is what
-// made this suite pass here and fail on a machine with no bf16 JIT.
-//
-// So measure it rather than assume it, per dtype and per machine: pack once
-// through the reorder and once through the layout core at the same width, and
-// report whether they agree.
+// Not every dtype can. Dynamic JIT packers honour the context NR where the
+// corresponding kernel exists, while fixed-width intrinsic packers may ignore
+// it. Such a reorder quietly emits its native width, so measure support rather
+// than assuming it.
 //
 // The measurement itself is always single-threaded. The jc range is split
 // NR-wide, so a 2*NR probe at the ambient count is handed to the packer as
@@ -632,8 +625,8 @@ round_trip_block_params(const char*                             label,
     }
 }
 
-// Widths at, below and well below the default NR, plus non-default KC/NC, so
-// the full-panel, fringe and tail paths are all exercised at each width.
+// Widths below, at and above the default NR, plus non-default KC/NC, so the
+// full-panel, fringe and tail paths are all exercised at each width.
 //
 // The last two are deliberately awkward: a width that is not a power of two,
 // an NC that is an odd multiple of it, and a KC that divides nothing in
@@ -641,33 +634,31 @@ round_trip_block_params(const char*                             label,
 // it, so these are the cases that actually hold the un-reorder to being
 // parameter-driven.
 //
-// Two constraints bound what is legal here, and both are properties of the
-// packed format rather than of the un-reorder:
-//
-//  - KC must be a multiple of the dtype's k_factor. Each pc panel pads its own
-//    kc0 up to k_factor, so an odd KC makes the panels sum to more than the
-//    round_up(k, k_factor) rows the buffer was sized for.
-//  - NR must not exceed the widest chunk the vectorised reorder emits (64
-//    here), or the two sides would cut the panel differently.
+// KC must be a multiple of the dtype's k_factor. Each pc panel pads its own kc0
+// up to k_factor, so an odd KC makes the panels sum to more than the
+// round_up(k, k_factor) rows the buffer was sized for.
 //
 // Every dtype is offered the same widths. Which of them a given dtype can
 // actually reach is not fixed here but measured per machine by
 // reorder_honours_width, so a path whose packer ignores NR skips instead of
 // failing.
 std::vector<dlp_gemm_blocking_t>
-nr64_block_params()
+variable_block_params()
 {
     return {
-        { 0, 64, 0, 1024, 256 }, { 0, 32, 0, 1024, 1024 },
-        { 0, 16, 0, 512, 384 },  { 0, 48, 0, 336, 100 },
-        { 0, 16, 0, 240, 44 },
+        { 0, 64, 0, 1024, 256 },  { 0, 32, 0, 1024, 1024 },
+        { 0, 16, 0, 512, 384 },   { 0, 48, 0, 336, 100 },
+        { 0, 16, 0, 240, 44 },    { 0, 80, 0, 560, 256 },
+        { 0, 96, 0, 1056, 256 },  { 0, 112, 0, 784, 256 },
+        { 0, 128, 0, 1024, 256 }, { 0, 144, 0, 1008, 256 },
+        { 0, 160, 0, 1120, 256 },
     };
 }
 
-// NR is pinned at 64: that is the width the production reorder currently
-// emits. NC and KC vary independently of it, always as multiples of 64 so
-// they remain legal for every dtype (NC must be a multiple of NR; KC must be
-// a multiple of the k interleave factor, which is 1, 2 or 4).
+// This larger stress sweep is pinned at NR=64 to bound its runtime. NC and KC
+// vary independently of it, always as multiples of 64 so they remain legal for
+// every dtype (NC must be a multiple of NR; KC must be a multiple of the k
+// interleave factor, which is 1, 2 or 4).
 std::vector<dlp_gemm_blocking_t>
 nr64_sweep_block_params()
 {
@@ -814,7 +805,7 @@ TEST(UnreorderBlockParams, Bf16Bf16F32OF32Reference)
     round_trip_block_params<bfloat16>(
         "bf16bf16f32of32", aocl_get_reorder_buf_size_bf16bf16f32of32,
         aocl_reorder_bf16bf16f32of32, aocl_unreorder_bf16bf16f32of32_reference,
-        nr64_block_params(), 2, 16);
+        variable_block_params(), 2, 16);
 }
 
 TEST(UnreorderBlockParams, S8S8S32OS32Reference)
@@ -822,7 +813,7 @@ TEST(UnreorderBlockParams, S8S8S32OS32Reference)
     round_trip_block_params<int8_t>(
         "s8s8s32os32", aocl_get_reorder_buf_size_s8s8s32os32,
         aocl_reorder_s8s8s32os32, aocl_unreorder_s8s8s32os32_reference,
-        nr64_block_params(), 4, 16);
+        variable_block_params(), 4, 16);
 }
 
 TEST(UnreorderBlockParams, U8S8S32OS32Reference)
@@ -830,7 +821,7 @@ TEST(UnreorderBlockParams, U8S8S32OS32Reference)
     round_trip_block_params<int8_t>(
         "u8s8s32os32", aocl_get_reorder_buf_size_u8s8s32os32,
         aocl_reorder_u8s8s32os32, aocl_unreorder_u8s8s32os32_reference,
-        nr64_block_params(), 4, 16);
+        variable_block_params(), 4, 16);
 }
 
 // f32 has k_factor 1, so no panel pads its k extent and KC is free to divide
@@ -916,23 +907,25 @@ TEST(ReorderRefBlockParams, Bf16Bf16F32OF32)
                                       aocl_get_reorder_buf_size_bf16bf16f32of32,
                                       aocl_reorder_bf16bf16f32of32_reference,
                                       aocl_unreorder_bf16bf16f32of32_reference,
-                                      nr64_block_params(), 2, 16, true);
+                                      variable_block_params(), 2, 16, true);
 }
 
 TEST(ReorderRefBlockParams, S8S8S32OS32)
 {
-    round_trip_block_params<int8_t>(
-        "s8s8s32os32_ref", aocl_get_reorder_buf_size_s8s8s32os32,
-        aocl_reorder_s8s8s32os32_reference,
-        aocl_unreorder_s8s8s32os32_reference, nr64_block_params(), 4, 16, true);
+    round_trip_block_params<int8_t>("s8s8s32os32_ref",
+                                    aocl_get_reorder_buf_size_s8s8s32os32,
+                                    aocl_reorder_s8s8s32os32_reference,
+                                    aocl_unreorder_s8s8s32os32_reference,
+                                    variable_block_params(), 4, 16, true);
 }
 
 TEST(ReorderRefBlockParams, U8S8S32OS32)
 {
-    round_trip_block_params<int8_t>(
-        "u8s8s32os32_ref", aocl_get_reorder_buf_size_u8s8s32os32,
-        aocl_reorder_u8s8s32os32_reference,
-        aocl_unreorder_u8s8s32os32_reference, nr64_block_params(), 4, 16, true);
+    round_trip_block_params<int8_t>("u8s8s32os32_ref",
+                                    aocl_get_reorder_buf_size_u8s8s32os32,
+                                    aocl_reorder_u8s8s32os32_reference,
+                                    aocl_unreorder_u8s8s32os32_reference,
+                                    variable_block_params(), 4, 16, true);
 }
 
 TEST(ReorderRefBlockParams, F32F32F32OF32)
@@ -1052,56 +1045,66 @@ TEST(ReorderBufSize, Fp16RejectsNrNotMultipleOfMinNr)
     EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_BLOCK_PARAMS);
 }
 
-TEST(ReorderTunedValidation, RejectsNonNativeNr)
+TEST(ReorderTunedValidation, SupportsDynamicInt8Nr)
 {
-    // Legal for the reference (NR is a multiple of min_NR, NC % NR == 0) but
-    // not the native packer width, so the tuned entry points must refuse.
-    dlp_gemm_blocking_t bp = { 0, 32, 0, 1024, 256 };
-    const md_t          k  = 32;
-    const md_t          n  = 64;
+    const Shape shape = { 67, 199 };
 
-    {
-        dlp_metadata_t md = fresh_metadata();
-        md.block_params   = &bp;
-        std::vector<int8_t> in(k * n, 0);
-        std::vector<int8_t> packed(k * n * 2, 0);
-        aocl_reorder_u8s8s32os32('r', 'n', 'B', in.data(), packed.data(), k, n,
-                                 n, &md);
-        if (md.error_hndl.error_code != DLP_CLSC_NOT_SUPPORTED) {
-            EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_BLOCK_PARAMS);
-        }
+    // Establish ISA support once using the default configuration. A rejection
+    // of any explicitly tested NR below is then a failure, not a silent skip.
+    if (!round_trip<int8_t>(aocl_get_reorder_buf_size_u8s8s32os32,
+                            aocl_reorder_u8s8s32os32,
+                            aocl_unreorder_u8s8s32os32_reference, 'r', shape)) {
+        GTEST_SKIP() << "INT8 reorder is not supported on this processor";
     }
-    {
-        dlp_metadata_t md = fresh_metadata();
-        md.block_params   = &bp;
-        std::vector<int8_t> in(k * n, 0);
-        std::vector<int8_t> packed(k * n * 2, 0);
-        aocl_reorder_s8s8s32os32('r', 'n', 'B', in.data(), packed.data(), k, n,
-                                 n, &md);
-        if (md.error_hndl.error_code != DLP_CLSC_NOT_SUPPORTED) {
-            EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_BLOCK_PARAMS);
-        }
+
+    for (md_t nr : { (md_t)16, (md_t)32, (md_t)48, (md_t)64, (md_t)80, (md_t)96,
+                     (md_t)112, (md_t)128 }) {
+        dlp_gemm_blocking_t bp = { 0, nr, 0, 12 * nr, 100 };
+        SCOPED_TRACE("NR=" + std::to_string(nr));
+
+        EXPECT_TRUE(round_trip<int8_t>(
+            aocl_get_reorder_buf_size_u8s8s32os32, aocl_reorder_u8s8s32os32,
+            aocl_unreorder_u8s8s32os32_reference, 'r', shape, &bp));
+        EXPECT_TRUE(round_trip<int8_t>(
+            aocl_get_reorder_buf_size_s8s8s32os32, aocl_reorder_s8s8s32os32,
+            aocl_unreorder_s8s8s32os32_reference, 'r', shape, &bp));
     }
-    {
-        dlp_metadata_t md = fresh_metadata();
-        md.block_params   = &bp;
-        std::vector<float16> in(k * n, 0);
-        std::vector<float16> packed(k * n * 2, 0);
-        aocl_reorder_f16f16f16of16('r', 'n', 'B', in.data(), packed.data(), k,
-                                   n, n, &md);
-        if (md.error_hndl.error_code != DLP_CLSC_NOT_SUPPORTED) {
-            EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_BLOCK_PARAMS);
-        }
+
+    // U8 packing has no fused column-sum accumulators, so its register-feasible
+    // GEMM widths extend beyond the S8 limit of 128.
+    for (md_t nr : { (md_t)144, (md_t)160 }) {
+        dlp_gemm_blocking_t bp = { 0, nr, 0, 7 * nr, 100 };
+        SCOPED_TRACE("U8-only NR=" + std::to_string(nr));
+        EXPECT_TRUE(round_trip<int8_t>(
+            aocl_get_reorder_buf_size_u8s8s32os32, aocl_reorder_u8s8s32os32,
+            aocl_unreorder_u8s8s32os32_reference, 'r', shape, &bp));
+    }
+}
+
+TEST(ReorderTunedValidation, Fp16RejectsNonNativeNr)
+{
+    dlp_gemm_blocking_t bp = { 0, 32, 0, 1024, 256 };
+    dlp_metadata_t      md = fresh_metadata();
+    md.block_params        = &bp;
+    const md_t           k = 32;
+    const md_t           n = 64;
+    std::vector<float16> in(k * n, 0);
+    std::vector<float16> packed(k * n * 2, 0);
+
+    aocl_reorder_f16f16f16of16('r', 'n', 'B', in.data(), packed.data(), k, n, n,
+                               &md);
+    if (md.error_hndl.error_code != DLP_CLSC_NOT_SUPPORTED) {
+        EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_BLOCK_PARAMS);
     }
 }
 
 // ---------------------------------------------------------------------------
-// NR=64 sweep: 1..16k non-linear k/n, several NC/KC, multithreaded.
+// Native-width stress sweep: 1..16k non-linear k/n, several NC/KC,
+// multithreaded.
 //
-// The production reorder currently only supports NR=64 (fp16's native 128
-// aside), so this is the width we can actually pack and then invert with the
-// reference un-reorder. Variable-NR reorder is a later change; until then
-// sweeping NR here would assert a packer capability that does not exist.
+// Variable NR is covered by UnreorderBlockParams and the focused INT8 test
+// above. Keep this larger matrix sweep at NR=64 to bound its runtime while
+// stressing the macro-panel and fringe arithmetic.
 // ---------------------------------------------------------------------------
 
 TEST(UnreorderNr64Sweep, Bf16Bf16F32OF32Reference)
@@ -1304,7 +1307,7 @@ TEST(UnreorderBlockParams, Bf16TunedHonoursCallerWidth)
     round_trip_block_params<bfloat16>(
         "bf16bf16f32of32 tuned", aocl_get_reorder_buf_size_bf16bf16f32of32,
         aocl_reorder_bf16bf16f32of32, aocl_unreorder_bf16bf16f32of32,
-        nr64_block_params(), 2, 16);
+        variable_block_params(), 2, 16);
 }
 
 // The tuned bf16 entry point has to agree with the reference wherever it is

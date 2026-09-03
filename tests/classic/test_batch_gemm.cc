@@ -1130,6 +1130,88 @@ TEST(BatchGemmTest, SkippedGroupsReportFailureNotSuccess)
     }
 }
 
+template<typename AType, typename BatchFn>
+void
+verifyInt8SkippedGroupsReportFailure(BatchFn batch_gemm)
+{
+    constexpr int     group_count   = 4;
+    constexpr int     dim           = 8;
+    constexpr int     invalid_group = 1;
+    constexpr int32_t sentinel      = -999;
+
+    std::vector<std::vector<AType>> a_data(
+        group_count, std::vector<AType>(dim * dim, static_cast<AType>(1)));
+    std::vector<std::vector<int8_t>>  b_data(group_count,
+                                             std::vector<int8_t>(dim * dim, 1));
+    std::vector<std::vector<int32_t>> c_data(
+        group_count, std::vector<int32_t>(dim * dim, sentinel));
+
+    std::vector<char> order(group_count, 'r');
+    std::vector<char> transa(group_count, 'n');
+    std::vector<char> transb(group_count, 'n');
+    std::vector<char> mem_format_a(group_count, 'n');
+    std::vector<char> mem_format_b(group_count, 'n');
+
+    std::vector<md_t> m(group_count, dim);
+    std::vector<md_t> n(group_count, dim);
+    std::vector<md_t> k(group_count, dim);
+    std::vector<md_t> lda(group_count, dim);
+    std::vector<md_t> ldb(group_count, dim);
+    std::vector<md_t> ldc(group_count, dim);
+    std::vector<md_t> group_size(group_count, 1);
+
+    std::vector<int32_t> alpha(group_count, 1);
+    std::vector<int32_t> beta(group_count, 0);
+
+    std::vector<const AType*>  a_ptrs(group_count);
+    std::vector<const int8_t*> b_ptrs(group_count);
+    std::vector<int32_t*>      c_ptrs(group_count);
+
+    std::vector<dlp_metadata_t>  metadata(group_count);
+    std::vector<dlp_metadata_t*> metadata_ptrs(group_count);
+
+    for (int g = 0; g < group_count; ++g) {
+        a_ptrs[g] = a_data[g].data();
+        b_ptrs[g] = b_data[g].data();
+        c_ptrs[g] = c_data[g].data();
+        std::memset(&metadata[g], 0, sizeof(dlp_metadata_t));
+        metadata_ptrs[g] = &metadata[g];
+    }
+
+    lda[invalid_group] = 0;
+
+    batch_gemm(order.data(), transa.data(), transb.data(), m.data(), n.data(),
+               k.data(), alpha.data(), a_ptrs.data(), lda.data(), b_ptrs.data(),
+               ldb.data(), beta.data(), c_ptrs.data(), ldc.data(), group_count,
+               group_size.data(), mem_format_a.data(), mem_format_b.data(),
+               metadata_ptrs.data());
+
+    if (metadata[0].error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+        GTEST_SKIP() << "INT8 batch GEMM requires AVX512-VNNI";
+    }
+
+    EXPECT_EQ(metadata[0].error_hndl.error_code, DLP_CLSC_SUCCESS);
+    EXPECT_EQ(c_data[0][0], dim);
+    EXPECT_EQ(metadata[invalid_group].error_hndl.error_code,
+              DLP_CLSC_INVALID_LEADING_DIMENSION);
+    for (int g = invalid_group + 1; g < group_count; ++g) {
+        EXPECT_EQ(metadata[g].error_hndl.error_code, DLP_CLSC_FAILURE)
+            << "skipped group " << g << " must not report success";
+        EXPECT_EQ(c_data[g][0], sentinel)
+            << "skipped group " << g << " output was unexpectedly written";
+    }
+}
+
+TEST(BatchGemmTest, U8S8SkippedGroupsReportFailureNotSuccess)
+{
+    verifyInt8SkippedGroupsReportFailure<uint8_t>(aocl_batch_gemm_u8s8s32os32);
+}
+
+TEST(BatchGemmTest, S8S8SkippedGroupsReportFailureNotSuccess)
+{
+    verifyInt8SkippedGroupsReportFailure<int8_t>(aocl_batch_gemm_s8s8s32os32);
+}
+
 // ============================================================================
 // INPUT VALIDATION (NEGATIVE PATHS)
 // ============================================================================
@@ -1146,8 +1228,8 @@ TEST(BatchGemmTest, SkippedGroupsReportFailureNotSuccess)
  *   BatchNullArrayArgs   the array arguments themselves being NULL (CPUPL-9033)
  *   BatchGroupCount      the by-value group_count bound
  *
- * Per-group error reporting is already pinned by
- * BatchGemmTest.SkippedGroupsReportFailureNotSuccess above and is not repeated.
+ * Per-group error reporting is already pinned by the skipped-group tests above
+ * and is not repeated.
  */
 
 namespace validation {

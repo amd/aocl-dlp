@@ -33,10 +33,10 @@
 #include "runtime/dlp_runtime.h"
 
 void
-dlp_reorderb_nr64_s8s8s32o32(dlp_gemm_obj_t*  b,
-                             dlp_gemm_obj_t*  b_reorder,
-                             dlp_rntm_t*      rntm,
-                             dlp_gemm_cntx_t* lcntx);
+dlp_reorderb_s8s8s32o32(dlp_gemm_obj_t*  b,
+                        dlp_gemm_obj_t*  b_reorder,
+                        dlp_rntm_t*      rntm,
+                        dlp_gemm_cntx_t* lcntx);
 
 void
 dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,

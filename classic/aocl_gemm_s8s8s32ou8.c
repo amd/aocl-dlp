@@ -230,6 +230,23 @@ aocl_gemm_s8s8s32ou8(const char      order,
     // modifies the context object.
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
 
+    err = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
+    err = dlp_gemm_validate_hints_with_call(&lcntx_l, mtag_b_use,
+                                            rntm_g.num_threads, rntm_g.ic_ways,
+                                            rntm_g.jc_ways);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Invalid GEMM hints for this call.", __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
 
@@ -242,6 +259,34 @@ aocl_gemm_s8s8s32ou8(const char      order,
     // attempt to execute the kernel, and return an error instead.
     if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
+
+    // JIT pack-B against the same blksz.NR the GEMM kernel uses. A pack-B
+    // kernel is expected on AVX-512 VNNI; a NULL handle means generation
+    // failed. n=1 gemv copies B rather than packing (NR == 1) and needs no
+    // pack-B kernel.
+    lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_S8S8S32OU8, n_use, k_use,
+                                       rs_b_use, cs_b_use, &lcntx_l);
+    if ((dlp_cpuid_is_avx512vnni_supported() == TRUE) && (lcntx_l.blksz.NR > 1)
+        && (lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
+
+    dlp_upd_pack_strides(DLP_KERNEL_S8S8S32OU8, &lcntx_l);
+    err = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_l);
+    if (err != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_l.blksz.MC, lcntx_l.blksz.NC, lcntx_l.blksz.KC,
+                 lcntx_l.blksz.MR, lcntx_l.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
 

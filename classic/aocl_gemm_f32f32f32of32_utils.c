@@ -309,7 +309,7 @@ aocl_reorder_f32f32f32of32(const char      order,
                     (void*)(input_buf_addr + (rs_b * pc) + (cs_b * jc)),
                     (void*)(reorder_buf_addr + (jc_cur_loop * k)
                             + (n_sub_updated * pc) + (jc_cur_loop_rem * kc0)),
-                    nc0, kc0, rs_b, cs_b, &rs_b_reorder, &cs_b_reorder);
+                    nc0, kc0, rs_b, cs_b, &rs_b_reorder, &cs_b_reorder, NULL);
             }
 
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);

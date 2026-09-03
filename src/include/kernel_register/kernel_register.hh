@@ -82,9 +82,9 @@ struct packHashKeyGetter
      *
      * Hashes on (panel_dim, k_factor) to select the bucket, mirroring
      * the GEMM pattern of (mr, nr). Any collisions from kernels that
-     * share the same (panel_dim, k_factor) but differ in kInstPref,
-     * src_type, or dst_type are resolved by the in-bucket comparator
-     * (packKeyComparator) which checks all five fields via operator==.
+     * share the same (panel_dim, k_factor) but differ in remaining pack
+     * configuration are resolved by the in-bucket comparator
+     * (packKeyComparator), which checks every field via operator==.
      *
      * @param kI Pointer to packKernelInfo object
      * @return Tuple of (panel_dim, k_factor) used as hash key

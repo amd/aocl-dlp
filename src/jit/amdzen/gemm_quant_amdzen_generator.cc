@@ -473,7 +473,6 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
         int8_t*  bPtr = static_cast<int8_t*>(params->b);
         int32_t* cPtr = static_cast<int32_t*>(params->c);
         int32_t* c_jr = cPtr;
-        md_t     rsB  = params->rsB;
 
         md_t n = params->n;
 
@@ -492,7 +491,12 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
 
         if (nFullpieces > 0) {
             md_t elementsToProcess = nFullpieces * numElemsPerReg;
-            params->rsB            = (nFullpieces * rsB) / VNNI_CONST;
+            // Packed INT8 B is consecutive 64-byte VNNI ZMMs per 16-n block.
+            // After loading nFullpieces ZMMs, advance one K-quad by
+            // nFullpieces * 16 n * VNNI_CONST bytes. The previous
+            // (nFullpieces * rsB) / VNNI_CONST form equals that only when
+            // rsB == NR * VNNI_CONST and NR == 64 (the classic packer).
+            params->rsB = nFullpieces * numElemsPerReg * VNNI_CONST;
 
             params->a = aPtr;
             params->c = c_jr;

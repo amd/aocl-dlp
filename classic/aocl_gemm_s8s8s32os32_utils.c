@@ -326,25 +326,47 @@ aocl_reorder_s8s8s32os32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-
-    // Un-reorder reads these same block sizes back out of the metadata, so
-    // both directions have to apply it or the layouts will not match.
     err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
     if (err_no != DLP_CLSC_SUCCESS) {
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
-
-    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
-    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return;
     }
 
-    // packb hardcodes NR=64. A caller NR would only change the jc split, so
-    // unpack/reference at that NR would decode the wrong layout.
-    if (lcntx_g.blksz.NR != 64) {
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+    err_no = dlp_gemm_validate_hints(&lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "GEMM hints must be zero (unset) or positive, got "
+                 "m_hint: %ld nt_hint: %ld\n",
+                 (lcntx_g.gemm_kernel_hints).m_hint,
+                 (lcntx_g.gemm_kernel_hints).nt_hint);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_S8S8S32OS32, n, k, rs_b, cs_b,
+                                       &lcntx_g);
+    if (lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        return;
+    }
+    dlp_upd_pack_strides(DLP_KERNEL_S8S8S32OS32, &lcntx_g);
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_g.blksz.MC, lcntx_g.blksz.NC, lcntx_g.blksz.KC,
+                 lcntx_g.blksz.MR, lcntx_g.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
         return;
     }
 
@@ -360,7 +382,7 @@ aocl_reorder_s8s8s32os32(const char      order,
     b.width                  = n;
     b.length                 = k;
 
-    dlp_reorderb_nr64_s8s8s32o32(&b, &b_reorder, &rntm_g, &lcntx_g);
+    dlp_reorderb_s8s8s32o32(&b, &b_reorder, &rntm_g, &lcntx_g);
 }
 
 void

@@ -961,37 +961,30 @@ jitU8S8VNNI_GEMM<KType>::moveCPtr()
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
-    // Optimized C pointer advancement: regCPtr += MR * regRsC
-    if (MR == 3) {
-        lea(regCPtr, ptr[regCPtr + regRsC + regRsC * 2]);
-    } else if (MR == 5) {
-        lea(regCPtr, ptr[regCPtr + regRsC + regRsC * 4]);
-    } else {
-        // General power-of-2 decomposition - optimal for all other cases
-        // Already perfect for MR = 1,2,4,6,8.
-        int m_val       = MR;
-        int power2scale = 1;
-        while (m_val > 0) {
-            if (m_val & 1) {
-                // lea() only supports scale factors of 1, 2, 4, and 8.
-                // For larger powers of 2, shift a temporary register and add.
-                if (power2scale <= 8) {
-                    lea(regCPtr, ptr[regCPtr + power2scale * regRsC]);
-                } else {
-                    mov(regTmp1, regRsC);
-                    int shift_amount = 0;
-                    int temp_scale   = power2scale;
-                    while (temp_scale > 1) {
-                        shift_amount++;
-                        temp_scale >>= 1;
-                    }
-                    shl(regTmp1, shift_amount);
-                    add(regCPtr, regTmp1);
+    // Advance C by MR rows. Decompose MR into encodable power-of-two scales;
+    // x86 addressing permits only one base and one scaled index per LEA.
+    int m_val       = MR;
+    int power2scale = 1;
+    while (m_val > 0) {
+        if (m_val & 1) {
+            // lea() only supports scale factors of 1, 2, 4, and 8.
+            // For larger powers of 2, shift a temporary register and add.
+            if (power2scale <= 8) {
+                lea(regCPtr, ptr[regCPtr + power2scale * regRsC]);
+            } else {
+                mov(regTmp1, regRsC);
+                int shift_amount = 0;
+                int temp_scale   = power2scale;
+                while (temp_scale > 1) {
+                    shift_amount++;
+                    temp_scale >>= 1;
                 }
+                shl(regTmp1, shift_amount);
+                add(regCPtr, regTmp1);
             }
-            m_val >>= 1;
-            power2scale <<= 1;
         }
+        m_val >>= 1;
+        power2scale <<= 1;
     }
 
     return dlp::jit::jitGeneratorError::success;

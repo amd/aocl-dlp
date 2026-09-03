@@ -39,10 +39,10 @@
 #endif
 
 void
-dlp_reorderb_nr64_u8s8s32o32(dlp_gemm_obj_t*  b,
-                             dlp_gemm_obj_t*  b_reorder,
-                             dlp_rntm_t*      rntm,
-                             dlp_gemm_cntx_t* lcntx)
+dlp_reorderb_u8s8s32o32(dlp_gemm_obj_t*  b,
+                        dlp_gemm_obj_t*  b_reorder,
+                        dlp_rntm_t*      rntm,
+                        dlp_gemm_cntx_t* lcntx)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -138,13 +138,17 @@ dlp_reorderb_nr64_u8s8s32o32(dlp_gemm_obj_t*  b,
                 // st = ( jc_cur_loop * k )    <traverse blocks 1,2,3,4>
                 //    + ( n_sub_updated * pc ) <traverse block 5>
                 //    + ( NC' * kc0_updated)   <traverse block 6>
-                ((packb_s32)lcntx->packb_fun_ptr)(
+                int8_t* pack_dst =
                     (((int8_t*)b_reorder->storage.aligned_buffer)
                      + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
-                     + (jc_cur_loop_rem * kc0_updated)),
-                    (((int8_t*)b->storage.aligned_buffer) + (rs_b * pc)
-                     + jc * cs_b),
-                    rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
+                     + (jc_cur_loop_rem * kc0_updated));
+                const int8_t* pack_src = (((int8_t*)b->storage.aligned_buffer)
+                                          + (rs_b * pc) + jc * cs_b);
+
+                dlp_execute_packb_kernel(
+                    lcntx->dlp_pack_kernel_hndl.pack_b_hndl, (void*)pack_src,
+                    (void*)pack_dst, nc0, kc0, rs_b, cs_b, &rs_b_reorder,
+                    &cs_b_reorder, NULL);
             }
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }

@@ -145,4 +145,62 @@ class jitAmdZenPackBBF16 : public dlp::jit::packBJitGenerator
     std::unique_ptr<dlp::jit::packBJitGenerator> clone() override;
 };
 
+// Orchestrator for JIT-generated INT8 VNNI-4 pack-B kernels. Same ladder
+// shape as jitAmdZenPackBBF16, with K_FACTOR = 4 (vpdpbusd) and kernelWidth
+// = 16 n (one ZMM = 64 bytes).
+//
+//   index 0            -> lt-block kernel (kernelWidth wide, runtime masked)
+//   index i in [1..nf] -> looped kernel of width i*kernelWidth (nf == full NR)
+//
+// executeKernel issues full-NR panels, then one base-width fringe panel,
+// then one runtime-masked lt16 panel. packKernelInfo.accColSum selects
+// packBGeneratorParams.accColSum: U8 emits pack-only code and S8 emits fused
+// compensation. The execute ABI remains common. cs_dst is 64 (one VNNI ZMM),
+// not NR/4; rs_dst is NR * 4. Column-major sources use a 16x16 dword transpose
+// of 64-K tiles.
+class jitAmdZenPackBINT8 : public dlp::jit::packBJitGenerator
+{
+    std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
+    std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
+
+    static constexpr md_t K_FACTOR = 4;
+
+    md_t NR;
+
+    bool isColMajor_;
+    bool accColSum_;
+
+    std::vector<void*>                                 kernelCodeBlocks;
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
+
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::packBJitGeneratorContext& jI);
+
+  public:
+    jitAmdZenPackBINT8();
+    ~jitAmdZenPackBINT8();
+    jitAmdZenPackBINT8(const jitAmdZenPackBINT8&)            = delete;
+    jitAmdZenPackBINT8& operator=(const jitAmdZenPackBINT8&) = delete;
+    jitAmdZenPackBINT8(jitAmdZenPackBINT8&&)                 = delete;
+    jitAmdZenPackBINT8& operator=(jitAmdZenPackBINT8&&)      = delete;
+
+    dlp::jit::jitGeneratorError operator()(
+        const dlp::jit::packBJitGeneratorContext& jI) override
+    {
+        return generateAllKernels(jI);
+    }
+
+    std::vector<dlp::kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override;
+    std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override;
+    dlp::kernels::kernelError                executeKernel(
+                       dlp::kernels::kernelParams* _params) override;
+    std::unique_ptr<dlp::jit::packBJitGenerator> clone() override;
+};
+
 } // namespace amdzen::gen

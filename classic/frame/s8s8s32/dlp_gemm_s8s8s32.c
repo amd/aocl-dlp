@@ -268,10 +268,13 @@ DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
                 for (iter_t pc = 0; pc < k; pc += KC) {
                     md_t kc0 = dlp_min((k - pc), KC);
 
-                    ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                        (pack_b_buffer_s8s8s32os32) + (n_sub_updated * pc),
-                        pack_b_column_sum, (b + (rs_b * pc) + (jc * cs_b)),
-                        rs_b, cs_b, nc0, kc0, &rs_b_use, &cs_b_use);
+                    dlp_execute_packb_kernel(
+                        lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                        (void*)(b + (rs_b * pc) + (jc * cs_b)),
+                        (void*)((pack_b_buffer_s8s8s32os32)
+                                + (n_sub_updated * pc)),
+                        nc0, kc0, rs_b, cs_b, &rs_b_use, &cs_b_use,
+                        pack_b_column_sum);
                 }
 
                 b_use                       = pack_b_buffer_s8s8s32os32;
@@ -533,14 +536,15 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
                         }
                     }
 
-                    ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                        pack_b_buffer_s8s8s32o32
-                            + (jc_packb_start * kc0_updated),
-                        pack_b_column_sum + (jc_packb_start),
-                        (b + (rs_b * pc) + (cs_b * jc)
-                         + (cs_b * jc_packb_start)),
-                        rs_b, cs_b, (jc_packb_end - jc_packb_start), kc0,
-                        &rs_b_use, &cs_b_use);
+                    dlp_execute_packb_kernel(
+                        lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                        (void*)(b + (rs_b * pc) + (cs_b * jc)
+                                + (cs_b * jc_packb_start)),
+                        (void*)(pack_b_buffer_s8s8s32o32
+                                + (jc_packb_start * kc0_updated)),
+                        (jc_packb_end - jc_packb_start), kc0, rs_b, cs_b,
+                        &rs_b_use, &cs_b_use,
+                        pack_b_column_sum + (jc_packb_start));
                 } else {
                     dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
                 }
