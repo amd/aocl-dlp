@@ -28,6 +28,7 @@
 
 #include <string.h>
 
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_5loop_interface_apis.h"
 #include "gemm_utils/dlp_gemm_utils.h"
@@ -129,16 +130,16 @@ dlp_gather_a_rowmajor_s8_s8s4(
 }
 
 /*
- * Dedicated s8s4 sym-quant GEMV driver (m == 1 or n == 1), mirroring
- * dlp_gemv_rowvar_s8s8s32o32_sym_quant. The s8s4 reorder mirrors the s8s8
- * reorder, so the same specialized GEMV micro-kernels
- * (dlp_gemv_{n,m}_one_s8s8s32os32_sym_quant) are reused:
- *   * n == 1: the reorder already emitted the tight s8 column + per-group
- *     column sums (identical to s8s8), consumed directly.
- *   * m == 1: the compact s4 weights of each NC-wide B panel are widened once
- *     to the equivalent s8 reorder panel (per thread, in a small scratch) and
- *     handed to the s8s8 m == 1 kernel. The (uncompressed) per-group column
- *     sums that trail the compact weights are consumed in place.
+ * Dedicated s8s4 sym-quant GEMV driver (m == 1 or n == 1). The micro-kernel
+ * reads s8 only, and the two branches satisfy that at different points because
+ * the reorder emits a different layout for each:
+ *   * n == 1: the reorder already sign-extended the nibbles and emitted a tight
+ *     s8 column followed by the per-group column sums, so the buffer is handed
+ *     to the kernel as it stands.
+ *   * m == 1: the reorder left the weights nibble-packed, so each NC-wide panel
+ *     is widened to the equivalent s8 reorder panel once (per thread, in a
+ *     small scratch) before the kernel runs. The per-group column sums trailing
+ *     the compact weights are stored uncompressed and consumed in place.
  * Callers must guarantee mtag_b == REORDERED and that k / (unadjusted) KC are
  * divisible by group_size (both enforced by dlp_gemm_rowvar_s8s4s32o32).
  */
@@ -146,22 +147,12 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
 {
     (void)rntm; /* Threading handled via thread object, not rntm. */
     md_t NC = lcntx->blksz.NC;
-    md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;
     md_t NR = lcntx->blksz.NR;
 
     // Reordered B is mandatory for this path (guaranteed by the caller).
     if (mtag_b != REORDERED) {
         return;
-    }
-
-    // Keep KC aligned to the group size so a quantization group never straddles
-    // a KC boundary (same adjustment as the s8s8 sym-quant GEMV and the reorder
-    // function).
-    if (grp_post_op_list->group_size > KC) {
-        KC = grp_post_op_list->group_size;
-    } else if ((KC % grp_post_op_list->group_size) != 0) {
-        KC = (KC / grp_post_op_list->group_size) * grp_post_op_list->group_size;
     }
 
     int8_t* a_use    = (int8_t*)a;
@@ -286,10 +277,13 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
                 cs_a_use = 1;
             }
 
-            dlp_gemv_n_one_s8s8s32os32_sym_quant(
-                mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
-                grp_post_ops_attr, post_op_list, &post_ops_attr);
+            // The reorder already emits tight s8 columns for n == 1, so there
+            // is no widening to do before the kernel.
+            dlp_execute_gemm_quant_kernel(
+                &(lcntx->dlp_quant_kernel_hndl), mc0, 1, k, (void*)a_use,
+                rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use, 0, 0,
+                (void*)c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                post_op_list, post_ops_attr, grp_post_ops_attr);
         }
 
         if ((mtag_a == PACK) && (pack_a_buffer != NULL)) {
@@ -395,11 +389,14 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
             post_ops_attr.rs_c_downscale = rs_c;
             post_ops_attr.b_sum_offset   = 0;
 
-            dlp_gemv_m_one_s8s8s32os32_sym_quant(
-                nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
-                n_sub_updated, jc_cur_loop_rem, grp_post_ops_attr, post_op_list,
-                &post_ops_attr);
+            // b_use points at the widened panel from above, so the kernel reads
+            // plain s8 bytes here.
+            dlp_execute_gemm_quant_kernel(
+                &(lcntx->dlp_quant_kernel_hndl), 1, nc0, k, (void*)a_use,
+                rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use,
+                n_sub_updated, jc_cur_loop_rem, (void*)c_use, rs_c, cs_c,
+                (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr,
+                grp_post_ops_attr);
 
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
@@ -950,12 +947,16 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                         b_kernel = b_use + (jr * kc0_updated);
                     }
 
-                    dlp_gemm_rowvar_s8s8s32os32_6x64m_sym_quant(
-                        mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                        a_block_stride, b_kernel, rs_b_use, cs_b_use,
-                        dlp_offset_or_null_f32(c_use_ic, jr), rs_c_use, 1,
-                        alpha, beta0, grp_post_ops_attr, post_op_list,
-                        post_ops_attr);
+                    // Both provenances of b_kernel are already s8 by this
+                    // point -- widened scratch on REORDERED, packer output on
+                    // PACK -- so the kernel sees plain s8 bytes either way.
+                    dlp_execute_gemm_quant_kernel(
+                        &(lcntx->dlp_quant_kernel_hndl), mc0, nr0, kc0,
+                        (void*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                        (void*)b_kernel, rs_b_use, cs_b_use, 0, 0,
+                        (void*)dlp_offset_or_null_f32(c_use_ic, jr), rs_c_use,
+                        1, (void*)&alpha, (void*)&beta0, post_op_list,
+                        post_ops_attr, grp_post_ops_attr);
 
                     post_ops_attr.b_sum_offset += NR;
                 }

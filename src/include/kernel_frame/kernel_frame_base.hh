@@ -76,6 +76,11 @@ enum class kernelDatatype : uint8_t
     f16f16f16of16, // FP16×FP16 → FP16 (with native FP16 accumulator)
     f16f16f16of32, // FP16×FP16 → F32  (native FP16 accumulator, F32 output)
     f32f16f32of32, // F32×FP16 → F32 (mixed-precision, B stored as FP16)
+    // Symmetric group-quantized (GroupScale) quant kernel datatypes.
+    s8s8s32of32_sym_quant,
+    s8s8s32obf16_sym_quant,
+    s8s4s32of32_sym_quant,
+    s8s4s32obf16_sym_quant,
     max_kernel_datatypes
 };
 
@@ -702,6 +707,10 @@ enum class opQuantMode : uint8_t
     ready, // consumed as-is (q/dq already done in prep, or none needed)
     dequantInKernel, // kernel dequantizes / applies group scales
     quantInKernel,   // kernel quantizes the operand
+    // Kernel loads nibble-packed s4 and widens to s8 in-register before
+    // dequantizing. Pre-kernel widening stays dequantInKernel, since there the
+    // frame hands the kernel real s8.
+    widenDequantInKernel,
 };
 
 struct opQuantInfo

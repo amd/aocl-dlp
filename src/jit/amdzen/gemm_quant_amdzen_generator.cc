@@ -38,10 +38,15 @@
 namespace amdzen::gen {
 
 jitAmdZenGemmQuant::jitAmdZenGemmQuant()
-    : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::s8s8s32of32,
-                         dlp::kernel_frame::kernelDatatype::s8s8s32obf16,
-                         dlp::kernel_frame::kernelDatatype::u8s8s32of32,
-                         dlp::kernel_frame::kernelDatatype::u8s8s32obf16 })
+    // The s8s4 sym-quant datatypes share this generator: the frame widens the
+    // compact s4 B panel to s8 before execute, so the emitted code is the
+    // s8xs8 one. They exist as distinct datatypes so the DE frontend and the
+    // kernel cache bucket can be selected per path.
+    : mKernelDatatypes(
+          { dlp::kernel_frame::kernelDatatype::s8s8s32of32_sym_quant,
+            dlp::kernel_frame::kernelDatatype::s8s8s32obf16_sym_quant,
+            dlp::kernel_frame::kernelDatatype::s8s4s32of32_sym_quant,
+            dlp::kernel_frame::kernelDatatype::s8s4s32obf16_sym_quant })
     , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni })
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1) // Initialise to 1 to avoid div-by-zero.

@@ -414,7 +414,9 @@ class gemmDEBackendUtils
     {
         kernel_frame::quantKernelInfo qKI;
 
-        // Reuse the kernelInfo creation to fill the base kernelInfo fields.
+        // Quant kernel info creation needs base kernelInfo fields, aQuant and
+        // bQuant fields. Reuse the kernelInfo creation to fill the base
+        // kernelInfo fields.
         qKI.base = gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, term_fringe_nr, k_unroll, kc, prefetch_c_dist,
             alphaScalingType, betaScalingType, mtag_a, mtag_b,
@@ -422,6 +424,7 @@ class gemmDEBackendUtils
             k_dtype, rs_c, cs_c, metadata, skinnyN, aliasMrSplit);
 
         // Handle group ops.
+        // Fill the aQuant field.
         kernel_frame::opQuantInfo* aQuant = &qKI.aQuant;
         dlp_quant_op_t*            a_pqo  = group_ops->a_post_quant_op;
         aQuant->src_type = (kernel_frame::DataType)a_pqo->src_type;
@@ -444,6 +447,7 @@ class gemmDEBackendUtils
                 isTiledAlongK(a_pqo->zero_point->outer_dim, false);
         }
 
+        // Fill the bQuant field.
         kernel_frame::opQuantInfo* bQuant = &qKI.bQuant;
         dlp_quant_op_t*            b_pqo  = group_ops->b_post_quant_op;
         bQuant->src_type = (kernel_frame::DataType)b_pqo->src_type;

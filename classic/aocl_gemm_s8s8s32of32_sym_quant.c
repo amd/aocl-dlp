@@ -436,14 +436,14 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
 
     if (is_column_major == TRUE) {
         dlp_init_and_get_gemm_quant_kernel_hndl(
-            DLP_KERNEL_S8S8S32OF32, order, mtag_b, mtag_a, n, m, k, rs_b, cs_b,
-            rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-            &group_ops, &lcntx_l, DLP_F32);
+            DLP_KERNEL_S8S8S32OF32_SYM_QUANT, order, mtag_b, mtag_a, n, m, k,
+            rs_b, cs_b, rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+            post_op_list, &group_ops, &lcntx_l, DLP_F32);
     } else {
         dlp_init_and_get_gemm_quant_kernel_hndl(
-            DLP_KERNEL_S8S8S32OF32, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
-            rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-            &group_ops, &lcntx_l, DLP_F32);
+            DLP_KERNEL_S8S8S32OF32_SYM_QUANT, order, mtag_a, mtag_b, m, n, k,
+            rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+            post_op_list, &group_ops, &lcntx_l, DLP_F32);
     }
 
     // The GEMM path is required to run on the JIT kernel. A NULL handle would

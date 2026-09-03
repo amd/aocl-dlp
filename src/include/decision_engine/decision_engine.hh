@@ -162,11 +162,27 @@ class decisionEngine
         auto quantTypeIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelRoutineType::gemm_quant);
 
-        // Reusing s8s8s32o[f32/bf16]DtIdx
-        quantBackends[quantTypeIdx][s8s8s32of32DtIdx] =
+        // Each sym-quant path owns its datatype slot, so the DE frontend is
+        // selected by kernelDatatype alone, exactly like the non-quant table.
+        auto s8s8SymF32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s8s32of32_sym_quant);
+        auto s8s8SymBf16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s8s32obf16_sym_quant);
+        quantBackends[quantTypeIdx][s8s8SymF32DtIdx] = new gemmQuantS8DEBackend;
+        quantBackends[quantTypeIdx][s8s8SymBf16DtIdx] =
             new gemmQuantS8DEBackend;
-        quantBackends[quantTypeIdx][s8s8s32obf16DtIdx] =
-            new gemmQuantS8DEBackend;
+
+        // s8s4 sym-quant runs the same generated kernel today, on B the frame
+        // widens to s8 first, but chooses its blocking independently: the
+        // s8s4 frontend owns its own tunables and its widening site.
+        auto s8s4SymF32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s4s32of32_sym_quant);
+        auto s8s4SymBf16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s4s32obf16_sym_quant);
+        quantBackends[quantTypeIdx][s8s4SymF32DtIdx] =
+            new gemmQuantS8S4DEBackend;
+        quantBackends[quantTypeIdx][s8s4SymBf16DtIdx] =
+            new gemmQuantS8S4DEBackend;
     }
 
     decisionEngine()

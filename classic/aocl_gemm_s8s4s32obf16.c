@@ -158,7 +158,12 @@ aocl_gemm_s8s4s32obf16(const char      order,
         goto err_hndl;
     }
 
-    // A in column-major/transposed storage needs to be packed to row-major.
+    // Packing A on request is not supported, so the tag is dropped.
+    if (mtag_a == PACK) {
+        mtag_a = UNPACKED;
+    }
+
+    // A in transposed storage needs to be packed to row-major.
     if (dlp_is_trans(dlp_transa)) {
         mtag_a = PACK;
     }
@@ -246,83 +251,44 @@ aocl_gemm_s8s4s32obf16(const char      order,
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
 
+    lcntx_g.dlp_quant_kernel_hndl.kernel_base = NULL;
+
+    // Column major is not supported: it would require swapping A and B, which
+    // an s8 A and an s4 B cannot be. The scale dims are used as given.
+    dlp_group_op group_ops;
+    err = dlp_gemm_translate_to_group_op_list(metadata, &group_ops, m, n, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
+    dlp_init_and_get_gemm_quant_kernel_hndl(
+        DLP_KERNEL_S8S4S32OBF16_SYM_QUANT, order, mtag_a, mtag_b, m, n, k, rs_a,
+        cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+        &group_ops, &lcntx_g, DLP_BF16);
+
+    // There is no fallback kernel on this path, so a failed JIT generation
+    // leaves nothing to run and the call returns an error.
+    if (lcntx_g.dlp_quant_kernel_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
+
     dlp_gemm_ops_bundle_t ops =
         DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
 
-#ifdef DLP_KERNELS_ZEN4
-    // GEMV fast path: for m==1 or n==1 with a reordered B and a group size that
-    // divides both k and KC, reuse the specialized s8s8 sym-quant GEMV kernels
-    // (dlp_gemv_{m,n}_one) instead of the generic 6x64 GEMM micro-kernel. The
-    // s8s4 reorder mirrors the s8s8 reorder, so:
-    //   * n==1 (divisible): the reorder already emitted the tight s8 column +
-    //     per-group column sums (identical to s8s8) -- consumed directly.
-    //   * m==1: the compact s4 general layout is widened once to the equivalent
-    //     s8 reorder buffer and handed to the s8s8 sym-quant path.
-    md_t gs = grp_post_op_list[0].group_size;
-    md_t KC = lcntx_g.blksz.KC;
-    if ((mtag_b == REORDERED) && (gs > 0) && ((k % gs) == 0) && ((KC % gs) == 0)
-        && ((m == 1) || (n == 1))) {
-        // n==1: reorder already emitted tight s8 columns + per-group column
-        // sums, consumed directly. m==1 (n!=1): must widen the compact s4 to s8
-        // first; leave b_gemv NULL until that succeeds so an allocation failure
-        // falls through to the generic s8s4 path below instead of feeding the
-        // s8s8 kernel a nibble-packed (half-size) buffer.
-        const int8_t* b_gemv  = (n == 1) ? b : NULL;
-        int8_t*       b_widen = NULL;
-
-        if (n != 1) {
-            md_t k_updated  = dlp_make_multiple_of_n(k, 4);
-            md_t n_updated  = dlp_make_multiple_of_n(n, 16);
-            md_t num_groups = (k + gs - 1) / gs;
-
-            msz_t w_s8_bytes = (msz_t)k_updated * n_updated;
-            msz_t colsum_bytes =
-                (msz_t)num_groups * n_updated * sizeof(int32_t);
-
-            dlp_clsc_err_t ret_err;
-            b_widen =
-                dlp_malloc_page_aligned(w_s8_bytes + colsum_bytes, &ret_err);
-            if (b_widen != NULL) {
-                // Widen the compact s4 weights back to the s8 packed layout and
-                // copy the (uncompressed) per-group column sums that trail
-                // them.
-                dlp_cvt_s4_to_s8_linear_avx512(b_widen, (const uint8_t*)b,
-                                               (md_t)w_s8_bytes);
-                memcpy(b_widen + w_s8_bytes,
-                       (const int8_t*)b + (w_s8_bytes / 2), colsum_bytes);
-                b_gemv = b_widen;
-            }
-        }
-
-        if (b_gemv != NULL) {
 #ifdef DLP_ENABLE_OPENMP
-            dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
-                m, n, k, a, rs_a, cs_a, mtag_a, b_gemv, rs_b, cs_b, mtag_b,
-                (float*)c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops,
-                DLP_BF16);
-#else
-            dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
-                m, n, k, a, rs_a, cs_a, mtag_a, b_gemv, rs_b, cs_b, mtag_b,
-                (float*)c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops,
-                DLP_BF16);
+    if (dlp_is_single_thread(&rntm_g) == FALSE) {
+        dlp_gemm_s8s4s32o32_openmp_thread_decorator(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
+    } else
 #endif
-            if (b_widen != NULL) {
-                dlp_free_page_aligned(b_widen);
-            }
-            goto err_hndl;
-        }
+    {
+        dlp_gemm_s8s4s32o32_thread_decorator(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
     }
-#endif
-
-#ifdef DLP_ENABLE_OPENMP
-    dlp_gemm_s8s4s32o32_openmp_thread_decorator(
-        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
-        cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
-#else
-    dlp_gemm_s8s4s32o32_thread_decorator(
-        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
-        cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
-#endif
 
 err_hndl:;
     DLP_GEMM_STOP_LOGGER();

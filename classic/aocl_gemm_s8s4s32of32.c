@@ -158,6 +158,11 @@ aocl_gemm_s8s4s32of32(const char      order,
         goto err_hndl;
     }
 
+    // Packing A on request is not supported, so the tag is dropped.
+    if (mtag_a == PACK) {
+        mtag_a = UNPACKED;
+    }
+
     // A in transposed storage needs to be packed to row-major.
     if (dlp_is_trans(dlp_transa)) {
         mtag_a = PACK;
@@ -245,18 +250,44 @@ aocl_gemm_s8s4s32of32(const char      order,
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
 
+    lcntx_g.dlp_quant_kernel_hndl.kernel_base = NULL;
+
+    // Column major is not supported: it would require swapping A and B, which
+    // an s8 A and an s4 B cannot be. The scale dims are used as given.
+    dlp_group_op group_ops;
+    err = dlp_gemm_translate_to_group_op_list(metadata, &group_ops, m, n, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
+    dlp_init_and_get_gemm_quant_kernel_hndl(
+        DLP_KERNEL_S8S4S32OF32_SYM_QUANT, order, mtag_a, mtag_b, m, n, k, rs_a,
+        cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+        &group_ops, &lcntx_g, DLP_F32);
+
+    // There is no fallback kernel on this path, so a failed JIT generation
+    // leaves nothing to run and the call returns an error.
+    if (lcntx_g.dlp_quant_kernel_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
+
     dlp_gemm_ops_bundle_t ops =
         DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-    dlp_gemm_s8s4s32o32_openmp_thread_decorator(
-        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
-        cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
-#else
-    dlp_gemm_s8s4s32o32_thread_decorator(
-        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
-        cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
+    if (dlp_is_single_thread(&rntm_g) == FALSE) {
+        dlp_gemm_s8s4s32o32_openmp_thread_decorator(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
+    } else
 #endif
+    {
+        dlp_gemm_s8s4s32o32_thread_decorator(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
+    }
 
 err_hndl:;
     DLP_GEMM_STOP_LOGGER();

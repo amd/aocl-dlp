@@ -89,6 +89,26 @@ get_kernel_family_name(kernelDatatype kDtype)
     }
 }
 
+// Kernel family name for the sym-quant datatypes. Kept separate from
+// get_kernel_family_name so the plain-GEMM switch stays a dense jump table
+// over the non-quant datatypes only.
+static std::string
+get_quant_kernel_family_name(kernelDatatype kDtype)
+{
+    switch (kDtype) {
+        case kernelDatatype::s8s8s32of32_sym_quant:
+            return "dlp_s8s8s32of32_sym_quant_jit_kernel";
+        case kernelDatatype::s8s8s32obf16_sym_quant:
+            return "dlp_s8s8s32obf16_sym_quant_jit_kernel";
+        case kernelDatatype::s8s4s32of32_sym_quant:
+            return "dlp_s8s4s32of32_sym_quant_jit_kernel";
+        case kernelDatatype::s8s4s32obf16_sym_quant:
+            return "dlp_s8s4s32obf16_sym_quant_jit_kernel";
+        default:
+            return "dlp_unknown_quant_jit_kernel";
+    }
+}
+
 DLP_ALWAYS_INLINE static dlp::kernel_frame::kernelInfo
 dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype                 kDType,
                                  md_t                           m,
@@ -692,11 +712,19 @@ dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype      kDType,
                                        md_t                kc_hint,
                                        md_t                c_downscale)
 {
-    if ((kDType == kernelDatatype::s8s8s32of32)
-        || (kDType == kernelDatatype::s8s8s32obf16)) {
+    if ((kDType == kernelDatatype::s8s8s32of32_sym_quant)
+        || (kDType == kernelDatatype::s8s8s32obf16_sym_quant)) {
         return dlp::de::decisionEngineInstance()
             .getGemmQuantKernelInfoForInputFastPath<
                 dlp::de::gemmQuantS8DEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
+                c_downscale, kDType);
+    } else if ((kDType == kernelDatatype::s8s4s32of32_sym_quant)
+               || (kDType == kernelDatatype::s8s4s32obf16_sym_quant)) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmQuantKernelInfoForInputFastPath<
+                dlp::de::gemmQuantS8S4DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
                 c_downscale, kDType);
@@ -732,7 +760,7 @@ dlp_generate_gemm_quant_jit_kernel(quantKernelInfo& qKI, kernelDatatype kDType)
     } else {
         // Generate datatype-specific kernel name for proper registry
         // management.
-        std::string kernelName = get_kernel_family_name(kDType);
+        std::string kernelName = get_quant_kernel_family_name(kDType);
         auto retVal = dlpKernelRegisterInstance().registerGemmQuantKernel(
             std::move(kB), std::move(kernelName));
         if (retVal != kernelFrameError::success) {
@@ -805,6 +833,17 @@ dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t     k_dtype,
     cntx->dlp_quant_kernel_hndl.mr     = qKI.base.mr;
     cntx->dlp_quant_kernel_hndl.nr     = qKI.base.nr;
     cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
+
+    // Overwrite the request with the resolved site. Pre-kernel unconditionally
+    // today, so whatever was asked for is not yet consulted: no generator emits
+    // a kernel that loads nibble-packed B, the s8s4 quant path sharing the s8s8
+    // generator which only ever sees widened bytes. Handing nibbles to a kernel
+    // that reads bytes is silent corruption rather than a slow path, so a
+    // request for in-kernel widening stays refused until that generator exists.
+    // Honouring it then also means folding the value into opQuantInfo, or the
+    // two variants share a cache bucket.
+    cntx->dlp_quant_kernel_hndl.nibble_widen_site = DLP_NIBBLE_WIDEN_PRE_KERNEL;
+
     cntx->blksz.KC                     = qKI.base.kc;
     cntx->blksz.MC                     = ((cntx->blksz.MC % qKI.base.mr) == 0)
                                              ? cntx->blksz.MC

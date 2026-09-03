@@ -696,7 +696,7 @@ gemmF32FP16DEBackend::getKernelInfoForInput(iDEInput* in)
     }
 }
 
-gemmQuantS8DEBackend::gemmQuantS8DEBackend()
+quantS8FamilyDEBackendBase::quantS8FamilyDEBackendBase()
     : isAvx512(false)
     , isAvx2(false)
     , isAvx512Bf16(false)
