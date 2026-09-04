@@ -40,14 +40,12 @@
 // thread split that goes with it.
 //
 // This is a base class rather than a member of the decision engine, so that a
-// Reorder engine can inherit the same search a GEMM backend does. Both ends
-// need it. A packed B panel does not record the NR it was packed at, so the
-// only way a later GEMM recovers that width is to re-run the identical search
-// over identical inputs.
+// Reorder engine can inherit the same search a GEMM backend does. A packed B
+// panel does not record the NR it was packed at, so the only way a later GEMM
+// recovers that width is to re-run the identical search over identical inputs.
 //
-// It derives the factorizer instead of sitting beside it. A tile can only be
-// costed against the split it would run under, so the search needs to be able
-// to factorize.
+// It derives the factorizer rather than sitting beside it, because a tile can
+// only be costed against the split it would run under.
 namespace dlp::de::optimizer {
 
 class gemmOptimizer : public thread_partition::gemmThreadPartitioner
@@ -55,9 +53,6 @@ class gemmOptimizer : public thread_partition::gemmThreadPartitioner
   public:
     // The entry point. The backend picks the arm, because eligibility depends
     // on state the optimizer does not hold, namely the architecture it runs on.
-    //
-    // One object, describing one GEMM, and which one was settled by
-    // makeModelInput. Neither arm has a second to reach for.
     //
     // The default answer is the tile the context already holds, which is the
     // right answer for any backend with no candidate set of its own.
@@ -71,11 +66,9 @@ class gemmOptimizer : public thread_partition::gemmThreadPartitioner
     // back to the same tile where nothing is admissible, but reaches it through
     // the sweep, which resolves a split for it.
     //
-    // Nothing here reads an extent. The context tile is the answer whatever the
-    // object describes, which is what lets this arm serve a reordered B whose
-    // hints were never stated: an object carrying zeros for m and the thread
-    // count, with no call to fall back to. Rules needing the extents that will
-    // actually run belong in the kernel-info fold, which has them.
+    // Nothing here reads an extent, which is what lets this arm serve a
+    // reordered B whose hints were never stated. Rules needing the extents that
+    // will actually run belong in the kernel-info fold, which has them.
     //
     // It must never resolve a split. Factorizing is the modelled arm's job, and
     // the split that comes back from it is the one a candidate was costed
@@ -106,15 +99,24 @@ class gemmOptimizer : public thread_partition::gemmThreadPartitioner
     // anything else would let a GEMM outvote the Reorder that already
     // committed the panel width.
     //
-    // Nothing calls this while each backend offers a single tile, which leaves
-    // the sweep nothing to rank.
+    // The objective is the padded output area landed on the busiest thread,
+    // which is what separates two tiles of equal area. K and any tile-only
+    // efficiency term are omitted: they scale every candidate of one call
+    // alike, so a candidate set mixing tiles of differing peak efficiency would
+    // have to reintroduce them.
     DLP_ALWAYS_INLINE virtual md_t costEval(
         const shape_model::gemmShapeModelInput&  in,
         const shape_model::gemmShapeModelResult& shape) const
     {
-        (void)in;
-        (void)shape;
-        return 0;
+        const md_t mrBlks = (in.m + shape.mr - 1) / shape.mr;
+        const md_t nrBlks = (in.n + shape.nr - 1) / shape.nr;
+
+        const md_t rows =
+            ((mrBlks + shape.ic_ways - 1) / shape.ic_ways) * shape.mr;
+        const md_t cols =
+            ((nrBlks + shape.jc_ways - 1) / shape.jc_ways) * shape.nr;
+
+        return rows * cols;
     }
 
   protected:
@@ -122,10 +124,8 @@ class gemmOptimizer : public thread_partition::gemmThreadPartitioner
     //
     // The ways pass through untouched rather than being zeroed, but nothing
     // downstream may read them: they describe whichever GEMM the input was
-    // about, and this arm did not resolve a partition for it. Echoing the
-    // input keeps this a pure tile decision, which is what "deferred" means
-    // here. The kernel-info fold enforces the rest by publishing only where
-    // the factorizer ran.
+    // about, and this arm did not resolve a partition for it. The kernel-info
+    // fold enforces that by publishing only where the factorizer ran.
     DLP_ALWAYS_INLINE static shape_model::gemmShapeModelResult deferSplit(
         const shape_model::gemmShapeModelInput& in,
         const shape_model::kernelDims           dims)
@@ -156,23 +156,18 @@ class gemmOptimizer : public thread_partition::gemmThreadPartitioner
         return out;
     }
 
-    // The search. It keeps the first admissible candidate; ranking them by
-    // costEval is what turns this into a choice once a backend offers more
-    // than one tile.
+    // The search. It costs every admissible candidate and keeps the cheapest.
     //
     // A tile is chosen as a pair, never one dimension at a time: MR and NR
-    // trade against the same 32 ZMMs. That is also what the Reorder contract
-    // needs. A Reorder cannot hand the width it chose to a later GEMM, so the
-    // two agree by running this same sweep over the same inputs, which is why
-    // the caller folds the hints into the input.
+    // trade against the same 32 ZMMs. A Reorder cannot hand the width it chose
+    // to a later GEMM, so the two agree by running this same sweep over the
+    // same inputs, which is why the caller folds the hints into the input.
     //
-    // The candidate set arrives as an argument. It belongs to the backend,
-    // which owns the JIT generator that decides which tiles exist, and a base
-    // cannot name a member of the class that derives it. A virtual accessor
-    // would work and is the wrong tool: an objective runs this loop once per
-    // candidate, and a vtable load there returns a pointer the compiler cannot
-    // fold. Taking the array by reference keeps the extent a compile-time
-    // constant, and N deduces from the call.
+    // The candidate set arrives as an argument, because it belongs to the
+    // backend that owns the JIT generator deciding which tiles exist, and a
+    // base cannot name a member of the class that derives it. Taking the array
+    // by reference keeps the extent a compile-time constant, and N deduces
+    // from the call.
     //
     // Each candidate is paired with the split it would run under, because a
     // tile's cost is a property of the pair rather than of the tile. The
@@ -181,15 +176,20 @@ class gemmOptimizer : public thread_partition::gemmThreadPartitioner
     // because the input is the GEMM that will run: over a reordered B the
     // classic layer holds the call to the hints before the model is reached.
     //
-    // The register budget is not checked. setupRegisterConfig in the JIT
-    // backend already counts accumulators, B panel and mask registers against
-    // cRegCount and rejects what does not fit, and a second copy of that test
-    // would drift from it.
+    // The register budget is not checked here. jitGEMMBF16::allocateReg()
+    // already rejects a tile that leaves too few A registers.
     //
     // An empty admissible set falls back to the baseline, which is what a
     // tunable naming a tile the generator does not offer produces. That
     // fallback returns in.nr on either end, so a Reorder and the GEMM after it
     // fall back to the same width.
+    //
+    // Admissibility is asked before the cost, never after: a frozen dimension
+    // is the caller's answer, not a term to be outweighed.
+    //
+    // Only a strict improvement displaces the incumbent, so ties keep the
+    // earliest candidate listed. Both ends of a reorder depend on that being
+    // deterministic.
     template<std::size_t N>
     DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult sweepCandidates(
         const shape_model::gemmShapeModelInput& in,
@@ -197,13 +197,32 @@ class gemmOptimizer : public thread_partition::gemmThreadPartitioner
     {
         static_assert(N > 0, "a backend must offer at least one tile");
 
+        shape_model::gemmShapeModelResult best{};
+        md_t                              bestCost = 0;
+        bool                              costed   = false;
+
         for (const shape_model::kernelDims& cand : candidates) {
-            if (gemmShapeModelUtils::isCandidateAdmissible(in, cand)) {
-                return resolveShape(in, cand);
+            if (!gemmShapeModelUtils::isCandidateAdmissible(in, cand)) {
+                continue;
+            }
+
+            const shape_model::gemmShapeModelResult shape =
+                resolveShape(in, cand);
+            const md_t cost = costEval(in, shape);
+
+            if (!costed || (cost < bestCost)) {
+                best     = shape;
+                bestCost = cost;
+                costed   = true;
             }
         }
 
-        return resolveShape(in, gemmShapeModelUtils::baselineKernelDims(in));
+        if (!costed) {
+            return resolveShape(in,
+                                gemmShapeModelUtils::baselineKernelDims(in));
+        }
+
+        return best;
     }
 };
 

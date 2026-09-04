@@ -601,11 +601,9 @@ class gemmF32DEBackend final : public iDEBackend
     }
 };
 
-// final, and not as documentation. The optimizer reaches its datatype hooks,
-// adjustWays and costEval, through the base that defines them. With this class
-// left open, a further-derived backend could re-override either, so the
-// compiler would have to keep the vtable load. That measured as two indirect
-// calls inside the per-candidate loop; final removes them.
+// final, and not as documentation. It lets the compiler devirtualise the
+// optimizer's datatype hooks, adjustWays and costEval, which the per-candidate
+// loop would otherwise have to reach through an indirect call.
 class gemmBF16DEBackend final : public iDEBackend
 {
   public:
@@ -615,11 +613,12 @@ class gemmBF16DEBackend final : public iDEBackend
     // shared search in optimizer/de_optimizer.hh, which is why another datatype
     // contributes a different set rather than a different algorithm.
     //
-    // One entry, the Zen5 BF16 default, which leaves the sweep nothing to rank:
-    // the only admissible tile wins, and it is the tile the context already
-    // held. Widening this set is what gives costEval something to tell apart.
+    // Order is load-bearing: the sweep breaks ties toward the earliest entry,
+    // so the context default is listed first. Every entry must fit the register
+    // budget jitGEMMBF16::allocateReg() enforces.
     static constexpr shape_model::kernelDims candidateTiles[] = {
         { 6, 64 },
+        { 8, 48 },
     };
 
     // The n at or below which only the NR=16 kernel family is reachable, and
@@ -640,17 +639,19 @@ class gemmBF16DEBackend final : public iDEBackend
         f32Backend; // For rerouting when AVX512BF16 is not supported
 
     // The tiles are tuned against the Zen5 cache hierarchy, so the model is
-    // fenced to that architecture. Resolved once at construction, since it
-    // cannot change for the life of the process.
+    // fenced to that architecture. The fence itself is in de_gemm_backend.cc.
     bool isAnalyticalShapeModelArch;
 
-    // The whole screen: this architecture, and whether the object describes a
-    // GEMM well enough to choose a tile for. See
-    // gemmShapeModelUtils::isEligible for the second half.
+    // The whole screen: this architecture, a reordered B, and whether the
+    // object describes a GEMM well enough to choose a tile for. See
+    // gemmShapeModelUtils::isEligible for the last of those.
+    //
+    // Pack-on-the-fly is excluded. The cost model prices padded output area and
+    // not the B packing such a call repeats, so a tile that lowers the modelled
+    // cost can still lose on the call as a whole.
     //
     // Over a reordered B the object holds the hints, so an unstated pair fails
-    // this and both ends fall to the context tile. Under any other tag it holds
-    // the call, which describes itself.
+    // this and both ends fall to the context tile.
     //
     // This is the one predicate that decides the arm. The kernel-info fold asks
     // it again before publishing a split, and asking twice is the point: a
@@ -658,7 +659,7 @@ class gemmBF16DEBackend final : public iDEBackend
     DLP_ALWAYS_INLINE bool canUseAnalyticalShapeModel(
         const shape_model::gemmShapeModelInput& in) const
     {
-        return isAnalyticalShapeModelArch
+        return isAnalyticalShapeModelArch && in.b_reordered
                && gemmShapeModelUtils::isEligible(in);
     }
 

@@ -74,6 +74,11 @@ class gemmShapeModelUtils
     // already describes the GEMM the tile is being chosen for. A zero in either
     // is the application declining to describe it.
     //
+    // A single extent on either axis is refused along with the zero: m == 1 and
+    // n == 1 route to GEMV fast paths that hardcode their own block sizes and
+    // consult no model, so a width chosen here would not be the one the panel
+    // is read at.
+    //
     // The pool is stated one of two ways and either will do. A count is the
     // usual one. A pinned pair of ways is the other: ways outrank the count in
     // the runtime's precedence, so a pinned call arrives with the count at -1
@@ -83,9 +88,8 @@ class gemmShapeModelUtils
     // be ranked against it directly.
     //
     // The memory tag of A is deliberately not part of this. The intrinsic
-    // pack-A writes a plain row-major MC x KC image: every arm of its unroll
-    // ladder stores to (ic + j) * KC + kr and reports rs_p = KC, so the packed
-    // buffer carries no MR-shaped structure that a later MR could contradict.
+    // pack-A writes a plain row-major MC x KC image, so the packed buffer
+    // carries no MR-shaped structure that a later MR could contradict.
     //
     // The architecture half of the screen is resolved once in the backend
     // constructor.
@@ -95,7 +99,8 @@ class gemmShapeModelUtils
         const bool poolStated = (in.num_threads > 0)
                                 || ((in.ic_ways > 0) && (in.jc_ways > 0));
 
-        return !isTilePinnedByCaller(in) && (in.m > 0) && poolStated;
+        return !isTilePinnedByCaller(in) && (in.m > 1) && (in.n > 1)
+               && poolStated;
     }
 
     // True when the application pinned MR through metadata. Honoured on every

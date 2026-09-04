@@ -91,6 +91,11 @@ struct gemmShapeModelInput
     md_t num_threads;
     md_t ic_ways;
     md_t jc_ways;
+
+    // Whether this shape decision is for a reordered/packed-B panel (i.e., B is
+    // packed once and then reused). The cost model has no packing term, so it
+    // is only consulted in this case rather than on pack-on-the-fly GEMMs.
+    bool b_reordered;
 };
 
 // The one place an input is built, and the one place the memory tag is read.
@@ -137,13 +142,22 @@ makeModelInput(md_t m,
                bool b_reordered)
 {
     if (b_reordered) {
-        return gemmShapeModelInput{
-            m_hint, n, k, mr, nr, frozen, nt_hint, /*ic_ways=*/0, /*jc_ways=*/0
-        };
+        return gemmShapeModelInput{ m_hint,
+                                    n,
+                                    k,
+                                    mr,
+                                    nr,
+                                    frozen,
+                                    nt_hint,
+                                    /*ic_ways=*/0,
+                                    /*jc_ways=*/0,
+                                    /*b_reordered=*/true };
     }
 
-    return gemmShapeModelInput{ m,      n,           k,       mr,     nr,
-                                frozen, num_threads, ic_ways, jc_ways };
+    return gemmShapeModelInput{
+        m,      n,           k,       mr,      nr,
+        frozen, num_threads, ic_ways, jc_ways, /*b_reordered=*/false
+    };
 }
 
 // The tile, and the split to run it under where the model resolved one.

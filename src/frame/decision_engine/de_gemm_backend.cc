@@ -183,9 +183,9 @@ gemmBF16DEBackend::gemmBF16DEBackend()
             kernel_frame::kernelInstrPreference::avx512_zmm_bf16_favour;
     }
 
-    // Tuned against the Zen5 cache hierarchy and the AVX512-BF16 microkernel
-    // family, so fenced to that combination. Resolved here to keep the per-call
-    // check a boolean load.
+    // The tiles are tuned for the Zen5 cache hierarchy and the AVX512-BF16
+    // microkernels, so the model is fenced to that combination. Resolved here
+    // to keep the per-call check a boolean load.
     isAnalyticalShapeModelArch = isAvx512Bf16
                                  && arch_utils::archConfigManager::getInstance()
                                         .isZen5SimilarConfiguredArch();
