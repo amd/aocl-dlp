@@ -146,7 +146,7 @@ dlp_gemm_detect_thread_topo()
         }
     }
 
-    int num_core_grps = num_procs / core_grp_size;
+    int num_core_grps = (num_procs + core_grp_size - 1) / core_grp_size;
 
     // Get count of core groups that are loaded and not loaded with adj ranks.
     // This will give an approximation for thread pin distribution.
