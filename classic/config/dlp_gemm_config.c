@@ -563,6 +563,19 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
             return DLP_CLSC_INVALID_BLOCK_PARAMS;
         }
 
+        // Ensure MC or NC is a multiple of MR or NR respectively in case they
+        // were not set in metadata block_params (=0 case).
+        if (block_params->MC <= 0) {
+            lcntx->blksz.MC =
+                ((lcntx->blksz.MC + lcntx->blksz.MR - 1) / lcntx->blksz.MR)
+                * lcntx->blksz.MR;
+        }
+        if (block_params->NC <= 0) {
+            lcntx->blksz.NC =
+                ((lcntx->blksz.NC + lcntx->blksz.NR - 1) / lcntx->blksz.NR)
+                * lcntx->blksz.NR;
+        }
+
         // The first write to the mask in this call. Every caller merges into a
         // fresh copy of the global context, whose mask is zero, and the kernel
         // and pack-B inits add their own bits only after this, so there is
