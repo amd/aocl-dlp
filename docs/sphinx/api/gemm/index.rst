@@ -344,26 +344,9 @@ Reordering Functions
 Unreordering Functions
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. doxygenfunction:: aocl_unreorder_bf16bf16f32of32
+.. doxygengroup:: unreorder
    :project: aocl-dlp
-
-.. doxygenfunction:: aocl_unreorder_bf16bf16f32of32_reference
-   :project: aocl-dlp
-
-.. doxygenfunction:: aocl_unreorder_f32f32f32of32_reference
-   :project: aocl-dlp
-
-.. doxygenfunction:: aocl_unreorder_s8s8s32os32_reference
-   :project: aocl-dlp
-
-.. doxygenfunction:: aocl_unreorder_u8s8s32os32_reference
-   :project: aocl-dlp
-
-.. doxygenfunction:: aocl_unreorder_f16f16f16of16
-   :project: aocl-dlp
-
-.. doxygenfunction:: aocl_unreorder_f16f16f16of16_reference
-   :project: aocl-dlp
+   :members:
 
 
 .. rubric:: See Also
