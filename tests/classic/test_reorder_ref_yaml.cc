@@ -30,7 +30,7 @@
  * YAML-driven round trips for aocl_reorder_*_reference /
  * aocl_unreorder_*_reference. Each (dtype, k, n, order) is a named gtest
  * so coverage and --gtest_list_tests list every size in
- * configs/reorder_ref_coverage.yaml.
+ * configs/reorder_ref_coverage.yaml (sanity K/N; blocking still swept).
  */
 
 #include "aocl_dlp.h"
