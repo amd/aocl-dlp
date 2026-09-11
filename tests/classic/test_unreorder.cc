@@ -675,11 +675,11 @@ is_sweep_partner(md_t n)
 {
     // The sparse axis used once either k or n is past the dense cutoff: a
     // mix of packing-granularity edges (powers of two and one-off) and the
-    // 16k bound, so a large dimension is still crossed with a fringe, a
-    // full NR, a full NC-ish panel and the other extreme.
-    static const md_t partners[] = { 1,    7,    16,   32,   64,  65,
-                                     128,  192,  256,  320,  512, 1024,
-                                     2048, 4096, 8192, 16384 };
+    // 2k bound, so a large dimension is still crossed with a fringe, a full
+    // NR, a full NC-ish panel and the other extreme without constructing the
+    // very large matrices that made this sweep dominate CI runtime.
+    static const md_t partners[] = { 1,   7,   16,  32,   64,  65,
+                                     128, 256, 512, 1024, 2048 };
     for (md_t p : partners) {
         if (p == n) {
             return true;
@@ -688,25 +688,23 @@ is_sweep_partner(md_t n)
     return false;
 }
 
-// 1 < k,n <= 16k, non-linear. Below 512 every listed pair runs so packing
+// 1 <= k,n <= 2k, non-linear. Below 256 every listed pair runs so packing
 // fringes are covered densely; past that, each large value is crossed with
-// the partner axis (and with itself) so 16k x 16k is in the set without
-// paying for a 16k x 16k cartesian.
+// the partner axis (and with itself). The separate round-trip and blocking
+// tests still cover the other widths and awkward KC/NC combinations.
 std::vector<Shape>
 nr64_sweep_shapes()
 {
-    static const md_t dims[] = { 1,    2,    3,     5,     7,    8,    15,
-                                 16,   17,   31,    32,    33,   63,   64,
-                                 65,   96,   127,   128,   129,  192,  255,
-                                 256,  257,  320,   384,   511,  512,  513,
-                                 768,  1023, 1024,  1025,  1536, 2047, 2048,
-                                 2049, 3072, 4095,  4096,  4097, 6144, 8191,
-                                 8192, 8193, 12288, 16383, 16384 };
+    static const md_t dims[] = { 1,   2,    3,    5,    7,    8,    15,
+                                 16,  17,   31,   32,   33,   63,   64,
+                                 65,  96,   127,  128,  129,  192,  255,
+                                 256, 257,  320,  384,  511,  512,  513,
+                                 768, 1023, 1024, 1025, 1536, 2047, 2048 };
 
     std::vector<Shape> out;
     for (md_t k : dims) {
         for (md_t n : dims) {
-            if ((k <= 512 && n <= 512) || is_sweep_partner(n) || k == n) {
+            if ((k <= 256 && n <= 256) || is_sweep_partner(n) || k == n) {
                 out.push_back({ k, n });
             }
         }
