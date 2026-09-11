@@ -1087,8 +1087,71 @@ class gemmBF16DEBackend final : public iDEBackend
     }
 };
 
-class gemmU8S8DEBackend final : public iDEBackend
+// Shape-model behavior shared by the two classic INT8 GEMM backends.
+//
+// U8S8 and S8S8 use the same classic s32 threading heuristic. The concrete
+// backends still own their candidate sets so later profiling can qualify them
+// independently (S8S8 also carries pack-B column-sum constraints).
+class gemmInt8DEBackendBase : public iDEBackend
 {
+  protected:
+    bool isAnalyticalShapeModelArch = false;
+
+    DLP_ALWAYS_INLINE bool canUseAnalyticalShapeModel(
+        const shape_model::gemmShapeModelInput& in) const
+    {
+        // Like BF16, the objective has no per-call B-packing term. Restrict it
+        // to panels packed once by reorder, where that omission is sound.
+        return isAnalyticalShapeModelArch && in.b_reordered
+               && gemmShapeModelUtils::isEligible(in) && (in.m > 1)
+               && (in.n > 1);
+    }
+
+    // Keep this faithful to dlp_gemm_s32o32_get_threading(): after the shared
+    // seed partition, INT8 only applies the panel-work rebalance.
+    DLP_ALWAYS_INLINE void adjustWays(md_t  mr,
+                                      md_t  nr,
+                                      md_t  m,
+                                      md_t  n,
+                                      md_t& nThreads,
+                                      md_t& icWays,
+                                      md_t& jcWays) const override final
+    {
+        const md_t mrBlks = (m + mr - 1) / mr;
+        if (mrBlks >= icWays) {
+            thread_partition::adjustIcJcWays(mr, nr, m, n, nThreads, icWays,
+                                             jcWays);
+        }
+    }
+};
+
+class gemmU8S8DEBackend final : public gemmInt8DEBackendBase
+{
+  public:
+    // The two equal-area tiles qualified for shipping on the Turin reordered-B
+    // dashboard. As in BF16, the analytical model evaluates both under their
+    // candidate-specific thread split and selects the lower busiest-thread
+    // cost. This is not an inventory of every tile the JIT can encode.
+    static constexpr shape_model::kernelDims candidateTiles[] = {
+        { 6, 64 },
+        { 8, 48 },
+    };
+
+    DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult proposeShape(
+        const shape_model::gemmShapeModelInput& in) const override final
+    {
+        return sweepCandidates(in, candidateTiles);
+    }
+
+    DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult resolveGemmShape(
+        const shape_model::gemmShapeModelInput& in) const override final
+    {
+        return canUseAnalyticalShapeModel(in)
+                   ? gemmU8S8DEBackend::proposeShape(in)
+                   : gemmU8S8DEBackend::baselineShape(in);
+    }
+
+  private:
     bool                                isAvx512;
     bool                                isAvx2;
     bool                                isAvx512Vnni;
@@ -1193,28 +1256,28 @@ class gemmU8S8DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype               k_dtype,
-        [[maybe_unused]] md_t                           m,
-        [[maybe_unused]] md_t                           n,
-        md_t                                            k,
-        [[maybe_unused]] md_t                           rs_a,
-        [[maybe_unused]] md_t                           cs_a,
-        [[maybe_unused]] md_t                           rs_b,
-        [[maybe_unused]] md_t                           cs_b,
-        md_t                                            rs_c,
-        md_t                                            cs_c,
-        void*                                           alpha,
-        void*                                           beta,
-        AOCL_DLP_MEMORY_TAG                             mtag_a,
-        AOCL_DLP_MEMORY_TAG                             mtag_b,
-        dlp_gemm_post_op*                               metadata,
-        md_t                                            mr_hint,
-        md_t                                            nr_hint,
-        md_t                                            kc_hint,
-        md_t                                            c_downscale,
-        [[maybe_unused]] dlp_gemm_thread_info_t*        thread_info,
-        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
-        [[maybe_unused]] md_t                           blksz_set_mask,
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        [[maybe_unused]] md_t             rs_a,
+        [[maybe_unused]] md_t             cs_a,
+        [[maybe_unused]] md_t             rs_b,
+        [[maybe_unused]] md_t             cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info,
+        const dlp_gemm_kernel_hints_t*    gemm_hints,
+        md_t                              blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1234,8 +1297,32 @@ class gemmU8S8DEBackend final : public iDEBackend
             gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
                                                          kc_hint);
 
-        md_t mr = mr_hint;
-        md_t nr = nr_hint;
+        static constexpr dlp_gemm_thread_info_t noThreadInfo{};
+        const dlp_gemm_thread_info_t&           threads =
+            (thread_info != nullptr) ? *thread_info : noThreadInfo;
+
+        const md_t m_hint  = (gemm_hints != nullptr) ? gemm_hints->m_hint : 0;
+        const md_t nt_hint = (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0;
+        const bool b_reordered = (mtag_b == AOCL_DLP_MEMORY_TAG::REORDERED);
+
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            m, n, k, mr_hint, nr_hint, blksz_set_mask, m_hint, nt_hint,
+            threads.num_threads, threads.ic_ways, threads.jc_ways, b_reordered);
+        const shape_model::gemmShapeModelResult shape =
+            gemmU8S8DEBackend::resolveGemmShape(in);
+
+        md_t mr = shape.mr;
+        md_t nr = shape.nr;
+
+        const bool publishSplit = canUseAnalyticalShapeModel(in)
+                                  && (threads.ic_ways <= 0)
+                                  && (threads.jc_ways <= 0);
+        if ((thread_info != nullptr) && publishSplit) {
+            thread_info->num_threads = shape.num_threads;
+            thread_info->ic_ways     = shape.ic_ways;
+            thread_info->jc_ways     = shape.jc_ways;
+        }
+
         // k_unroll=2 emits two VNNI groups per outer-loop iteration. The
         // generalised K-tail in u8s8_gemm_generator.cc makes K_UNROLL=2
         // safe on any K, so divisibility is no longer required. A
@@ -1278,15 +1365,14 @@ class gemmU8S8DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
-        [[maybe_unused]] md_t                           nc,
-        md_t                                            cs_src,
-        [[maybe_unused]] md_t                           n,
-        [[maybe_unused]] md_t                           k,
-        [[maybe_unused]] md_t                           mr_hint,
-        md_t                                            nr_hint,
-        [[maybe_unused]] md_t                           blksz_set_mask,
-        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints)
-        override final
+        [[maybe_unused]] md_t          nc,
+        md_t                           cs_src,
+        md_t                           n,
+        md_t                           k,
+        md_t                           mr_hint,
+        md_t                           nr_hint,
+        md_t                           blksz_set_mask,
+        const dlp_gemm_kernel_hints_t* gemm_hints) override final
     {
         // INT8 pack-B JIT is AVX-512-VNNI only. Without VNNI the frame keeps
         // the C packer (same VNNI-4 layout, NR from lcntx).
@@ -1306,14 +1392,48 @@ class gemmU8S8DEBackend final : public iDEBackend
             kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
         }
 
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
+            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
+            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
+            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
+            /*b_reordered=*/true);
+
+        const md_t nr = canUseAnalyticalShapeModel(in)
+                            ? gemmU8S8DEBackend::proposeShape(in).nr
+                            : in.nr;
+
         return dlp::kernel_frame::packKernelInfo(
-            nr_hint, k_factor, kInstPref, kernel_frame::DataType::s8,
+            nr, k_factor, kInstPref, kernel_frame::DataType::s8,
             kernel_frame::DataType::s8, colMajor, /*accColSum=*/false);
     }
 };
 
-class gemmS8DEBackend final : public iDEBackend
+class gemmS8DEBackend final : public gemmInt8DEBackendBase
 {
+  public:
+    // The same two shipping candidates and selection policy as U8S8. Both
+    // remain below the S8 pack-B column-sum accumulator's hard NR=128 limit.
+    static constexpr shape_model::kernelDims candidateTiles[] = {
+        { 6, 64 },
+        { 8, 48 },
+    };
+
+    DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult proposeShape(
+        const shape_model::gemmShapeModelInput& in) const override final
+    {
+        return sweepCandidates(in, candidateTiles);
+    }
+
+    DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult resolveGemmShape(
+        const shape_model::gemmShapeModelInput& in) const override final
+    {
+        return canUseAnalyticalShapeModel(in)
+                   ? gemmS8DEBackend::proposeShape(in)
+                   : gemmS8DEBackend::baselineShape(in);
+    }
+
+  private:
     bool                                isAvx512;
     bool                                isAvx2;
     bool                                isAvx512Vnni;
@@ -1420,28 +1540,28 @@ class gemmS8DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype               k_dtype,
-        [[maybe_unused]] md_t                           m,
-        [[maybe_unused]] md_t                           n,
-        md_t                                            k,
-        [[maybe_unused]] md_t                           rs_a,
-        [[maybe_unused]] md_t                           cs_a,
-        [[maybe_unused]] md_t                           rs_b,
-        [[maybe_unused]] md_t                           cs_b,
-        md_t                                            rs_c,
-        md_t                                            cs_c,
-        void*                                           alpha,
-        void*                                           beta,
-        AOCL_DLP_MEMORY_TAG                             mtag_a,
-        AOCL_DLP_MEMORY_TAG                             mtag_b,
-        dlp_gemm_post_op*                               metadata,
-        md_t                                            mr_hint,
-        md_t                                            nr_hint,
-        md_t                                            kc_hint,
-        md_t                                            c_downscale,
-        [[maybe_unused]] dlp_gemm_thread_info_t*        thread_info,
-        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
-        [[maybe_unused]] md_t                           blksz_set_mask,
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        [[maybe_unused]] md_t             rs_a,
+        [[maybe_unused]] md_t             cs_a,
+        [[maybe_unused]] md_t             rs_b,
+        [[maybe_unused]] md_t             cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info,
+        const dlp_gemm_kernel_hints_t*    gemm_hints,
+        md_t                              blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1463,8 +1583,32 @@ class gemmS8DEBackend final : public iDEBackend
             gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
                                                          kc_hint);
 
-        md_t mr = mr_hint;
-        md_t nr = nr_hint;
+        static constexpr dlp_gemm_thread_info_t noThreadInfo{};
+        const dlp_gemm_thread_info_t&           threads =
+            (thread_info != nullptr) ? *thread_info : noThreadInfo;
+
+        const md_t m_hint  = (gemm_hints != nullptr) ? gemm_hints->m_hint : 0;
+        const md_t nt_hint = (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0;
+        const bool b_reordered = (mtag_b == AOCL_DLP_MEMORY_TAG::REORDERED);
+
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            m, n, k, mr_hint, nr_hint, blksz_set_mask, m_hint, nt_hint,
+            threads.num_threads, threads.ic_ways, threads.jc_ways, b_reordered);
+        const shape_model::gemmShapeModelResult shape =
+            gemmS8DEBackend::resolveGemmShape(in);
+
+        md_t mr = shape.mr;
+        md_t nr = shape.nr;
+
+        const bool publishSplit = canUseAnalyticalShapeModel(in)
+                                  && (threads.ic_ways <= 0)
+                                  && (threads.jc_ways <= 0);
+        if ((thread_info != nullptr) && publishSplit) {
+            thread_info->num_threads = shape.num_threads;
+            thread_info->ic_ways     = shape.ic_ways;
+            thread_info->jc_ways     = shape.jc_ways;
+        }
+
         // k_unroll=2 emits two VNNI groups per outer-loop iteration. The
         // generalised K-tail in s8_gemm_generator.cc makes K_UNROLL=2
         // safe on any K, so divisibility is no longer required. The
@@ -1506,15 +1650,14 @@ class gemmS8DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
-        [[maybe_unused]] md_t                           nc,
-        md_t                                            cs_src,
-        [[maybe_unused]] md_t                           n,
-        [[maybe_unused]] md_t                           k,
-        [[maybe_unused]] md_t                           mr_hint,
-        md_t                                            nr_hint,
-        [[maybe_unused]] md_t                           blksz_set_mask,
-        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints)
-        override final
+        [[maybe_unused]] md_t          nc,
+        md_t                           cs_src,
+        md_t                           n,
+        md_t                           k,
+        md_t                           mr_hint,
+        md_t                           nr_hint,
+        md_t                           blksz_set_mask,
+        const dlp_gemm_kernel_hints_t* gemm_hints) override final
     {
         // INT8 pack-B JIT is AVX-512-VNNI only. Without VNNI the frame keeps
         // the C packer (same VNNI-4 layout, NR from lcntx).
@@ -1534,8 +1677,19 @@ class gemmS8DEBackend final : public iDEBackend
             kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
         }
 
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
+            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
+            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
+            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
+            /*b_reordered=*/true);
+
+        const md_t nr = canUseAnalyticalShapeModel(in)
+                            ? gemmS8DEBackend::proposeShape(in).nr
+                            : in.nr;
+
         return dlp::kernel_frame::packKernelInfo(
-            nr_hint, k_factor, kInstPref, kernel_frame::DataType::s8,
+            nr, k_factor, kInstPref, kernel_frame::DataType::s8,
             kernel_frame::DataType::s8, colMajor, /*accColSum=*/true);
     }
 };

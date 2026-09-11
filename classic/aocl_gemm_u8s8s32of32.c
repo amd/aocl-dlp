@@ -175,6 +175,11 @@ aocl_gemm_u8s8s32of32(const char      order,
     // modifies the context object.
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
 
+    // Seed the DE with the runtime pool and any caller-pinned ways.
+    lcntx_l.thread_info.num_threads = rntm_g.num_threads;
+    lcntx_l.thread_info.ic_ways     = rntm_g.ic_ways;
+    lcntx_l.thread_info.jc_ways     = rntm_g.jc_ways;
+
     err = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l, metadata);
     if (err != DLP_CLSC_SUCCESS) {
         dlp_print_msg(" Failed to update context with metadata.", __FILE__,
@@ -204,6 +209,10 @@ aocl_gemm_u8s8s32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         goto err_hndl;
     }
+
+    // Execute with the split under which the DE selected the tile.
+    rntm_g.ic_ways = lcntx_l.thread_info.ic_ways;
+    rntm_g.jc_ways = lcntx_l.thread_info.jc_ways;
 
     // JIT pack-B against the same blksz.NR the GEMM kernel uses. A pack-B
     // kernel is expected on AVX-512 VNNI; a NULL handle means generation

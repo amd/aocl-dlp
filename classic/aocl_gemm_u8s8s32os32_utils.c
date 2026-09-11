@@ -180,19 +180,6 @@ aocl_reorder_u8s8s32os32(const char      order,
         return; // A reorder not supported.
     }
 
-#ifdef DLP_KERNELS_ZEN4
-    if (n == 1) {
-        if (rs_b == 1) {
-            memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(int8_t)));
-        } else {
-            for (iter_t k0 = 0; k0 < k; k0++) {
-                reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
-            }
-        }
-        return;
-    }
-#endif
-
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.
     dlp_rntm_t rntm_g;
@@ -203,6 +190,12 @@ aocl_reorder_u8s8s32os32(const char      order,
     if (err_no != DLP_CLSC_SUCCESS) {
         dlp_print_msg(" Failed to update context with metadata.", __FILE__,
                       __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return;
     }
@@ -219,6 +212,26 @@ aocl_reorder_u8s8s32os32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return;
     }
+
+    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR,
+                                      dlp_get_packb_u8s8s32o32_min_NR(),
+                                      lcntx_g.blksz.KC, 4)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
+
+#ifdef DLP_KERNELS_ZEN4
+    if (n == 1) {
+        if (rs_b == 1) {
+            memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(int8_t)));
+        } else {
+            for (iter_t k0 = 0; k0 < k; k0++) {
+                reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
+            }
+        }
+        return;
+    }
+#endif
 
     lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
     dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_U8S8S32OS32, n, k, rs_b, cs_b,

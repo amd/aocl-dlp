@@ -252,6 +252,14 @@ gemmU8S8DEBackend::gemmU8S8DEBackend()
     if (!isAvx512Vnni) {
         canGenerateKernelInfo = false;
     }
+
+    // The initial INT8 shape-model candidate is the shipped Zen5 tile. Keep
+    // the architecture fence explicit so later candidate additions require
+    // measurements before affecting another microarchitecture.
+    isAnalyticalShapeModelArch = arch_utils::archConfigManager::getInstance()
+                                     .isAvx512VnniSupportedByConfiguredArch()
+                                 && arch_utils::archConfigManager::getInstance()
+                                        .isZen5SimilarConfiguredArch();
 }
 
 std::optional<kernel_frame::kernelInfo>
@@ -315,6 +323,14 @@ gemmS8DEBackend::gemmS8DEBackend()
     if (!isAvx512Vnni) {
         canGenerateKernelInfo = false;
     }
+
+    // Keep S8S8 under the same measured architecture fence as U8S8. Its
+    // eventual candidate set will be narrower because column-sum accumulation
+    // consumes additional registers.
+    isAnalyticalShapeModelArch = arch_utils::archConfigManager::getInstance()
+                                     .isAvx512VnniSupportedByConfiguredArch()
+                                 && arch_utils::archConfigManager::getInstance()
+                                        .isZen5SimilarConfiguredArch();
 }
 
 std::optional<kernel_frame::kernelInfo>
