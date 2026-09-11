@@ -359,7 +359,6 @@ dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
                                    md_t             k)
 {
     (void)(m); // Unused for now, potential to be used later.
-    (void)(n); // Unused for now, potential to be used later.
 
     if (b_quant_op == NULL) {
         dlp_gemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
@@ -404,6 +403,10 @@ dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
             if ((b_zp_ptr->zero_point_len > 0)
                 && (b_zp_ptr->zero_point == NULL))
                 return DLP_CLSC_NULL_POINTER;
+            if ((b_zp_ptr->zero_point_len != 1)
+                && (b_zp_ptr->zero_point_len != n)) {
+                return DLP_CLSC_INVALID_ZP_LEN;
+            }
         }
 
         if ((b_quant_op->quant_op_kind == DLP_QUANT_OP_DEQUANTIZE)
@@ -415,6 +418,11 @@ dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
             if ((b_scl_ptr->scale_factor_len > 0)
                 && (b_scl_ptr->scale_factor == NULL))
                 return DLP_CLSC_NULL_POINTER;
+            // check if scale factor length is valid
+            if ((b_scl_ptr->scale_factor_len != 1)
+                && (b_scl_ptr->scale_factor_len != n)) {
+                return DLP_CLSC_INVALID_SF_LEN;
+            }
         }
         dlp_gemm_set_pre_ops_node_params(
             (pre_op_list + i), group_size,

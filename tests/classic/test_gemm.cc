@@ -433,6 +433,16 @@ check_valid_params(const GemmTestConfig& config)
             return false;
         }
     }
+    if (config.woq_param) {
+        md_t gs = config.woq_param->getGroupSize();
+        if ((gs > k) || (gs < 0)) {
+            return false;
+        }
+        // API requires even group_size unless it is 0 (full K) or equals K.
+        if ((gs != 0) && (gs != k) && (gs % 2 != 0)) {
+            return false;
+        }
+    }
 
     return true;
 }

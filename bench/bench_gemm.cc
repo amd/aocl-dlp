@@ -290,9 +290,12 @@ class OptimizedGemmBenchmark : public ConcreteUAL
             benchmark::ClobberMemory();
         }
 
-        md_t group_size = config_.group_scale_param
-                              ? config_.group_scale_param->getGroupSize()
-                              : 0;
+        md_t group_size = 0;
+        if (config_.group_scale_param) {
+            group_size = config_.group_scale_param->getGroupSize();
+        } else if (config_.woq_param) {
+            group_size = config_.woq_param->getGroupSize();
+        }
         BenchmarkMetrics::calculateAndReport(state, m_, n_, k_, a_type_,
                                              b_type_, c_type_, group_size);
     }

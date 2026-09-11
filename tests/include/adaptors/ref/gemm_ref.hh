@@ -257,7 +257,8 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
                             void*                 b_scale_data,
                             md_t                  sf_len,
                             framework::MatrixType sf_type,
-                            bool                  reorder_b = false);
+                            bool                  reorder_b  = false,
+                            md_t                  group_size = 0);
 
 /** BF16×U4 ref: zp_type s8 => (u4-zp)*scale; zp_type bf16 => (u4-8)*scale+zp.
  */
@@ -282,7 +283,8 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
                             md_t                  zp_len,
                             framework::MatrixType sf_type,
                             framework::MatrixType zp_type,
-                            bool                  reorder_b = false);
+                            bool                  reorder_b  = false,
+                            md_t                  group_size = 0);
 void
 aocl_gemm_s8s8s32of32_sym_quant_ref(const char            order,
                                     const char            transa,

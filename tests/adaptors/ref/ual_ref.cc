@@ -392,7 +392,8 @@ UalRef::reorder(void*        A,
  * @param B Second input matrix
  * @param C Output matrix
  * @param hasMetadata Whether the plan has post-ops metadata
- * @param group_size group_size for sym_quant API
+ * @param group_size Group size along K (0 is valid; means one group over full
+ * K)
  * @return bool True if parameters are valid, false otherwise
  */
 bool
@@ -509,10 +510,7 @@ UalRef::checkValidGemmParams(const Matrix& A,
         return false;
     }
 
-    // group_size conditions:
-    // 1. group_size must be less than or equal to k.
-    // 2. group_size = 0 is valid and implies one group over full k.
-    // 3. group_size < 0 (-ve) is invalid.
+    // group_size: must be <= k, non-negative; 0 means one group over full k.
     if ((group_size > k) || (group_size < 0)) {
         return false;
     }

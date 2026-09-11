@@ -79,7 +79,8 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
                             void*                 b_scale_data,
                             md_t                  sf_len,
                             framework::MatrixType sf_type,
-                            bool                  reorder_b)
+                            bool                  reorder_b,
+                            md_t                  group_size)
 {
     // Validate WOQ metadata (scale required; S4 has no zero-point).
     if (b_scale_data == nullptr) {
@@ -119,10 +120,15 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
         }
     };
 
+    md_t gs_eff = ((group_size == 0) || (group_size > k)) ? k : group_size;
+    if (gs_eff <= 0) {
+        gs_eff = (k > 0) ? k : 1;
+    }
     bool per_tensor_scale = (sf_len == 1);
-    auto getScale         = [&](md_t j) -> float {
-        return getValueFromBuffer(b_scale_data, sf_type,
-                                  per_tensor_scale ? 0 : j);
+    auto getScale         = [&](md_t j, md_t k_idx) -> float {
+        md_t group = k_idx / gs_eff;
+        md_t idx   = per_tensor_scale ? group : (group * n + j);
+        return getValueFromBuffer(b_scale_data, sf_type, idx);
     };
 
     md_t i, j, l;
@@ -138,8 +144,7 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
                 a_stride = lda;
             }
 
-            float scale_j = getScale(j);
-            float sum     = 0.0f;
+            float sum = 0.0f;
             // BLAS contract: when alpha == 0 the result is independent of A and
             // B, which must not be referenced. Skipping the accumulation leaves
             // sum at 0 so the write-back below reduces to beta * C_initial (or
@@ -158,7 +163,7 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
                         else
                             b_s8 = unpack_s4(B, b_ldb, j, l);
                     }
-                    float b_f32 = static_cast<float>(b_s8) * scale_j;
+                    float b_f32 = static_cast<float>(b_s8) * getScale(j, l);
                     // Match DLP: kernel converts scaled B to bf16 before matmul
                     b_f32 = bf16_to_f32(f32_to_bf16(b_f32));
                     sum += bf16_to_f32(*a_ptr) * b_f32;

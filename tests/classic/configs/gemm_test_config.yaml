@@ -27,7 +27,9 @@
 #   f32s8s32o*  (A_Quant) ........ api_smoke_a_quant_f32s8_all_outputs
 #   s8s8s32o*   (A_Quant on int8)  api_smoke_a_quant_s8s8 / _asym
 #   bf16s4f32of32 / obf16 (WOQ) .. api_smoke_woq_bf16s4 / _out_bf16
+#                                  / _group
 #   bf16u4f32of32 / obf16 (WOQ) .. api_smoke_woq_bf16u4_asym / _out_bf16_asym
+#                                  / _group
 #   post-ops: Bias/Scale/RELU/GELU-ERF ... api_smoke_f32_all_postops
 #             GELU-TANH/SWISH/SIGMOID/TANH/CLIP/PRELU/MISH ...
 #                                          api_smoke_f32_elementwise_activations
@@ -375,6 +377,7 @@ gemm_tests:
           params:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
+            group_size: ["0", "16"]
 
   - name: "quant_api_s8s8_sym_quant_f32"
     a_type: ["s8"]
@@ -775,6 +778,7 @@ gemm_tests:
   # Weight-Only Quantization (WOQ) bf16 x s4 -> f32
   # (aocl_gemm_bf16s4f32of32). B is a 4-bit quantized weight; WOQ supplies the
   # per-N scale factor. Requires the reorder-B path, so mtagB=reorder.
+  # group_size omitted (0) is one group over full K.
   # --------------------------------------------------------------------------
   - name: "api_smoke_woq_bf16s4"
     a_type: ["bf16"]
@@ -893,6 +897,66 @@ gemm_tests:
             scale_factor_len: ["n"]
             zero_point_type: ["f32"]
             zero_point_len: ["n"]
+
+  # --------------------------------------------------------------------------
+  # WOQ with group_size: scale/zp buffers are num_groups * (1 or n).
+  # group_size must be even unless it equals K (or 0, meaning full K).
+  # --------------------------------------------------------------------------
+  - name: "api_smoke_woq_bf16s4_group"
+    a_type: ["bf16"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["1", "n"]
+            group_size: ["16"]
+
+  - name: "api_smoke_woq_bf16u4_asym_group"
+    a_type: ["bf16"]
+    b_type: ["u4"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["1", "n"]
+            zero_point_type: ["s8", "bf16"]
+            zero_point_len: ["1", "n"]
+            group_size: ["16"]
 
   # --------------------------------------------------------------------------
 

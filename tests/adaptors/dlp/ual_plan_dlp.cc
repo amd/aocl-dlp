@@ -1371,6 +1371,18 @@ DlpUalPlan::convertWOQOperations()
     b_quant.src_type      = getStorageType(m_b_type);
     b_quant.dst_type      = DLP_BF16;
 
+    md_t group_size    = param.getGroupSize();
+    md_t k             = getK();
+    md_t n             = getN();
+    b_quant.group_size = group_size;
+
+    // Scale/zp buffers are sized num_groups * base_len. Kernels branch on the
+    // per-group length (1 vs n), so pass that logical length, not the full
+    // buffer size.
+    auto woqLogicalLen = [&](md_t total) -> md_t {
+        return WOQParam::logicalParamLen(total, n, k, group_size);
+    };
+
     // Scale factor assignment for B matrix
     if (param.hasB_ScaleFactor()) {
         if (!b_quant.dequant_scale_factors) {
@@ -1378,7 +1390,7 @@ DlpUalPlan::convertWOQOperations()
         }
         auto* scl = b_quant.dequant_scale_factors;
         scl->data = convertMatrixToPtr(*param.getB_ScaleFactor());
-        scl->len  = param.getB_ScaleFactor()->getCols();
+        scl->len  = woqLogicalLen(param.getB_ScaleFactor()->getCols());
         scl->stor_type =
             getStorageType(param.getB_ScaleFactor()->getMatrixType());
         scl->outer_dim =
@@ -1392,13 +1404,11 @@ DlpUalPlan::convertWOQOperations()
         }
         auto* zp      = b_quant.zero_point;
         zp->data      = convertMatrixToPtr(*param.getB_ZeroPoint());
-        zp->len       = param.getB_ZeroPoint()->getCols();
+        zp->len       = woqLogicalLen(param.getB_ZeroPoint()->getCols());
         zp->stor_type = getStorageType(param.getB_ZeroPoint()->getMatrixType());
         zp->outer_dim =
             getScalarOrVectorDim(zp->len, DLP_PARAM_DIM_PER_CHANNEL);
     }
-
-    b_quant.group_size = 0; // one group over full K
 }
 
 void

@@ -1077,7 +1077,11 @@ MicroTest::createOperationParam(
             idx        = std::min(idx, group_size_it->second.size() - 1);
             auto gs_str =
                 std::any_cast<std::string>(group_size_it->second[idx]);
-            group_size = static_cast<md_t>(std::stoul(gs_str));
+            group_size = static_cast<md_t>(std::stoll(gs_str));
+            if (group_size < 0) {
+                throw std::runtime_error("Group size must be non-negative, got "
+                                         + gs_str);
+            }
         }
 
         // Parse A and B granularity independently (each defaults to PER_GROUP).
@@ -1172,20 +1176,41 @@ MicroTest::createOperationParam(
             sf_type       = stringToMatrixType(type_str);
         }
 
-        // Create scale factor matrix based on length specification
+        // Parse group_size (0 means one group over full K)
+        md_t group_size    = 0;
+        auto group_size_it = config.params.find("group_size");
+        if (group_size_it != config.params.end()
+            && !group_size_it->second.empty()) {
+            auto   idx_it = param_indices.find("group_size");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, group_size_it->second.size() - 1);
+            auto gs_str =
+                std::any_cast<std::string>(group_size_it->second[idx]);
+            group_size = static_cast<md_t>(std::stoll(gs_str));
+            if (group_size < 0) {
+                throw std::runtime_error("Group size must be non-negative, got "
+                                         + gs_str);
+            }
+        }
+
+        // Scale/zp buffers are num_groups * base_len. Kernels index as
+        //   per-tensor (len=1): scale[group]
+        //   per-channel (len=n): scale[group * n + col]
+        md_t ng          = WOQParam::numGroups(getK(), group_size);
+        md_t base_sf_len = (sf_len == "n") ? getN() : 1;
+
         Matrix sf_matrix;
         // Use fixed seed for reproducible random values across DLP and REF
         std::mt19937                          gen(RANDOM_SEED);
         std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
-        if (sf_len == "n") {
-            std::vector<float> sf_data(getN());
-            for (std::size_t i = 0; i < sf_data.size(); ++i) {
-                sf_data[i] = dist(gen);
-            }
-            sf_matrix = Matrix::fromVector(sf_data, sf_type);
+        std::vector<float>                    sf_data(ng * base_sf_len);
+        for (auto& v : sf_data) {
+            v = dist(gen);
+        }
+        if (sf_data.size() == 1) {
+            sf_matrix = Matrix::fromValue(sf_data[0], sf_type);
         } else {
-            float sf_value = dist(gen);
-            sf_matrix      = Matrix::fromValue(sf_value, sf_type);
+            sf_matrix = Matrix::fromVector(sf_data, sf_type);
         }
 
         // Parse optional zero point for asymmetric quantization
@@ -1216,25 +1241,23 @@ MicroTest::createOperationParam(
             has_zp  = true;
         }
 
+        WOQBuilder woq_builder;
+        woq_builder.setB_ScaleFactor(sf_matrix).setGroupSize(group_size);
+
         if (has_zp) {
-            if (zp_len == "n") {
-                std::vector<float> zp_data(getN());
-                for (std::size_t i = 0; i < zp_data.size(); ++i) {
-                    zp_data[i] = dist(gen);
-                }
-                zp_matrix = Matrix::fromVector(zp_data, zp_type);
-            } else {
-                zp_matrix = Matrix::fromValue(dist(gen), zp_type);
+            md_t               base_zp_len = (zp_len == "n") ? getN() : 1;
+            std::vector<float> zp_data(ng * base_zp_len);
+            for (auto& v : zp_data) {
+                v = dist(gen);
             }
-            // Asymmetric quantization: include zero-point
-            return createWOQ()
-                .setB_ScaleFactor(sf_matrix)
-                .setB_ZeroPoint(zp_matrix)
-                .build();
-        } else {
-            // Symmetric quantization: no zero-point
-            return createWOQ().setB_ScaleFactor(sf_matrix).build();
+            if (zp_data.size() == 1) {
+                zp_matrix = Matrix::fromValue(zp_data[0], zp_type);
+            } else {
+                zp_matrix = Matrix::fromVector(zp_data, zp_type);
+            }
+            woq_builder.setB_ZeroPoint(zp_matrix);
         }
+        return woq_builder.build();
     }
     throw std::runtime_error("Unknown operation type: " + config.type);
 }

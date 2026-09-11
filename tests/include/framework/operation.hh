@@ -412,11 +412,13 @@ class WOQParam : public IOperationParam
   private:
     std::unique_ptr<Matrix> m_b_scale_factor;
     std::unique_ptr<Matrix> m_b_zero_point;
+    md_t                    m_group_size = 0; // 0 means one group over full K
 
   public:
     WOQParam() = default;
 
     WOQParam(const WOQParam& other)
+        : m_group_size(other.m_group_size)
     {
         if (other.m_b_scale_factor) {
             m_b_scale_factor =
@@ -444,10 +446,39 @@ class WOQParam : public IOperationParam
         m_b_zero_point = std::make_unique<Matrix>(zp);
     }
 
+    void setGroupSize(md_t groupSize) { m_group_size = groupSize; }
+
     const Matrix* getB_ScaleFactor() const { return m_b_scale_factor.get(); }
     const Matrix* getB_ZeroPoint() const { return m_b_zero_point.get(); }
     bool hasB_ScaleFactor() const { return m_b_scale_factor != nullptr; }
     bool hasB_ZeroPoint() const { return m_b_zero_point != nullptr; }
+    md_t getGroupSize() const { return m_group_size; }
+
+    // WOQ kernels treat group_size 0 (or a value larger than K) as one group
+    // spanning K. The scale/zp buffers are laid out as num_groups * base_len.
+    static md_t numGroups(md_t k, md_t group_size)
+    {
+        md_t gs_eff = ((group_size == 0) || (group_size > k)) ? k : group_size;
+        if (k == 0 || gs_eff == 0) {
+            return 1;
+        }
+        return (k + gs_eff - 1) / gs_eff;
+    }
+
+    static md_t logicalParamLen(md_t total_elems,
+                                md_t n,
+                                md_t k,
+                                md_t group_size)
+    {
+        md_t ng = numGroups(k, group_size);
+        if (total_elems == ng) {
+            return 1;
+        }
+        if (n > 0 && total_elems == ng * n) {
+            return n;
+        }
+        return 0;
+    }
 };
 
 /**
@@ -1204,6 +1235,7 @@ class WOQBuilder
   private:
     std::unique_ptr<Matrix> m_b_scale_factor;
     std::unique_ptr<Matrix> m_b_zero_point;
+    md_t                    m_group_size = 0;
 
   public:
     WOQBuilder& setB_ScaleFactor(const Matrix& sf)
@@ -1218,6 +1250,12 @@ class WOQBuilder
         return *this;
     }
 
+    WOQBuilder& setGroupSize(md_t groupSize)
+    {
+        m_group_size = groupSize;
+        return *this;
+    }
+
     std::unique_ptr<IOperationParam> build()
     {
         if (!m_b_scale_factor) {
@@ -1229,6 +1267,7 @@ class WOQBuilder
         if (m_b_zero_point) {
             param->setB_ZeroPoint(*m_b_zero_point);
         }
+        param->setGroupSize(m_group_size);
         return param;
     }
 };

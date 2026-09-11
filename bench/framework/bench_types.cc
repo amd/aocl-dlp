@@ -193,6 +193,10 @@ generateBenchmarkName(const GemmBenchConfig& config)
     }
     if (config.woq_param) {
         name << "_WOQ";
+        md_t gs = config.woq_param->getGroupSize();
+        if (gs != 0) {
+            name << ",gs:" << gs;
+        }
     }
 
     // Add detailed post_ops information

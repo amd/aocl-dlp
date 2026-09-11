@@ -179,7 +179,8 @@ class UalRef : public IUal
      * @param B Second input matrix
      * @param C Output matrix
      * @param hasMetadata Whether the plan has post-ops metadata
-     * @param group_size group_size for sym_quant API
+     * @param group_size Group size along K (0 is valid; means one group over
+     * full K). Divisibility rules are API-specific and checked separately.
      * @return bool True if parameters are valid, false otherwise
      */
     bool checkValidGemmParams(const Matrix& A,

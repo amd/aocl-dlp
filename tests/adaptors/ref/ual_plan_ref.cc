@@ -78,6 +78,22 @@ namespace {
         }
     }
 
+    // WOQ (bf16s4/bf16u4): divisibility by 2 after group_size 0 -> k, matching
+    // dlp_gemm_translate_to_pre_ops_list().
+    bool isValidWoqGroupSizeAlignment(md_t group_size, md_t k)
+    {
+        md_t gs = (group_size == 0) ? k : group_size;
+        return !((gs != k) && (gs % 2 != 0));
+    }
+
+    // GroupScale (sym_quant): divisibility by 4 after group_size 0 -> k,
+    // matching dlp_gemm_translate_to_group_postops_list().
+    bool isValidGroupScaleGroupSizeAlignment(md_t group_size, md_t k)
+    {
+        md_t gs = (group_size == 0) ? k : group_size;
+        return !((gs != k) && (gs % 4 != 0));
+    }
+
 } // namespace
 
 void
@@ -113,7 +129,13 @@ RefUalPlan::execute()
     bool isBf16U4Gemm = (aType == MatrixType::bf16 && bType == MatrixType::u4);
 
     if ((isBf16S4Gemm || isBf16U4Gemm) && m_woq) {
-        if (!ualRef.checkValidGemmParams(A, B, C, true)) {
+        md_t k          = A.getEffectiveCols();
+        md_t group_size = m_woq->getGroupSize();
+
+        if (!ualRef.checkValidGemmParams(A, B, C, true, group_size)) {
+            return UALError::UAL_FAILURE;
+        }
+        if (!isValidWoqGroupSizeAlignment(group_size, k)) {
             return UALError::UAL_FAILURE;
         }
 
@@ -132,8 +154,17 @@ RefUalPlan::execute()
             return UALError::UAL_FAILURE;
         }
 
-        md_t       sf_len = b_scale_factor.getRows() * b_scale_factor.getCols();
-        md_t       zp_len = b_zero_point.getRows() * b_zero_point.getCols();
+        md_t n      = B.getEffectiveCols();
+        md_t sf_len = WOQParam::logicalParamLen(b_scale_factor.getRows()
+                                                    * b_scale_factor.getCols(),
+                                                n, k, group_size);
+        md_t zp_len = WOQParam::logicalParamLen(
+            b_zero_point.getRows() * b_zero_point.getCols(), n, k, group_size);
+
+        if (sf_len == 0 || (b_zp_data != nullptr && zp_len == 0)) {
+            return UALError::UAL_FAILURE;
+        }
+
         MatrixType sf_type = b_scale_factor.getMatrixType();
         MatrixType zp_type = b_zero_point.getMatrixType();
 
@@ -169,7 +200,7 @@ RefUalPlan::execute()
                 static_cast<int>(B.getLeadingDimension()), beta_f32,
                 reinterpret_cast<float*>(tempC_f32.getData()),
                 static_cast<int>(tempC_f32.getLeadingDimension()), b_scale_data,
-                sf_len, sf_type, B.isReordered());
+                sf_len, sf_type, B.isReordered(), group_size);
         } else {
             if (b_zp_data == nullptr) {
                 return UALError::UAL_FAILURE;
@@ -185,7 +216,8 @@ RefUalPlan::execute()
                 static_cast<int>(B.getLeadingDimension()), beta_f32,
                 reinterpret_cast<float*>(tempC_f32.getData()),
                 static_cast<int>(tempC_f32.getLeadingDimension()), b_scale_data,
-                b_zp_data, sf_len, zp_len, sf_type, zp_type, B.isReordered());
+                b_zp_data, sf_len, zp_len, sf_type, zp_type, B.isReordered(),
+                group_size);
         }
 
         applyPostOps(tempC_f32);
@@ -395,14 +427,17 @@ RefUalPlan::execute()
     // group_size > 0.
     if (isS8S8GroupScale || isS8S4GroupScale) {
         md_t gs = m_group_scale->getGroupSize();
+        md_t K  = A.getEffectiveCols();
 
         if (!ualRef.checkValidGemmParams(A, B, C, false, gs)) {
+            return UALError::UAL_FAILURE;
+        }
+        if (!isValidGroupScaleGroupSizeAlignment(gs, K)) {
             return UALError::UAL_FAILURE;
         }
 
         md_t M = C.getEffectiveRows();
         md_t N = C.getEffectiveCols();
-        md_t K = A.getEffectiveCols();
 
         md_t gs_eff = (gs == 0) ? K : gs;
         md_t ng     = (K + gs_eff - 1) / gs_eff;

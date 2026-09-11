@@ -86,7 +86,8 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
                             md_t                  zp_len,
                             framework::MatrixType sf_type,
                             framework::MatrixType zp_type,
-                            bool                  reorder_b)
+                            bool                  reorder_b,
+                            md_t                  group_size)
 {
     if (b_scale_data == nullptr) {
         std::cerr << "bf16u4f32of32_ref: Missing required B scale factors"
@@ -129,14 +130,21 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
         }
     };
 
+    md_t gs_eff = ((group_size == 0) || (group_size > k)) ? k : group_size;
+    if (gs_eff <= 0) {
+        gs_eff = (k > 0) ? k : 1;
+    }
     bool per_tensor_scale = (sf_len == 1);
     bool per_tensor_zp    = (zp_len == 1);
-    auto getScale         = [&](md_t j) -> float {
-        return getValueFromBuffer(b_scale_data, sf_type,
-                                  per_tensor_scale ? 0 : j);
+    auto getScale         = [&](md_t j, md_t k_idx) -> float {
+        md_t group = k_idx / gs_eff;
+        md_t idx   = per_tensor_scale ? group : (group * n + j);
+        return getValueFromBuffer(b_scale_data, sf_type, idx);
     };
-    auto getZp = [&](md_t j) -> float {
-        return getValueFromBuffer(b_zp_data, zp_type, per_tensor_zp ? 0 : j);
+    auto getZp = [&](md_t j, md_t k_idx) -> float {
+        md_t group = k_idx / gs_eff;
+        md_t idx   = per_tensor_zp ? group : (group * n + j);
+        return getValueFromBuffer(b_zp_data, zp_type, idx);
     };
 
     const bool float_domain_zp = (zp_type == framework::MatrixType::bf16);
@@ -154,9 +162,6 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
                 a_stride = lda;
             }
 
-            float scale_j = getScale(j);
-            float zp_j    = getZp(j);
-
             // get b_u4 at index lk
             auto b_u4_at = [&](md_t lk) -> uint8_t {
                 if (transb == 'N' || transb == 'n') {
@@ -169,11 +174,14 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
                 return unpack_u4(B, b_ldb, j, lk);
             };
 
-            // dequant B to f32
-            auto dequant_b_f32 = [&](uint8_t b_u4) -> float {
+            // dequant B to f32, using the scale/zp of the K-group that
+            // contains k_idx.
+            auto dequant_b_f32 = [&](uint8_t b_u4, md_t k_idx) -> float {
+                float scale = getScale(j, k_idx);
+                float zp    = getZp(j, k_idx);
                 return float_domain_zp
-                           ? (static_cast<float>(b_u4) - 8.0f) * scale_j + zp_j
-                           : (static_cast<float>(b_u4) - zp_j) * scale_j;
+                           ? (static_cast<float>(b_u4) - 8.0f) * scale + zp
+                           : (static_cast<float>(b_u4) - zp) * scale;
             };
 
             float sum = 0.0f;
@@ -184,8 +192,8 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
             if (alpha != 0.0f) {
                 for (l = 0; l + 1 < k; l += 2) {
                     // dequant B to f32
-                    float b0 = dequant_b_f32(b_u4_at(l));
-                    float b1 = dequant_b_f32(b_u4_at(l + 1));
+                    float b0 = dequant_b_f32(b_u4_at(l), l);
+                    float b1 = dequant_b_f32(b_u4_at(l + 1), l + 1);
                     // convert f32 to bf16
                     float b_bf0 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b0));
                     float b_bf1 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b1));
@@ -198,8 +206,8 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
                     a_ptr += 2 * a_stride;
                 }
                 if (l < k) {
-                    float b_bf = bf16_to_f32(
-                        f32_to_bf16_vcvtneps2bf16(dequant_b_f32(b_u4_at(l))));
+                    float b_bf  = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(
+                        dequant_b_f32(b_u4_at(l), l)));
                     float a_f32 = bf16_to_f32(*a_ptr);
                     sum         = std::fma(a_f32, b_bf, sum);
                 }

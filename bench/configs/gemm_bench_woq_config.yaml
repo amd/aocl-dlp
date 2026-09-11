@@ -12,7 +12,8 @@
 #
 # Common: A=bf16, C=f32, acc=f32, row-major; per-tensor ("1") and per-channel
 # ("n") scale (and zero-point where applicable) combinations via cartesian=false
-# WOQ param lists.
+# WOQ param lists. group_size 0 is one group over full K; otherwise scale/zp
+# buffers are num_groups * (1 or n). group_size must be even unless it equals K.
 # ==============================================================================
 
 gemm_tests:
@@ -47,6 +48,7 @@ gemm_tests:
           params:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
+            group_size: ["0", "16", "12","32","128"]
     post_operations:
       cartesian: false
       operations:
@@ -90,6 +92,7 @@ gemm_tests:
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
             zero_point_type: ["s8", "bf16"]
+            group_size: ["0", "16", "12","32","128"]
     post_operations:
       cartesian: false
       operations:
