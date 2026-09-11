@@ -860,15 +860,12 @@ dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t     k_dtype,
     cntx->dlp_quant_kernel_hndl.nr     = qKI.base.nr;
     cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
 
-    // Overwrite the request with the resolved site. Pre-kernel unconditionally
-    // today, so whatever was asked for is not yet consulted: no generator emits
-    // a kernel that loads nibble-packed B, the s8s4 quant path sharing the s8s8
-    // generator which only ever sees widened bytes. Handing nibbles to a kernel
-    // that reads bytes is silent corruption rather than a slow path, so a
-    // request for in-kernel widening stays refused until that generator exists.
-    // Honouring it then also means folding the value into opQuantInfo, or the
-    // two variants share a cache bucket.
-    cntx->dlp_quant_kernel_hndl.nibble_widen_site = DLP_NIBBLE_WIDEN_PRE_KERNEL;
+    // Expose the DE-selected B representation to the C frame. The mode is
+    // already part of qKI and therefore of the kernel-cache identity.
+    cntx->dlp_quant_kernel_hndl.nibble_widen_site =
+        (qKI.bQuant.mode == opQuantMode::widenDequantInKernel)
+            ? DLP_NIBBLE_WIDEN_IN_KERNEL
+            : DLP_NIBBLE_WIDEN_PRE_KERNEL;
 
     cntx->blksz.KC                     = qKI.base.kc;
     cntx->blksz.MC                     = ((cntx->blksz.MC % qKI.base.mr) == 0)

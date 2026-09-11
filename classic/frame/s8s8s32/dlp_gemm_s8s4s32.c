@@ -603,8 +603,15 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-    // Allocate the per-thread transient widening scratch once (REORDERED only).
-    if (mtag_b == REORDERED) {
+    // Whether the micro-kernel widens nibbles itself, which is resolved during
+    // kernel init and reported back on the handle. When it does, the panel is
+    // read straight out of the reorder buffer and there is nothing to stage.
+    md_t in_kernel_widen = (lcntx->dlp_quant_kernel_hndl.nibble_widen_site
+                            == DLP_NIBBLE_WIDEN_IN_KERNEL);
+
+    // Allocate the per-thread transient widening scratch once (REORDERED only,
+    // and only when the widening actually happens ahead of the kernel).
+    if ((mtag_b == REORDERED) && (in_kernel_widen == FALSE)) {
         dlp_clsc_err_t ret_err;
         b_panel_s8 = dlp_malloc_page_aligned(b_panel_size, &ret_err);
         if (b_panel_s8 == NULL) {
@@ -925,23 +932,37 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
 
                     const int8_t* b_kernel;
                     if (mtag_b == REORDERED) {
-                        // Transiently widen this compact s4 NR-panel back to
-                        // s8. The panel occupies round_up(nr0,16) columns of
-                        // the packed layout; the kernel never reads beyond
-                        // that. The scratch tail is zeroed to guard against
-                        // padded reads.
-                        md_t widen_cols  = dlp_make_multiple_of_n(nr0, 16);
-                        md_t widen_elems = widen_cols * kc0_updated;
                         md_t b_s8_jr_off = b_s8_pc_base + (jr * kc0_updated);
 
-                        if (widen_elems < (NR * kc0_updated)) {
-                            memset(b_panel_s8 + widen_elems, 0,
-                                   (size_t)((NR * kc0_updated) - widen_elems));
+                        if (in_kernel_widen) {
+                            // The micro-kernel loads nibbles directly, so the
+                            // compact panel is handed over as-is. Offsets stay
+                            // in s8-equivalent units and are halved to index
+                            // it, which is exact because every such offset is
+                            // even. The cast is a reinterpretation only: these
+                            // bytes are nibble pairs, not s8 values, until the
+                            // kernel sign-extends them.
+                            b_kernel =
+                                (const int8_t*)(b_compact + (b_s8_jr_off / 2));
+                        } else {
+                            // Transiently widen this compact s4 NR-panel back
+                            // to s8. The panel occupies round_up(nr0,16)
+                            // columns of the packed layout; the kernel never
+                            // reads beyond that. The scratch tail is zeroed to
+                            // guard against padded reads.
+                            md_t widen_cols  = dlp_make_multiple_of_n(nr0, 16);
+                            md_t widen_elems = widen_cols * kc0_updated;
+
+                            if (widen_elems < (NR * kc0_updated)) {
+                                memset(
+                                    b_panel_s8 + widen_elems, 0,
+                                    (size_t)((NR * kc0_updated) - widen_elems));
+                            }
+                            dlp_cvt_s4_to_s8_linear_avx512(
+                                b_panel_s8, b_compact + (b_s8_jr_off / 2),
+                                widen_elems);
+                            b_kernel = b_panel_s8;
                         }
-                        dlp_cvt_s4_to_s8_linear_avx512(
-                            b_panel_s8, b_compact + (b_s8_jr_off / 2),
-                            widen_elems);
-                        b_kernel = b_panel_s8;
                     } else {
                         // PACK: read the runtime-packed s8 weights directly.
                         b_kernel = b_use + (jr * kc0_updated);

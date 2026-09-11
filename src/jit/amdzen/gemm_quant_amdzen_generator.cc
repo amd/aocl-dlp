@@ -110,6 +110,9 @@ jitAmdZenGemmQuant::generateAllKernels(
     c_downscale     = qKI.base.c_downscale;
     a_scale_type    = qKI.aQuant.scale.storeDt;
     b_scale_type    = qKI.bQuant.scale.storeDt;
+    bNibblesInKernel =
+        (qKI.bQuant.mode
+         == dlp::kernel_frame::opQuantMode::widenDequantInKernel);
 
     setGeneratorKernelMetaInfo(qKI.base.kInstPref);
 
@@ -443,6 +446,7 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
         if (processBlockSize <= 0) {
             return dlp::kernels::kernelError::error;
         }
+        const md_t bByteDiv = bNibblesInKernel ? 2 : 1;
 
         md_t mFullPieces    = params->m / MR;
         md_t mPartialPieces = params->m % MR;
@@ -496,7 +500,9 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
             // nFullpieces * 16 n * VNNI_CONST bytes. The previous
             // (nFullpieces * rsB) / VNNI_CONST form equals that only when
             // rsB == NR * VNNI_CONST and NR == 64 (the classic packer).
-            params->rsB = nFullpieces * numElemsPerReg * VNNI_CONST;
+            // bByteDiv halves it for nibble-packed B, whose k-quad is half as
+            // wide; the product is a multiple of 64, so the division is exact.
+            params->rsB = nFullpieces * numElemsPerReg * VNNI_CONST / bByteDiv;
 
             params->a = aPtr;
             params->c = c_jr;
@@ -531,7 +537,8 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
 
             md_t k_updated =
                 ((params->k + VNNI_CONST - 1) / VNNI_CONST) * VNNI_CONST;
-            params->b = (int8_t*)(params->b) + elementsToProcess * k_updated;
+            params->b =
+                (int8_t*)(params->b) + elementsToProcess * k_updated / bByteDiv;
 
             c_jr = utils::offsetOrNull(c_jr, elementsToProcess);
             (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
@@ -551,7 +558,7 @@ jitAmdZenGemmQuant::executeKernel(dlp::kernels::kernelParams* _params)
             params->c = c_jr;
             params->n = nRemainder;
 
-            params->rsB = numElemsPerReg * VNNI_CONST;
+            params->rsB = numElemsPerReg * VNNI_CONST / bByteDiv;
 
             if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 params->maskS32    = 0xFFFF >> (numElemsPerReg - nRemainder);

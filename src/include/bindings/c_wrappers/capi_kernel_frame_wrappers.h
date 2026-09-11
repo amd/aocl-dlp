@@ -202,32 +202,13 @@ typedef struct
     uint8_t           dst_type;
 } dlp_pack_info_hndl_t;
 
-// Where the nibble-packed (s4/u4) B operand is widened to bytes.
-//
-// An internal tuning knob, deliberately reachable only from library source:
-// there is no API and no environment variable for it, because which site is
-// faster is the library's finding to make rather than the application's to
-// state. AUTO leaves the choice to the DE, which resolves it against mtag_b
-// and against whether an in-kernel generator exists at all; the forced values
-// exist so the two sites can be measured against each other.
-//
-// Nothing forces a site today, so every context gets AUTO by way of the
-// zero-initialised global. Pinning one means writing the field below before the
-// quant kernel init reads it -- on the s8s4 contexts rather than on all of
-// them, since the other operation types have no nibbles to widen.
-//
-// PRE_KERNEL covers both of the pre-kernel widens, which are not the same
-// place: on the REORDERED path the 5-loop driver widens each panel into a
-// per-thread scratch, while on the PACK path there is no scratch and the widen
-// is fused into the pack-B kernels. What the two share, and what the kernel
-// cares about, is that the bytes are already widened by the time it loads them.
-//
-// AUTO must stay 0. Every local context is copied from the zero-initialised
-// global, so zero-initialisation and the stated default have to agree.
+// Resolved B representation consumed by the quantized GEMM kernel. This is an
+// internal result from the decision engine, not an application tuning knob.
+// PRE_KERNEL is zero so zero-initialized contexts safely retain the existing
+// widened-s8 behavior.
 typedef enum
 {
-    DLP_NIBBLE_WIDEN_AUTO = 0,
-    DLP_NIBBLE_WIDEN_PRE_KERNEL,
+    DLP_NIBBLE_WIDEN_PRE_KERNEL = 0,
     DLP_NIBBLE_WIDEN_IN_KERNEL,
 } dlp_nibble_widen_site_t;
 
@@ -237,14 +218,8 @@ typedef struct
     md_t              mr;
     md_t              nr;
     kernel_datatype_t kDtype;
-    // The widening site, in and out through the same field. Going in it is the
-    // request, AUTO unless something pinned it; coming out of
-    // dlp_init_and_get_gemm_quant_kernel_hndl it is the site of the kernel
-    // actually obtained, which the frame reads to size the pack buffer and pick
-    // the packer. The two can differ: generation can fall through to a
-    // micro-kernel that only reads widened bytes, and the frame then has to
-    // widen for it whatever was asked for. Never AUTO on the way out, so the
-    // frame never has to resolve anything itself.
+    // Projection of bQuant.mode for the C frame: PRE means the kernel consumes
+    // widened s8 bytes; IN means it consumes compact nibble-packed B.
     dlp_nibble_widen_site_t nibble_widen_site;
 } dlp_gemm_quant_kernel_hndl_t;
 

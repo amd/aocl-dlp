@@ -78,17 +78,24 @@ jitGEMMQuant<KType>::allocateReg(utils::quantGeneratorParams& params)
         vec128Reg = 0;
     }
 
-    // For 6x64 primary kernel we are essentially left with 3 registers that
-    // can be used for aPool.
-    const int aPoolMin = 3;
+    // Reserve the vpmultishiftqb nibble-position control when B is handed over
+    // nibble-packed, plus whatever scratch the chosen variant needs.
+    bWidenInKernel = (params.bQuant.mode
+                      == dlp::kernel_frame::opQuantMode::widenDequantInKernel);
+    widenCtlReg    = bWidenInKernel ? 1 : 0;
+    widenAuxReg    = bWidenInKernel ? 1 : 0;
+
+    // Scratch registers reserved below B: the A pool, plus the widen registers
+    // when present.
+    const int scratchMin = 3;
 
     // True for small NR (16/32), false for NR 48/64 (which keep the stack
     // bank).
-    fBankInRegs = (2 * cReg + vec128Reg + bReg + aPoolMin) <= numRegs;
+    fBankInRegs = (2 * cReg + vec128Reg + bReg + scratchMin) <= numRegs;
 
     cRegIdx = numRegs - cReg; // Starting index for C (int32 accumulators)
     if (fBankInRegs) {
-        // Layout (top-down): C | fReg (f32 bank) | B | vec128 | A pool.
+        // Layout (top-down): C | fReg | B | vec128 | widenCtl | widenAux | A.
         fRegIdx = cRegIdx - cReg;
         bRegIdx = fRegIdx - bReg;
     } else {
@@ -97,14 +104,21 @@ jitGEMMQuant<KType>::allocateReg(utils::quantGeneratorParams& params)
         bRegIdx = cRegIdx - bReg;
     }
 
-    vec128RegIdx = vec128Reg == 1 ? bRegIdx - 1 : 0;
-    aRegIdx      = 0;
-    aReg = bRegIdx - vec128RegIdx; // free A pool = zmm0 .. vec128RegIdx-1
+    // Carve the singleton registers off the bottom of B, in order, then hand
+    // whatever is left below them to the A pool.
+    int nextRegIdx = bRegIdx;
+    vec128RegIdx   = vec128Reg == 1 ? --nextRegIdx : 0;
+    widenCtlRegIdx = widenCtlReg == 1 ? --nextRegIdx : 0;
+    widenAuxRegIdx = widenAuxReg == 1 ? --nextRegIdx : 0;
 
-    // Validate register count (need a non-empty A scratch pool below vec128).
+    aRegIdx = 0;
+    aReg    = nextRegIdx; // free A pool = zmm[nextRegIdx-1] .. zmm[0]
+
+    // Validate register count (need a non-empty A scratch pool at the bottom).
     if (aReg < 1) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
+    aPool = (MR < aReg) ? MR : aReg;
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -187,11 +201,91 @@ jitGEMMQuant<KType>::initializeRegisters()
 }
 
 template<utils::kernelInstrType KType>
+Xbyak::Address
+jitGEMMQuant<KType>::widenPoolQword(int off)
+{
+    return Xbyak::util::qword[Xbyak::util::rip + widenConstPool + off];
+}
+
+template<utils::kernelInstrType KType>
+Xbyak::Address
+jitGEMMQuant<KType>::widenPoolDwordBcst(int off)
+{
+    return Xbyak::util::ptr_b[Xbyak::util::rip + widenConstPool + off];
+}
+
+template<utils::kernelInstrType KType>
+Xbyak::Address
+jitGEMMQuant<KType>::widenPoolZword(int off)
+{
+    return Xbyak::util::zword[Xbyak::util::rip + widenConstPool + off];
+}
+
+template<utils::kernelInstrType KType>
+void
+jitGEMMQuant<KType>::loadWidenControl()
+{
+    vpbroadcastq(Xbyak::Zmm(widenCtlRegIdx), widenPoolQword(kWidenCtlOff));
+}
+
+// Logic ported from int4_utils_avx512 which can be used as source of truth
+template<utils::kernelInstrType KType>
+void
+jitGEMMQuant<KType>::widenBLoad(int dstIdx, const Xbyak::Reg64& base, int disp)
+{
+    const Xbyak::Zmm dst(dstIdx);
+    const Xbyak::Zmm sign(widenAuxRegIdx);
+
+    // Place the 64 packed nibbles into separate bytes, clear the adjacent
+    // nibble left by vpmultishiftqb, then sign-extend bit 3 with the same
+    // bitwise chain used by the pre-kernel converter.
+    vpmovzxdq(dst, Xbyak::util::yword[base + disp]);
+    vpmultishiftqb(dst, Xbyak::Zmm(widenCtlRegIdx), dst);
+    vpandd(dst, dst, widenPoolDwordBcst(kLowNibbleOff));
+    vpandd(sign, dst, widenPoolDwordBcst(kSignBitOff));
+    vpxord(sign, sign, widenPoolDwordBcst(kSignBitOff));
+    vpaddb(sign, sign, widenPoolZword(kSignFillOff));
+    vpord(dst, dst, sign);
+}
+
+template<utils::kernelInstrType KType>
+void
+jitGEMMQuant<KType>::embedWidenConstantPool()
+{
+    Xbyak::Label poolEnd;
+    jmp(poolEnd, Xbyak::CodeGenerator::T_NEAR);
+
+    if (const size_t remain = getSize() % 64; remain != 0) {
+        nop(64 - remain);
+    }
+
+    L(widenConstPool);
+    dq(0x1C1814100C080400ULL);
+    dd(0x0F0F0F0FU);
+    dd(0x08080808U);
+    nop(kSignFillOff - 16);
+    for (int i = 0; i < 64; ++i) {
+        db(0xF8);
+    }
+    L(poolEnd);
+}
+
+template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMQuant<KType>::loadBValues()
 {
+    // Nibble-packed B halves the source footprint: the 64 s8 values a B
+    // register holds arrive as 32 bytes, so the per-register displacement is
+    // kSrcBytes rather than RegBytes and the widen sequence replaces the load.
+    // The caller's regRsB must likewise be the nibble row stride.
+    const int bSrcBytes = bWidenInKernel ? kNibbleSrcBytes : RegBytes;
+
     for (iter_t i = 0; i < bFullReg; ++i) {
-        vmovdqu32(RegType(bRegIdx + i), ptr[regBptr + i * RegBytes]);
+        if (bWidenInKernel) {
+            widenBLoad(bRegIdx + i, regBptr, i * bSrcBytes);
+        } else {
+            vmovdqu32(RegType(bRegIdx + i), ptr[regBptr + i * bSrcBytes]);
+        }
     }
 
     if (useMask) {
@@ -199,7 +293,12 @@ jitGEMMQuant<KType>::loadBValues()
         if (maskRegIndex >= numRegs) {
             return dlp::jit::jitGeneratorError::badKernelInfo;
         }
-        vmovdqu8(RegType(maskRegIndex), ptr[regBptr + bFullReg * RegBytes]);
+        if (bWidenInKernel) {
+            widenBLoad(maskRegIndex, regBptr, bFullReg * bSrcBytes);
+        } else {
+            vmovdqu8(RegType(maskRegIndex),
+                     ptr[regBptr + bFullReg * bSrcBytes]);
+        }
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -212,7 +311,6 @@ jitGEMMQuant<KType>::BroadcastAVNNIB(bool isVNNIrem)
     // Rotate the A broadcast over a small register pool (zmm0 .. aPool-1)
     // instead of funnelling all MR rows through aRegIdx, so consecutive rows
     // form independent broadcast -> +128 -> vpdpbusd chains.
-    const int aPool = (MR < vec128RegIdx) ? MR : vec128RegIdx;
     for (iter_t i = 0; i < MR; ++i) {
         int ar = aRegIdx + (i % aPool);
         if (isVNNIrem) {
@@ -335,7 +433,6 @@ jitGEMMQuant<KType>::applyGroupScalesFastPath()
     }
     lea(regKIter, ptr[regKIter + regTmpAptr * aScaleElemBytes()]);
 
-    const int aPool = (MR < vec128RegIdx) ? MR : vec128RegIdx;
     for (iter_t i = 0; i < MR; ++i) {
         int ar = aRegIdx + (i % aPool);
         RETURN_IF_ERROR(broadcastAScale(ar, regKIter)); // a_scale[row i, g0]
@@ -765,7 +862,6 @@ jitGEMMQuant<KType>::dequantAccumToStackGroup()
     mov(regTmp3, ptr[stackPtr + GRP_ATTR_OFF(grp_post_op_lda)]);
     mov(regTmp1, regAsclPtr);
 
-    const int aPool = (MR < vec128RegIdx) ? MR : vec128RegIdx;
     for (iter_t i = 0; i < MR; ++i) {
         int ar = aRegIdx + (i % aPool);
         RETURN_IF_ERROR(broadcastAScale(ar, regTmp1)); // a_scale[row i, gAbs]
@@ -862,6 +958,11 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
         vxorps(RegType(vec128RegIdx), RegType(vec128RegIdx),
                RegType(vec128RegIdx));
         vpbroadcastb(RegType(vec128RegIdx), regTmp1.cvt8());
+    }
+
+    // The nibble-position control is invariant for the whole tile.
+    if (bWidenInKernel) {
+        loadWidenControl();
     }
 
     // nIter (num_groups) == 1 ? fast path : group loop
@@ -1161,18 +1262,28 @@ jitGEMMQuant<KType>::generateKernel(utils::quantGeneratorParams& params)
     // Allocate registers.
     RETURN_IF_ERROR(allocateReg(params));
 
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
-    initializeStackFrame(stackFrame);
+    // Scoped so the StackFrame destructor emits the epilogue and ret before
+    // the constant pool below, which must sit outside the executed path.
+    {
+        Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+        initializeStackFrame(stackFrame);
 
-    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
-    // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
-    utils::winAbiVectorGuard winAbiGuard(this);
+        // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+        // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+        utils::winAbiVectorGuard winAbiGuard(this);
 
-    // Initialize parameters based on mLoop flag.
-    initializeParameters(params.base.mLoop);
+        // Initialize parameters based on mLoop flag.
+        initializeParameters(params.base.mLoop);
 
-    // Generate IR loop.
-    RETURN_IF_ERROR(generateIrLoop(params));
+        // Generate IR loop.
+        RETURN_IF_ERROR(generateIrLoop(params));
+    }
+
+    // Widen constants: data the kernel only ever reaches through rip-relative
+    // operands, placed past the ret so it is never executed.
+    if (bWidenInKernel) {
+        embedWidenConstantPool();
+    }
 
     return dlp::jit::jitGeneratorError::success;
 }

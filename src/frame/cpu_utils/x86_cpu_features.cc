@@ -53,6 +53,7 @@ enum x86_bit_positions : uint32_t
     avx512cd_bit_pos           = (1u << 28), // cpuid[eax=7,ecx=0]    :ebx[28]
     avx512bw_bit_pos           = (1u << 30), // cpuid[eax=7,ecx=0]    :ebx[30]
     avx512vl_bit_pos           = (1u << 31), // cpuid[eax=7,ecx=0]    :ebx[31]
+    avx512vbmi_bit_pos         = (1u << 1),  // cpuid[eax=7,ecx=0]    :ecx[1]
     avx512vnni_bit_pos         = (1u << 11), // cpuid[eax=7,ecx=0]    :ecx[11]
     movdiri_bit_pos            = (1u << 27), // cpuid[eax=7,ecx=0]    :ecx[27]
     movdir64b_bit_pos          = (1u << 28), // cpuid[eax=7,ecx=0]    :ecx[28]
@@ -142,6 +143,10 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
                 1;
         }
 
+        if (dlp_cpuid_has_features(ecx, avx512vbmi_bit_pos)) {
+            featureMap[utils::getUnderlyingValueOfEnum(
+                isaFeature::avx512vbmi)] = 1;
+        }
         if (dlp_cpuid_has_features(ecx, avx512vnni_bit_pos)) {
             featureMap[utils::getUnderlyingValueOfEnum(
                 isaFeature::avx512vnni)] = 1;

@@ -29,7 +29,6 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
@@ -61,14 +60,27 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
     using RegType = typename Traits::RegType;
 
     // Configuration and state.
-    int  numRegs  = Traits::numRegs;
-    int  RegSize  = Traits::regSize;
-    int  RegBytes = Traits::regBytes;
-    int  aReg, bReg, bFullReg, bMaskReg, cReg;
-    int  vec128Reg;
-    int  aRegIdx, bRegIdx, cRegIdx, vec128RegIdx;
-    bool fBankInRegs = false; // F32 bank in fReg vs [rsp] stack bank
-    int  fRegIdx     = 0;     // base ZMM index of the register-resident bank
+    int numRegs  = Traits::numRegs;
+    int RegSize  = Traits::regSize;
+    int RegBytes = Traits::regBytes;
+    int aReg, bReg, bFullReg, bMaskReg, cReg;
+    int vec128Reg;
+    int aRegIdx, bRegIdx, cRegIdx, vec128RegIdx;
+    // Rotation modulus for the A broadcast, min(MR, aReg). Consecutive rows
+    // take distinct registers out of the pool so the broadcast -> +128 ->
+    // vpdpbusd chains stay visibly independent; a pool of 1 is still correct
+    // (renaming breaks the WAR), which is what bounds how far it can shrink.
+    int aPool = 1;
+    // bitwiseChain widening needs one loop-invariant multishift control and one
+    // scratch ZMM. Both are reserved out of the A pool.
+    int widenCtlReg    = 0;
+    int widenCtlRegIdx = 0;
+    int widenAuxReg    = 0;
+    int widenAuxRegIdx = 0;
+    // B is nibble-packed s4 and the kernel widens it to s8 in-register.
+    bool bWidenInKernel = false;
+    bool fBankInRegs    = false; // F32 bank in fReg vs [rsp] stack bank
+    int  fRegIdx        = 0;     // base ZMM index of the register-resident bank
     int  MR, NR;
     int  c_downscale = DLP_F32;
 
@@ -97,6 +109,13 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
         return (bScaleType == dlp::kernel_frame::DataType::bf16) ? 2 : 4;
     }
 
+    static constexpr int kNibbleSrcBytes = 32;
+    static constexpr int kWidenCtlOff    = 0;
+    static constexpr int kLowNibbleOff   = 8;
+    static constexpr int kSignBitOff     = 12;
+    static constexpr int kSignFillOff    = 64;
+    Xbyak::Label         widenConstPool;
+
     Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     // Register allocations.
@@ -112,9 +131,15 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError allocateReg(
         utils::quantGeneratorParams& params);
-    void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
-    void initializeParameters(bool addIrLoop);
-    void initializeRegisters();
+    void           initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
+    void           initializeParameters(bool addIrLoop);
+    void           initializeRegisters();
+    void           loadWidenControl();
+    void           widenBLoad(int dstIdx, const Xbyak::Reg64& base, int disp);
+    void           embedWidenConstantPool();
+    Xbyak::Address widenPoolQword(int off);
+    Xbyak::Address widenPoolDwordBcst(int off);
+    Xbyak::Address widenPoolZword(int off);
     dlp::jit::jitGeneratorError loadBValues();
     dlp::jit::jitGeneratorError BroadcastAVNNIB(bool isVNNIrem);
     dlp::jit::jitGeneratorError kLoop(int unroll, bool isVNNIrem);

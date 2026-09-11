@@ -37,6 +37,7 @@
 #include "alias_detection_utils.hh"
 #include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "classic/dlp_macros.h"
+#include "cpu_utils/cpu_features.hh"
 #include "de_backend_utils.hh"
 #include "de_input.hh"
 #include "de_shape_model.hh"
@@ -1782,8 +1783,8 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::quantKernelInfo getGemmQuantKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        [[maybe_unused]] md_t             n,
+        md_t                              m,
+        md_t                              n,
         md_t                              k,
         [[maybe_unused]] md_t             rs_a,
         [[maybe_unused]] md_t             cs_a,
@@ -1832,10 +1833,28 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
             return INVALID_GEMM_QUANT_KERNEL_INFO;
         }
 
-        return gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
+        auto qKI = gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             *kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, group_ops);
+
+        // qKI.bQuant.mode is dequantInKernel from the shared fill, which is
+        // the s8s8-sym B-load path: the frame/pack widens nibbles first.
+        // Opt into nibble loads only for GEMM with reordered B when M fits in
+        // one micro-tile (otherwise B would be widened once per M-tile) and
+        // VBMI is present. GEMV-shaped m==1 / n==1 stay on dequantInKernel:
+        // the GEMV generators do not load nibbles, and n==1 reorder is already
+        // an s8 column.
+        const bool use_in_kernel =
+            (mtag_b == REORDERED) && (m > 1) && (n > 1) && (m <= mr)
+            && cpu_utils::cpuFeaturesInstance().hasFeature(
+                cpu_utils::isaFeature::avx512vbmi);
+
+        if (use_in_kernel) {
+            qKI.bQuant.mode = kernel_frame::opQuantMode::widenDequantInKernel;
+        }
+
+        return qKI;
     }
 
     DLP_ALWAYS_INLINE

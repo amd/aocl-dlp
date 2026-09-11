@@ -51,6 +51,10 @@ class jitAmdZenGemmQuant : public dlp::jit::gemmQuantJitGenerator
     // VNNI packs 4 int8s per 32-bit dword.
     int VNNI_CONST = 4;
 
+    // Layout baked into the generated kernel and consumed by the orchestrator
+    // when it computes B strides and panel advances.
+    bool bNibblesInKernel = false;
+
     md_t MR = 0, NR = 0, KC = 0, K_UNROLL = 0, PREFETCH_C_DIST = 0;
     md_t c_downscale = 0;
 
