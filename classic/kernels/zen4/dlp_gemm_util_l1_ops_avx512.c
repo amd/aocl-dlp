@@ -145,6 +145,9 @@ DLP_GEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx512)
                         zmm10outi); // zmm10out is the output
             zmm10out = _mm512_castsi512_ps(zmm10outi);
 
+            // Write exp(x) back, the division block below re-reads x.
+            _mm512_storeu_ps(x + idx, zmm10out);
+
             // Reduction to be done as double data type.
             ymm0        = _mm512_castps512_ps256(zmm10out);
             ymm1        = _mm512_extractf32x8_ps(zmm10out, 0x1);
@@ -173,6 +176,11 @@ DLP_GEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx512)
         EXPF_AVX512(zmm0, zmm10, zmm11, zmm12, zmm13,
                     zmm10outi); // zmm10out is the output
         zmm10out = _mm512_castsi512_ps(zmm10outi);
+
+        // Write exp(x) back, the division block below re-reads x. Done with the
+        // load mask, before it is inverted below, so that the padding lanes are
+        // not written out.
+        _mm512_mask_storeu_ps(x + idx, load_mask, zmm10out);
 
         // Ensure only n_part16_rem elements are valid, zero out rest.
         // This is required since exp(0) = 1.
@@ -256,8 +264,10 @@ DLP_GEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx512)
 
         // Exp reduction of the array.
         for (iter_t idx = 0; idx < n_incx; idx += incx) {
-            float temp_val = *(x + idx);
-            exp_sum += (double)(expf(temp_val));
+            // Write exp(x) back, the division loop below re-reads x.
+            float temp_val = expf(*(x + idx));
+            *(x + idx)     = temp_val;
+            exp_sum += (double)temp_val;
         }
         // Exp division of the array.
         for (iter_t idx = 0; idx < n_incx; idx += incx) {

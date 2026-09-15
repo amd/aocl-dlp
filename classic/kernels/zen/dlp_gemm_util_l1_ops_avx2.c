@@ -180,6 +180,9 @@ DLP_GEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx2)
                       ymm10outi); // zmm10out is the output
             ymm10out = _mm256_castsi256_ps(ymm10outi);
 
+            // Write exp(x) back, the division block below re-reads x.
+            _mm256_storeu_ps(x + idx, ymm10out);
+
             // Reduction to be done as double data type.
             xmm0  = _mm256_castps256_ps128(ymm10out);
             xmm1  = _mm256_extractf128_ps(ymm10out, 0x1);
@@ -206,6 +209,9 @@ DLP_GEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx2)
             EXPF_SSE(xmm0, xmm1, xmm10, xmm11, xmm12, xmm10outi);
             xmm10out = _mm_castsi128_ps(xmm10outi);
 
+            // Write exp(x) back, the division block below re-reads x.
+            _mm_storeu_ps(x + idx, xmm10out);
+
             xmm0d = _mm_cvtps_pd(xmm10out);
             xmm1d = _mm_cvtps_pd(
                 _mm_permute_ps(xmm10out, 0x4E)); // 0 1 2 3 -> 2 3 0 1
@@ -230,6 +236,14 @@ DLP_GEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx2)
 
             EXPF_SSE(xmm0, xmm1, xmm10, xmm11, xmm12, xmm10outi);
             xmm10out = _mm_castsi128_ps(xmm10outi);
+
+            // Write exp(x) back, the division block below re-reads x. Only the
+            // n_part4_rem leading lanes belong to x, the padding must not be
+            // written out. Stored lane by lane, matching the remainder blocks
+            // in the GeLU kernels above.
+            _mm_storeu_ps(temp_fl_buf, xmm10out);
+            for (iter_t rem_idx = 0; rem_idx < n_part4_rem; ++rem_idx)
+                *(x + idx + rem_idx) = temp_fl_buf[rem_idx];
 
             xmm0d = _mm_cvtps_pd(xmm10out);
             xmm1d = _mm_cvtps_pd(
@@ -328,8 +342,10 @@ DLP_GEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx2)
 
         // Exp reduction of the array.
         for (iter_t idx = 0; idx < n_incx; idx += incx) {
-            float temp_val = *(x + idx);
-            exp_sum += (double)(expf(temp_val));
+            // Write exp(x) back, the division loop below re-reads x.
+            float temp_val = expf(*(x + idx));
+            *(x + idx)     = temp_val;
+            exp_sum += (double)temp_val;
         }
         // Exp division of the array.
         for (iter_t idx = 0; idx < n_incx; idx += incx) {
