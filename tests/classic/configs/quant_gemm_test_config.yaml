@@ -797,3 +797,140 @@ gemm_tests:
             group_size: ["32", "64"]
             a_granularity: ["PER_GROUP"]
             b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [19] beta==0 / NaN-C regression: verifies beta==0 never reads C.
+  #
+  # C is deliberately filled entirely with NaN via fill_pattern (a static
+  # "values: [.nan]" pattern). beta==0 means the API contract is
+  # C := alpha*dequant(A*B); any NaN in the output means C leaked into the
+  # result. The reference plan's GroupScale branch explicitly zeros its own
+  # C-independent f32 scratch when beta==0 (see ual_plan_ref.cc), so a correct
+  # DLP path must produce the same NaN-free numbers.
+  # The default (non-opted-in) NaN comparison
+  # (treat_nan_equal=false, matrix.cc) fails on any NaN leak on either side,
+  # so this also guards the reference path from silently reproducing a leak.
+  #
+  # Covers both output dtypes for s8s8 (sym_quant) and s8s4 (group-quant),
+  # row-major only, with mtagB swept over none (runtime pack) and reorder
+  # (pre-reordered B) so both B code paths are exercised.
+  # --------------------------------------------------------------------------
+  - name: "beta0_nanC_s8s8_float_out"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 5, 64]
+    n: [1, 64, 130]
+    k: [256, 4096]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            group_size: ["0", "32"]
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            a_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+    fill_pattern:
+      - apply_matrix: ["C"]
+        type: "static"
+        values: [.nan]
+
+  - name: "beta0_nanC_s8s8_bf16_out"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 5, 64]
+    n: [1, 64, 130]
+    k: [256, 4096]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            group_size: ["0", "32"]
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            a_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+    fill_pattern:
+      - apply_matrix: ["C"]
+        type: "static"
+        values: [.nan]
+
+  - name: "beta0_nanC_s8s4_float_out"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 5, 64]
+    n: [1, 64, 130]
+    k: [256, 4096]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            group_size: ["0", "32"]
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            a_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+    fill_pattern:
+      - apply_matrix: ["C"]
+        type: "static"
+        values: [.nan]
+
+  - name: "beta0_nanC_s8s4_bf16_out"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 5, 64]
+    n: [1, 64, 130]
+    k: [256, 4096]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            group_size: ["0", "32"]
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            a_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+    fill_pattern:
+      - apply_matrix: ["C"]
+        type: "static"
+        values: [.nan]

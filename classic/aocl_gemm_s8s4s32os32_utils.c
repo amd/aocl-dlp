@@ -149,7 +149,9 @@ aocl_get_reorder_buf_size_s8s4s32os32(const char      order,
     // s8s8 sym-quant dlp_gemv_n_one kernel consumes. This mirrors the s8s8
     // reorder so the s8s4 GEMV path can reuse the s8s8 GEMV kernels directly.
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-    md_t            KC      = lcntx_g.blksz.KC;
+
+    // KC must be aligned to group_size.
+    md_t KC = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
 
     if ((n == 1) && ((k % group_size) == 0) && ((KC % group_size) == 0)) {
         // k s8 weights, padded so the int32 column sums that follow stay
@@ -257,7 +259,9 @@ aocl_reorder_s8s4s32os32(const char      order,
     // exactly like the s8s8 sym-quant n==1 reorder. The s4 nibbles are
     // sign-extended to s8 here so the GEMV path can consume this buffer without
     // a widen step.
-    md_t KC = lcntx_g.blksz.KC;
+
+    // KC must be aligned to group_size.
+    md_t KC = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
     if ((n == 1) && ((k % group_size) == 0) && ((KC % group_size) == 0)) {
         int32_t* pack_b_column_sum =
             (int32_t*)(reorder_buf_addr + dlp_gemm_col_sum_byte_offset(k));

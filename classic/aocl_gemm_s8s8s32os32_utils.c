@@ -208,7 +208,6 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
 
-    md_t KC = lcntx_g.blksz.KC;
     md_t group_size;
     err_no =
         dlp_get_sym_quant_group_size_from_metadata(metadata, k, &group_size);
@@ -218,6 +217,9 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return 0; // Error.
     }
+
+    // KC must be aligned to group_size.
+    md_t KC = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
 
     // Extra space since packing does width in multiples of 16. The vnni
     // instruction can be used as long as atleast one zmm register can be fully
@@ -569,7 +571,8 @@ aocl_reorder_s8s8s32os32_sym_quant(const char      order,
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
 
-    md_t KC = lcntx_g.blksz.KC;
+    // KC must be aligned to group_size.
+    md_t KC = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
 
 #ifdef DLP_KERNELS_ZEN4
     // Follow alternate reordering for n==1 iff k is divisible by group_size.

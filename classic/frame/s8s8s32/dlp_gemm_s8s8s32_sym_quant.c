@@ -160,11 +160,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
     // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
     // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
     // and GEMM panel boundaries diverge.
-    if (grp_post_op_list->group_size > KC) {
-        KC = grp_post_op_list->group_size;
-    } else if ((KC % grp_post_op_list->group_size) != 0) {
-        KC = (KC / grp_post_op_list->group_size) * grp_post_op_list->group_size;
-    }
+    KC = dlp_gemm_align_kc_to_group(KC, grp_post_op_list->group_size);
 
     // Strides are updated based on matrix packing/reordering.
     int8_t* a_use    = (int8_t*)a;
@@ -490,11 +486,7 @@ DLP_GEMM_5LOOP_UNIFIED(
     // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
     // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
     // and GEMM panel boundaries diverge.
-    if (grp_post_op_list->group_size > KC) {
-        KC = grp_post_op_list->group_size;
-    } else if ((KC % grp_post_op_list->group_size) != 0) {
-        KC = (KC / grp_post_op_list->group_size) * grp_post_op_list->group_size;
-    }
+    KC = dlp_gemm_align_kc_to_group(KC, grp_post_op_list->group_size);
 
     // Strides are updated based on matrix packing/reordering.
     const int8_t* a_use          = NULL;

@@ -145,6 +145,22 @@ dlp_offset_or_null_f32(float* base, md_t offset)
     return (base == NULL) ? NULL : (base + offset);
 }
 
+// Align KC to group_size for s8s8 sym_quant kernels for inputs where group size
+// is greater than KC.
+DLP_INLINE md_t
+dlp_gemm_align_kc_to_group(md_t kc, md_t group_size)
+{
+    if (group_size > kc) {
+        return group_size;
+    }
+
+    if ((kc % group_size) != 0) {
+        return (kc / group_size) * group_size;
+    }
+
+    return kc;
+}
+
 DLP_INLINE md_t
 dlp_gemm_get_Bpanel_width_for_kmd_traversal(md_t jc, md_t n, md_t NC, md_t NR)
 {

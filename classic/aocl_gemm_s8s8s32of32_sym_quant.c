@@ -434,6 +434,13 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         group_ops.b_post_quant_op = &kernel_b_quant_op;
     }
 
+    // Align KC to group_size
+    md_t group_size = grp_post_op_list[0].group_size;
+    if ((group_size == 0) || (group_size > k)) {
+        group_size = k;
+    }
+    lcntx_l.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC, group_size);
+
     if (is_column_major == TRUE) {
         dlp_init_and_get_gemm_quant_kernel_hndl(
             DLP_KERNEL_S8S8S32OF32_SYM_QUANT, order, mtag_b, mtag_a, n, m, k,

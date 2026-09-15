@@ -694,8 +694,14 @@ jitGEMVQuantN1<KType>::scaleYByBetaF32(int mSize)
     const bool isUnitBeta =
         (betaScalingType == dlp::kernel_frame::scalingType::one);
 
+    Xbyak::Label skipBeta;
+
     if (!isUnitBeta) {
         mov(regTmp1, ptr[stackPtr + N1_OFF(beta)]);
+
+        cmp(dword[regTmp1], 0);
+        je(skipBeta, T_NEAR);
+
         vpbroadcastd(RegType(bSclBaseIdx), ptr[regTmp1]);
         vcvtdq2ps(RegType(bSclBaseIdx), RegType(bSclBaseIdx));
     }
@@ -761,6 +767,8 @@ jitGEMVQuantN1<KType>::scaleYByBetaF32(int mSize)
                         RegType(yBaseIdx + b));
         }
     }
+
+    L(skipBeta);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -1694,8 +1702,14 @@ jitGEMVQuantM1<KType>::scaleYByBetaF32(bool nMask)
     const bool isUnitBeta =
         (betaScalingType == dlp::kernel_frame::scalingType::one);
 
+    Xbyak::Label betaSkip;
+
     if (!isUnitBeta) {
         mov(regKSubIter, ptr[stackPtr + M1_OFF(beta)]);
+
+        cmp(dword[regKSubIter], 0);
+        je(betaSkip, T_NEAR);
+
         vpbroadcastd(RegType(scratchIdx), ptr[regKSubIter]);
         vcvtdq2ps(RegType(scratchIdx), RegType(scratchIdx));
     }
@@ -1736,6 +1750,8 @@ jitGEMVQuantM1<KType>::scaleYByBetaF32(bool nMask)
                         RegType(bBaseIdx + i));
         }
     }
+
+    L(betaSkip);
 
     return dlp::jit::jitGeneratorError::success;
 }

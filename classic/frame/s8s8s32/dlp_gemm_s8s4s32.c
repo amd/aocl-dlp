@@ -484,11 +484,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     // negative pack offset -> out-of-bounds write. The reorder function applies
     // the SAME adjustment so the reordered-B layout matches GEMM execution
     // (mirrors the s8s8 sym-quant path).
-    if (grp_post_op_list->group_size > KC) {
-        KC = grp_post_op_list->group_size;
-    } else if ((KC % grp_post_op_list->group_size) != 0) {
-        KC = (KC / grp_post_op_list->group_size) * grp_post_op_list->group_size;
-    }
+    KC = dlp_gemm_align_kc_to_group(KC, grp_post_op_list->group_size);
 
     // Strides are updated based on matrix packing/reordering.
     const int8_t* a_use          = NULL;

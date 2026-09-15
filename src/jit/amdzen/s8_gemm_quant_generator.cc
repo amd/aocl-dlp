@@ -519,7 +519,13 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMQuant<KType>::scaleBeta()
 {
+    Xbyak::Label skipBeta;
+
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
+
+    cmp(dword[regTmp1], 0);
+    je(skipBeta, T_NEAR);
+
     vpbroadcastd(RegType(aRegIdx), ptr[regTmp1]);
     vcvtdq2ps(RegType(aRegIdx), RegType(aRegIdx)); // aRegIdx = beta (f32)
 
@@ -587,6 +593,8 @@ jitGEMMQuant<KType>::scaleBeta()
     if (c_downscale == DLP_BF16) {
         L(".QBETAOP_END");
     }
+
+    L(skipBeta);
 
     return dlp::jit::jitGeneratorError::success;
 }

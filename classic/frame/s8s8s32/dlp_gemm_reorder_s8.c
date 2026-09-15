@@ -164,11 +164,7 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
     // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
     // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
     // and GEMM panel boundaries diverge.
-    if (group_size > KC) {
-        KC = group_size;
-    } else if ((KC % group_size) != 0) {
-        KC = (KC / group_size) * group_size;
-    }
+    KC = dlp_gemm_align_kc_to_group(KC, group_size);
 
     md_t rs_b         = b->rs;
     md_t cs_b         = b->cs;
