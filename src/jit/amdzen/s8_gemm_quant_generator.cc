@@ -665,34 +665,19 @@ jitGEMMQuant<KType>::storeResult()
 
         updateCBufferPointers(); // regTmpCptr = base, regTmp1 = row stride
 
-        mov(regKIter, 0x00000001);
-        vpbroadcastd(RegType(aRegIdx), regKIter.cvt32()); // lsb mask
-        mov(regKIter, 0x00007FFF);
-        vpbroadcastd(RegType(aRegIdx + 1), regKIter.cvt32()); // rounding bias
-
         for (iter_t i = 0; i < MR; ++i) {
             for (iter_t j = 0; j < bFullReg; ++j) {
-                const int c = cRegIdx + i * bReg + j;
-                // bf16 = (c + 0x7FFF + ((c >> 16) & 1)) >> 16.
-                vpsrld(RegType(bRegIdx), RegType(c), 16);
-                vpandd(RegType(bRegIdx), RegType(bRegIdx), RegType(aRegIdx));
-                vpaddd(RegType(c), RegType(c), RegType(aRegIdx + 1));
-                vpaddd(RegType(c), RegType(c), RegType(bRegIdx));
-                vpsrld(RegType(c), RegType(c), 16);
-                vpmovdw(Xbyak::Ymm(c), RegType(c));
-                vmovdqu16(ptr[regTmpCptr + j * (RegBytes / 2)], Xbyak::Ymm(c));
+                vcvtneps2bf16(Xbyak::Ymm(bRegIdx + j),
+                              RegType(cRegIdx + i * bReg + j));
+                vmovdqu16(ptr[regTmpCptr + j * (RegBytes / 2)],
+                          Xbyak::Ymm(bRegIdx + j));
             }
             if (bMaskReg > 0) {
-                const int c = cRegIdx + i * bReg + bFullReg;
-                vpsrld(RegType(bRegIdx), RegType(c), 16);
-                vpandd(RegType(bRegIdx), RegType(bRegIdx), RegType(aRegIdx));
-                vpaddd(RegType(c), RegType(c), RegType(aRegIdx + 1));
-                vpaddd(RegType(c), RegType(c), RegType(bRegIdx));
-                vpsrld(RegType(c), RegType(c), 16);
-                vpmovdw(Xbyak::Ymm(c), RegType(c));
+                vcvtneps2bf16(Xbyak::Ymm(bRegIdx + bFullReg),
+                              RegType(cRegIdx + i * bReg + bFullReg));
                 vmovdqu16(ptr[regTmpCptr + bFullReg * (RegBytes / 2)]
                               | mask_regs[1],
-                          Xbyak::Ymm(c));
+                          Xbyak::Ymm(bRegIdx + bFullReg));
             }
             add(regTmpCptr, regTmp1);
         }
@@ -940,8 +925,16 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
     // as the running a_scale pointer across the group loop). Both slots live
     // inside the existing 64B scratch, so totalStack is unchanged.
     const int scratchOff2 = scratchOff + 8; // saved C base slot
+    // Third 8B scratch slot for the caller's rsp, which the alignment below
+    // discards.
+    const int scratchOff3 = scratchOff + 16;
     const int totalStack  = bankBytes + 64; // 64B scratch (keeps 64B align)
-    sub(rsp, totalStack);
+
+    // Align the frame to 64 bytes. regTmp1 is unused at this time.
+    mov(regTmp1, rsp);                     // store rsp for restoring later
+    sub(rsp, totalStack + 64);             // slack for the alignment adjustment
+    and_(rsp, static_cast<uint32_t>(-64)); // align stack
+    mov(ptr[rsp + scratchOff3], regTmp1);  // store regTmp1 to stack memory
 
     if (params.mLoop) {
         L(".QBLOOPI");
@@ -1207,7 +1200,8 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
         jne(".QBLOOPI", T_NEAR);
     }
 
-    add(rsp, totalStack);
+    // Restore rsp.
+    mov(rsp, ptr[rsp + scratchOff3]);
     vzeroupper();
     outLocalLabel();
 
