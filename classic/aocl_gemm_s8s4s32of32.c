@@ -245,6 +245,13 @@ aocl_gemm_s8s4s32of32(const char      order,
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
 
+    // Align KC to group_size
+    md_t group_size = grp_post_op_list[0].group_size;
+    if ((group_size == 0) || (group_size > k)) {
+        group_size = k;
+    }
+    lcntx_g.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
+
     dlp_gemm_ops_bundle_t ops =
         DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
 
