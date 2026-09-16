@@ -79,35 +79,80 @@ else()
     message(STATUS "Using shared AOCL-DLP library")
 endif()
 
-# Create an executable for each example source file
-foreach(source ${EXAMPLE_SOURCES})
-    # Extract the filename without extension
-    get_filename_component(example_name ${source} NAME_WE)
+#
+# Add a C example executable
+#
+# The examples are pure C while AOCL-DLP is C++, so CMake would derive the C
+# driver from their sources. That driver contributes only the C half of the
+# compiler's sanitizer runtime, whereas a sanitizer-instrumented build of the
+# library deliberately leaves the C++ half's handlers (vptr, dynamic type cache)
+# undefined for the final executable to supply - so a C-driver link either fails
+# to resolve them or produces a binary that aborts at load.
+#
+# Parameters:
+#   NAME    - Name of the example executable
+#   SOURCES - Example source files
+#
+function(dlp_add_c_example)
+    set(options "")
+    set(oneValueArgs NAME)
+    set(multiValueArgs SOURCES)
 
-    # Add executable with source from src directory
-    add_executable(${example_name} ${EXAMPLE_SOURCE_DIR}/${source})
+    cmake_parse_arguments(DLP_EXAMPLE "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if(NOT DLP_EXAMPLE_NAME)
+        message(FATAL_ERROR "dlp_add_c_example: NAME argument is required")
+    endif()
+
+    if(NOT DLP_EXAMPLE_SOURCES)
+        message(FATAL_ERROR "dlp_add_c_example: SOURCES argument is required")
+    endif()
+
+    add_executable(${DLP_EXAMPLE_NAME} ${DLP_EXAMPLE_SOURCES})
+
+    # Ask for the C++ driver only when C++ is available: this file may be added
+    # as a subdirectory of a project that never enabled the language, and
+    # demanding it there would fail the configure outright. list(FIND) rather
+    # than IN_LIST because a parent supplies the policy scope in that case and
+    # IN_LIST needs CMP0057 set to NEW.
+    get_property(enabled_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+    list(FIND enabled_languages CXX cxx_language_index)
+    if(NOT cxx_language_index EQUAL -1)
+        set_target_properties(${DLP_EXAMPLE_NAME} PROPERTIES LINKER_LANGUAGE CXX)
+    endif()
 
     # Link with AOCL-DLP library (includes all necessary include directories)
-    target_link_libraries(${example_name}
+    target_link_libraries(${DLP_EXAMPLE_NAME}
         PRIVATE
             ${AOCL_DLP_TARGET}
     )
 
     # Link with OpenMP
     if(OpenMP_C_FOUND)
-        target_link_libraries(${example_name} PRIVATE OpenMP::OpenMP_C)
+        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE OpenMP::OpenMP_C)
     endif()
     if(OpenMP_CXX_FOUND)
-        target_link_libraries(${example_name} PRIVATE OpenMP::OpenMP_CXX)
+        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE OpenMP::OpenMP_CXX)
     endif()
     if(OpenMP_C_FOUND OR OpenMP_CXX_FOUND)
-        target_compile_definitions(${example_name} PRIVATE DLP_EXAMPLE_ENABLE_OPENMP)
+        target_compile_definitions(${DLP_EXAMPLE_NAME} PRIVATE DLP_EXAMPLE_ENABLE_OPENMP)
     endif()
 
     # Link with math library on Unix/Linux
     if(UNIX)
-        target_link_libraries(${example_name} PRIVATE m)
+        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE m)
     endif()
+endfunction()
+
+# Create an executable for each example source file
+foreach(source ${EXAMPLE_SOURCES})
+    # Extract the filename without extension
+    get_filename_component(example_name ${source} NAME_WE)
+
+    dlp_add_c_example(
+        NAME ${example_name}
+        SOURCES ${EXAMPLE_SOURCE_DIR}/${source}
+    )
 
     message(STATUS "Added example: ${example_name}")
 endforeach()

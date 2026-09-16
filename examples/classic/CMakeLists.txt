@@ -58,54 +58,10 @@ foreach(source ${EXAMPLE_SOURCES})
     # Extract the filename without extension
     get_filename_component(example_name ${source} NAME_WE)
 
-    # Add executable
-    add_executable(${example_name} ${source})
-
-    # Add include directories
-    target_include_directories(${example_name}
-        PRIVATE
-            ${PROJECT_SOURCE_DIR}/include
-    )
-
-    # Choose library target based on static linking preference
-    if(DLP_EXAMPLES_LINK_STATIC)
-        set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking example ${example_name} with static AOCL-DLP library (whole-archive automatic)")
-    else()
-        set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
-        message(STATUS "Linking example ${example_name} with shared AOCL-DLP library")
-    endif()
-
-    # Link with the main library
-    # Note: For static library, whole-archive is automatically applied via INTERFACE_LINK_OPTIONS
-    target_link_libraries(${example_name}
-        PRIVATE
-            ${DLP_LIBRARY_TARGET}
-    )
-
-    # Link with OpenMP if available
-    if(OpenMP_C_FOUND)
-        target_link_libraries(${example_name} PRIVATE OpenMP::OpenMP_C)
-    endif()
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(${example_name} PRIVATE OpenMP::OpenMP_CXX)
-    endif()
-    if(OpenMP_C_FOUND OR OpenMP_CXX_FOUND)
-        target_compile_definitions(${example_name} PRIVATE DLP_EXAMPLE_ENABLE_OPENMP)
-    endif()
-
-    # Link with math library on Unix/Linux only
-    target_link_libraries(${example_name}
-        PRIVATE
-            $<$<BOOL:${UNIX}>:m>
-    )
-
-    # Apply centralized compiler flags
-    dlp_set_global_compile_flags(${example_name})
-
-    # Install the example
-    install(TARGETS ${example_name}
-        RUNTIME DESTINATION examples/classic
+    dlp_add_c_example(
+        NAME ${example_name}
+        SOURCES ${source}
+        INSTALL_DESTINATION examples/classic
     )
 endforeach()
 
