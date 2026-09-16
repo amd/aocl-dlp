@@ -96,11 +96,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
     // panel, underflowing the strip_s8 scratch below and corrupting the heap.
     // The GEMM 5-loop applies the SAME adjustment so reorder and compute agree
     // (see dlp_gemm_s8s4s32.c and the s8s8 sym-quant path).
-    if (group_size > KC) {
-        KC = group_size;
-    } else if ((KC % group_size) != 0) {
-        KC = (KC / group_size) * group_size;
-    }
+    KC = dlp_gemm_align_kc_to_group(KC, group_size);
 
     // Element strides measured in nibble units. transb='N' => cs_b==1 (row
     // contiguous), transb='T' => rs_b==1 (col contiguous).
