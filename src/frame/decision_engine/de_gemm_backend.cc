@@ -145,6 +145,8 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     , canGenerateKernelInfo(true)
     , f32Backend(nullptr)
     , isAnalyticalShapeModelArch(false)
+    , coresPerCCD(0)
+    , l3BytesPerCCD(0)
 {
     // Check for AVX512_BF16 support using the archConfigManager.
     // If it doesn't exist, we reroute to use the F32 JIT path.
@@ -189,6 +191,26 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     isAnalyticalShapeModelArch = isAvx512Bf16
                                  && arch_utils::archConfigManager::getInstance()
                                         .isZen5SimilarConfiguredArch();
+
+    // Topology for the streaming-B rule, read once because CPUID cannot sit on
+    // a per-call path. The last level is asked for by number and as unified,
+    // which is what an L3 is. getCacheSize reports one cache instance, so it
+    // gives the capacity behind a single compute die, which is what pairs with
+    // that die's core count. Both stay zero unless the whole chain succeeded,
+    // and isBStreamBound treats a zero as "do not fire".
+    auto&         cpuFeatures = dlp::cpu_utils::cpuFeatures::instance();
+    const int32_t cacheLevels = cpuFeatures.getNumCacheLevels();
+    const int32_t coresPerDie = cpuFeatures.getNumCoresPerComputeDie();
+
+    if ((cacheLevels > 0) && (coresPerDie > 0)) {
+        const int64_t llcBytes = cpuFeatures.getCacheSize(
+            cacheLevels, dlp::cpu_utils::cacheType::unified);
+
+        if (llcBytes > 0) {
+            coresPerCCD   = static_cast<md_t>(coresPerDie);
+            l3BytesPerCCD = static_cast<md_t>(llcBytes);
+        }
+    }
 }
 
 std::optional<kernel_frame::kernelInfo>

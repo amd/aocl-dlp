@@ -622,6 +622,12 @@ class gemmBF16DEBackend final : public iDEBackend
         { 8, 48 },
     };
 
+    // The tile the streaming-B rule reaches for, kept out of the candidate set
+    // above on purpose. All three tiles land 384 output elements on 24 ZMMs, so
+    // the area objective the sweep minimises cannot separate them; listed as a
+    // candidate, this one would win on shapes where B streaming does not apply.
+    static constexpr shape_model::kernelDims streamingTile = { 12, 32 };
+
     // The n at or below which only the NR=16 kernel family is reachable, and
     // the MR raised to there. Named because the rule that applies them and the
     // flag that tells the JIT generator which NR variants it can skip both read
@@ -643,6 +649,13 @@ class gemmBF16DEBackend final : public iDEBackend
     // fenced to that architecture. The fence itself is in de_gemm_backend.cc.
     bool isAnalyticalShapeModelArch;
 
+    // Topology the streaming-B rule needs: how many cores share one last-level
+    // cache, and how large it is. Read once in the constructor since CPUID is
+    // too expensive per call. Zero means detection failed, which disables the
+    // rule; guessing a capacity would move the comparison, not just blunt it.
+    md_t coresPerCCD;
+    md_t l3BytesPerCCD;
+
     // The whole screen: this architecture, a reordered B, and whether the
     // object describes a GEMM well enough to choose a tile for. See
     // gemmShapeModelUtils::isEligible for the last of those.
@@ -662,6 +675,67 @@ class gemmBF16DEBackend final : public iDEBackend
     {
         return isAnalyticalShapeModelArch && in.b_reordered
                && gemmShapeModelUtils::isEligible(in);
+    }
+
+    // The streaming-B rule: when one compute die's share of the packed panel
+    // does not fit that die's L3, prefer the tile that re-reads it less often.
+    //
+    // Every clause below is an empirically driven guardrail, not a derivation.
+    // The footprint is B / dies, the panel spread evenly over the dies the pool
+    // spans. The column ways that actually divide the panel are left out
+    // because computing them needs the partition, which needs the very tile
+    // this is choosing; over the corpus the rule was fit on, both forms select
+    // the same set.
+    DLP_ALWAYS_INLINE bool isBStreamBound(
+        const shape_model::gemmShapeModelInput& in) const
+    {
+        // Rows, both ends. The floor is exclusive: it is the largest m the
+        // default tile spans in one MR block.
+        constexpr md_t streamMinRows = 6;
+        constexpr md_t streamMaxRows = 132;
+
+        // Thread pool floor. Two full dies on a part with eight cores each.
+        constexpr md_t streamMinThreads = 16;
+
+        // The k multiple that makes a row-major bf16 A line-aligned.
+        constexpr md_t streamKAlign = 32;
+
+        if ((coresPerCCD <= 0) || (l3BytesPerCCD <= 0)) {
+            return false;
+        }
+
+        // Asked first: a pinned dimension is the caller's answer, and this rule
+        // may not overrule it any more than the sweep may.
+        if (!gemmShapeModelUtils::isCandidateAdmissible(in, streamingTile)) {
+            return false;
+        }
+
+        if ((in.m <= streamMinRows) || (in.m > streamMaxRows)) {
+            return false;
+        }
+
+        if ((in.k % streamKAlign) != 0) {
+            return false;
+        }
+
+        // The pool as offered; over a reordered B this is nt_hint, which
+        // eligibility has already made positive.
+        const md_t nThreads = in.num_threads;
+
+        if ((nThreads < streamMinThreads) || ((nThreads % coresPerCCD) != 0)) {
+            return false;
+        }
+
+        const md_t dies = nThreads / coresPerCCD;
+
+        // Sized off n and k, which describe this GEMM on both arms: only m is a
+        // hint over a reordered B. The packed panel is a bf16 image of B, so
+        // its size is B's own. The element width is this datatype's, not the
+        // rule's: shared with another datatype unparameterized, this would fire
+        // at the wrong occupancy.
+        const md_t bBytes = static_cast<md_t>(sizeof(uint16_t)) * in.n * in.k;
+
+        return (bBytes / dies) > l3BytesPerCCD;
     }
 
   protected:
@@ -708,9 +782,22 @@ class gemmBF16DEBackend final : public iDEBackend
   public:
     // This backend has a candidate set, so it runs the sweep instead of the
     // inherited baseline.
+    //
+    // The streaming rule short-circuits the sweep rather than competing inside
+    // it: the sweep minimises padded output area, and the rule fires on a
+    // traffic term with no area to contribute.
+    //
+    // It belongs here rather than in resolveGemmShape because this is the
+    // function both ends of a reorder reach: pack-B init calls it directly for
+    // the NR, kernel init reaches it through resolveGemmShape. One level up
+    // would pack the panel at 64 and read it at 32.
     DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult proposeShape(
         const shape_model::gemmShapeModelInput& in) const override final
     {
+        if (isBStreamBound(in)) {
+            return resolveShape(in, streamingTile);
+        }
+
         return sweepCandidates(in, candidateTiles);
     }
 
