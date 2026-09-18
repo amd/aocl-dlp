@@ -152,6 +152,50 @@ dlp_get_arch(void)
     return arch_id;
 }
 
+// Get the number of physical cores per compute die.
+int32_t
+dlp_cpuid_get_num_cores_per_compute_die(void)
+{
+    return cpuFeaturesInstance().getNumCoresPerComputeDie();
+}
+
+// Get the number of hardware threads per compute die.
+int32_t
+dlp_cpuid_get_num_hw_threads_per_compute_die(void)
+{
+    return cpuFeaturesInstance().getNumHardwareThreadsPerComputeDie();
+}
+
+// Map the C-facing dlp_cache_type to the internal dlp::cpu_utils::cacheType.
+DLP_ALWAYS_INLINE static cacheType
+dlpCacheTypeToInternal(dlp_cache_type type)
+{
+    switch (type) {
+        case DLP_CACHE_TYPE_DATA:
+            return cacheType::data;
+        case DLP_CACHE_TYPE_INSTRUCTION:
+            return cacheType::instruction;
+        case DLP_CACHE_TYPE_UNIFIED:
+            return cacheType::unified;
+        case DLP_CACHE_TYPE_INVALID:
+        default:
+            return cacheType::invalid;
+    }
+}
+
+int32_t
+dlp_cpuid_get_num_cache_levels(void)
+{
+    return cpuFeaturesInstance().getNumCacheLevels();
+}
+
+int64_t
+dlp_cpuid_get_cache_size(int32_t level, dlp_cache_type type)
+{
+    return cpuFeaturesInstance().getCacheSize(level,
+                                              dlpCacheTypeToInternal(type));
+}
+
 bool
 dlp_aocl_enable_instruction_query(void)
 {

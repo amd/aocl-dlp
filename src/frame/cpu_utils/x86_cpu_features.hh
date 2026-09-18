@@ -34,13 +34,21 @@
 
 namespace dlp::cpu_utils {
 
+struct cpuDieInfo
+{
+    uint32_t physicalCoreCount   = 0;
+    uint32_t hardwareThreadCount = 0;
+};
+
 class x86CpuFeatureDetector : public cpuFeatureDetectorBase
 {
     // Not using std::vector<bool> for now, its more of a bitset.
     std::vector<uint8_t>   featureMap;
     cpuVendor              thisVendor;
     std::vector<cacheInfo> cacheHierarchy;
+    cpuDieInfo             computeDie;
     void                   detectx86IsaFeatures();
+    void                   detectx86ComputeDie();
     void                   detectx86CacheInfo();
 
   public:
@@ -54,6 +62,8 @@ class x86CpuFeatureDetector : public cpuFeatureDetectorBase
     cpuVendor               getCpuVendor() const final;
     int32_t                 getNumVectorRegisters() const final;
     int32_t                 getNumVectorMaskRegisters() const final;
+    int32_t                 getNumCoresPerComputeDie() const final;
+    int32_t                 getNumHardwareThreadsPerComputeDie() const final;
 
     int32_t                getNumCacheLevels() const final;
     int64_t                getCacheSize(int32_t   level,

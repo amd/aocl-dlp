@@ -49,6 +49,17 @@ class cpuFeatureDetectorBase
     virtual int32_t                 getNumVectorRegisters() const       = 0;
     virtual int32_t                 getNumVectorMaskRegisters() const   = 0;
 
+    // Approximate compute-die queries for uniform systems. These report the
+    // topology represented by the CPU on which detection runs and return 0
+    // when that topology cannot be determined reliably.
+    virtual int32_t getNumCoresPerComputeDie() const = 0;
+
+    // API to get the number of hardware threads per compute die. This reports
+    // the processor's as-shipped SMT width: with SMT disabled it still counts
+    // every thread a core can run, not the online count. Assumes uniform
+    // compute-die topology and returns 0 if it cannot be determined.
+    virtual int32_t getNumHardwareThreadsPerComputeDie() const = 0;
+
     // Cache hierarchy queries.
     //
     // For 'getCacheSize' and 'getCacheInfo' the caller must state which kind of
@@ -108,6 +119,20 @@ class cpuFeatures
     int32_t getNumVectorMaskRegisters()
     {
         return pDetector->getNumVectorMaskRegisters();
+    }
+
+    int32_t getNumCoresPerComputeDie()
+    {
+        return pDetector->getNumCoresPerComputeDie();
+    }
+
+    // API to get the number of hardware threads per compute die. This reports
+    // the processor's as-shipped SMT width: with SMT disabled it still counts
+    // every thread a core can run, not the online count. Assumes uniform
+    // compute-die topology and returns 0 if it cannot be determined.
+    int32_t getNumHardwareThreadsPerComputeDie()
+    {
+        return pDetector->getNumHardwareThreadsPerComputeDie();
     }
 
     int32_t getNumCacheLevels() { return pDetector->getNumCacheLevels(); }

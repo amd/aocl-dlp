@@ -44,6 +44,18 @@ typedef enum
     DATAPATH_FP512
 } dlp_datapath_width;
 
+// Content type of a cache at a given level. Mirrors dlp::cpu_utils::cacheType.
+// A split level (typically L1) has separate DATA and INSTRUCTION caches; a
+// unified level (typically L2 / L3) serves both, so either a DATA or an
+// INSTRUCTION request is satisfied by the unified cache.
+typedef enum
+{
+    DLP_CACHE_TYPE_INVALID = 0,
+    DLP_CACHE_TYPE_DATA,
+    DLP_CACHE_TYPE_INSTRUCTION,
+    DLP_CACHE_TYPE_UNIFIED
+} dlp_cache_type;
+
 typedef enum
 {
     DLP_ARCH_ERROR = 0,
@@ -130,6 +142,32 @@ dlp_cpuid_is_similar_zen_arch();
 // via AOCL_DLP_ENABLE_INSTRUCTIONS)
 dlp_arch_t
 dlp_get_arch(void);
+
+// API to get the number of physical cores per compute die. Assumes uniform
+// compute-die topology and returns 0 if it cannot be determined.
+int32_t
+dlp_cpuid_get_num_cores_per_compute_die(void);
+
+// API to get the number of hardware threads per compute die. This reports the
+// processor's as-shipped SMT width: with SMT disabled it still counts every
+// thread a core can run, not the online count. Assumes uniform compute-die
+// topology and returns 0 if it cannot be determined.
+int32_t
+dlp_cpuid_get_num_hw_threads_per_compute_die(void);
+
+// API to get the number of cache levels present on the current CPU (e.g. 3 =>
+// L1, L2, L3). Returns 0 if the cache topology could not be determined.
+int32_t
+dlp_cpuid_get_num_cache_levels(void);
+
+// API to get the size (in bytes) of the cache at the given 'level' that
+// services the requested content 'type'. Valid values of 'level' are 1 (L1),
+// 2 (L2), 3 (L3), etc. For a split level (typically L1) 'type' selects
+// between the data and instruction caches; a unified level (typically L2/L3)
+// satisfies either request. Returns 0 if the requested level/type does not
+// exist or could not be determined.
+int64_t
+dlp_cpuid_get_cache_size(int32_t level, dlp_cache_type type);
 
 DLP_END_EXTERN_C
 

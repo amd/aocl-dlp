@@ -29,6 +29,7 @@
 #include <cstring>
 
 #include "classic/dlp_base_types.h"
+
 #include "cpu_utils/cpuid.hh"
 #include "utils/type_utils.hh"
 #include "x86_cpu_features.hh"
@@ -77,6 +78,20 @@ enum x86_cache_leaf : uint32_t
 {
     intel_cache_leaf = 0x00000004u, // Intel: Deterministic Cache Parameters
     amd_cache_leaf   = 0x8000001Du  // AMD (Zen+): Cache Topology Information
+};
+
+enum x86_topology_leaf : uint32_t
+{
+    intel_topology_leaf = 0x0000001Fu, // Intel: V2 Extended Topology
+    amd_topology_leaf   = 0x80000026u  // AMD: Extended CPU Topology
+};
+
+enum x86_topology_level_type : uint32_t
+{
+    topology_level_invalid   = 0,
+    topology_level_core      = 1, // AMD Core / Intel logical processor
+    topology_level_amd_die   = 3,
+    topology_level_intel_die = 5
 };
 
 DLP_INLINE bool
@@ -328,6 +343,99 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
 }
 
 void
+x86CpuFeatureDetector::detectx86ComputeDie()
+{
+    computeDie = cpuDieInfo{};
+
+    if (thisVendor == cpuVendor::invalid) {
+        return;
+    }
+
+    uint32_t topology_leaf;
+    if (thisVendor == cpuVendor::amd) {
+        uint32_t cpuid_max_ext = __get_cpuid_max(0x80000000u, 0);
+        if (cpuid_max_ext < amd_topology_leaf) {
+            return;
+        }
+        topology_leaf = amd_topology_leaf;
+    } else {
+        uint32_t cpuid_max = __get_cpuid_max(0, 0);
+        if (cpuid_max < intel_topology_leaf) {
+            return;
+        }
+        topology_leaf = intel_topology_leaf;
+    }
+
+    uint32_t threads_per_core           = 0;
+    uint32_t logical_processors_per_die = 0;
+    uint32_t logical_processors_per_pkg = 0;
+    uint32_t previous_level_count       = 0;
+    bool     found_die_level            = false;
+
+    // Both topology leaves enumerate hierarchy levels through successive
+    // sub-leaves. EBX[15:0] reports the configured logical-processor count,
+    // while ECX[15:8] identifies the level type.
+    for (uint32_t sub_leaf = 0; sub_leaf <= 0xFFu; ++sub_leaf) {
+        uint32_t eax, ebx, ecx, edx;
+        __cpuid_count(topology_leaf, sub_leaf, eax, ebx, ecx, edx);
+
+        uint32_t logical_processor_count = ebx & 0xFFFFu;
+        uint32_t level_type              = (ecx >> 8) & 0xFFu;
+        if (logical_processor_count == 0
+            || level_type == topology_level_invalid) {
+            break;
+        }
+
+        // AMD explicitly reports whether a hierarchy level is asymmetric.
+        // A single CPUID sample cannot build correct per-die counts in that
+        // case, so leave computeDie empty rather than report uniform values.
+        if (thisVendor == cpuVendor::amd && (eax & (1u << 31)) != 0) {
+            return;
+        }
+
+        if (level_type == topology_level_core) {
+            threads_per_core = logical_processor_count;
+        }
+
+        if (thisVendor == cpuVendor::amd
+            && level_type == topology_level_amd_die) {
+            logical_processors_per_die = logical_processor_count;
+            found_die_level            = true;
+        } else if (thisVendor == cpuVendor::intel
+                   && level_type == topology_level_intel_die) {
+            // On Intel, the level immediately below the Die level describes
+            // the logical processors contained by one die.
+            logical_processors_per_die = previous_level_count;
+            found_die_level            = true;
+        }
+
+        // The final valid level describes all logical processors in the
+        // current package, regardless of which intermediate levels exist.
+        logical_processors_per_pkg = logical_processor_count;
+        previous_level_count       = logical_processor_count;
+    }
+
+    if (threads_per_core == 0 || logical_processors_per_pkg == 0) {
+        return;
+    }
+
+    // If no separate die level is exposed, model the package as one compute
+    // die. This keeps the API useful on monolithic and older Intel parts.
+    if (!found_die_level) {
+        logical_processors_per_die = logical_processors_per_pkg;
+    }
+
+    if (logical_processors_per_die == 0
+        || logical_processors_per_die % threads_per_core != 0) {
+        return;
+    }
+
+    computeDie.physicalCoreCount =
+        logical_processors_per_die / threads_per_core;
+    computeDie.hardwareThreadCount = logical_processors_per_die;
+}
+
+void
 x86CpuFeatureDetector::detectx86CacheInfo()
 {
     // Cache topology derivation relies on knowing the vendor to pick the
@@ -428,6 +536,7 @@ x86CpuFeatureDetector::x86CpuFeatureDetector()
                       0);
 
     detectx86IsaFeatures();
+    detectx86ComputeDie();
     detectx86CacheInfo();
 }
 
@@ -507,6 +616,18 @@ x86CpuFeatureDetector::getNumVectorMaskRegisters() const
 }
 
 int32_t
+x86CpuFeatureDetector::getNumCoresPerComputeDie() const
+{
+    return static_cast<int32_t>(computeDie.physicalCoreCount);
+}
+
+int32_t
+x86CpuFeatureDetector::getNumHardwareThreadsPerComputeDie() const
+{
+    return static_cast<int32_t>(computeDie.hardwareThreadCount);
+}
+
+int32_t
 x86CpuFeatureDetector::getNumCacheLevels() const
 {
     // The number of cache levels is the highest level reported across all the
@@ -534,7 +655,13 @@ x86CpuFeatureDetector::getCacheInfo(int32_t level, cacheType type) const
     // If nothing matches (e.g. the level does not exist), a zero-initialized
     // cacheInfo is returned.
     cacheInfo unifiedMatch{};
-    bool      haveUnified = false;
+
+    if ((level <= 0) || (level > getNumCacheLevels())
+        || (type == cacheType::invalid)) {
+        return unifiedMatch;
+    }
+
+    bool haveUnified = false;
 
     for (const auto& info : cacheHierarchy) {
         if (static_cast<int32_t>(info.level) != level) {

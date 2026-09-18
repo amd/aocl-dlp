@@ -65,6 +65,10 @@ class referenceCpuFeatureDetector : public cpuFeatureDetectorBase
 
     int32_t getNumVectorMaskRegisters() const final { return 0; }
 
+    int32_t getNumCoresPerComputeDie() const final { return 0; }
+
+    int32_t getNumHardwareThreadsPerComputeDie() const final { return 0; }
+
     int32_t getNumCacheLevels() const final { return 0; }
 
     int64_t getCacheSize([[maybe_unused]] int32_t   level,
