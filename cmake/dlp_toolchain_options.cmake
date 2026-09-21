@@ -23,21 +23,15 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# DEPRECATED: This file is deprecated and will be removed in future releases.
-# Options have been moved to modular files:
-# - dlp_core_options.cmake: Core library options
-# - dlp_testing.cmake: Testing options
-# - dlp_benchmark.cmake: Benchmarking options
-# - dlp_build_options.cmake: Build target options
-# - dlp_documentation.cmake: Documentation options
 
-function(dlp_define_options)
-    message(DEPRECATION "dlp_define_options() is deprecated. Options are now defined in modular files. This function will be removed in future releases.")
+function(dlp_define_toolchain_options)
+    # Pins Clang/AOCC to a specific GCC install (--gcc-install-dir=) instead
+    # of whatever GCC it finds by default. See dlp_clang_gcc_toolchain() in
+    # dlp_compiler_flags_linux.cmake/windows.cmake for how this is applied.
+    set(DLP_GCC_TOOLCHAIN "" CACHE PATH
+        "Exact GCC install directory (e.g. /usr/lib/gcc/x86_64-pc-linux-gnu/13.4.1) for Clang/AOCC to use via --gcc-install-dir=. Leave empty to use the compiler's default toolchain detection.")
 
-    # Call the new modular functions for backward compatibility
-    dlp_define_core_options()
-    dlp_define_testing_options()
-    dlp_define_benchmarking_options()
-    dlp_define_build_options()
-    dlp_define_documentation_options()
+    # Propagate to the caller for consistency with the project's other
+    # dlp_define_*_options() functions.
+    set(DLP_GCC_TOOLCHAIN ${DLP_GCC_TOOLCHAIN} PARENT_SCOPE)
 endfunction()

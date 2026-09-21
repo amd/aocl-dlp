@@ -116,6 +116,55 @@ if(MSVC)
     )
 endif()
 
+# Windows mirror of dlp_compiler_flags_linux.cmake's toolchain pin - applies
+# DLP_GCC_TOOLCHAIN (defined in dlp_toolchain_options.cmake). Only meaningful
+# for MinGW/straight-clang++ builds using libstdc++; a no-op under
+# clang-cl/MSVC, which use the MSVC STL instead. Gated per-language
+# (DLP_COMPILER_CLANG/DLP_CXX_COMPILER_CLANG, from dlp_platform.cmake) since a
+# non-Clang compiler doesn't understand --gcc-install-dir=.
+function(dlp_clang_gcc_toolchain)
+    if(NOT DLP_GCC_TOOLCHAIN)
+        return()
+    endif()
+
+    if(MSVC)
+        message(WARNING "DLP_GCC_TOOLCHAIN is set but the active frontend is "
+                        "MSVC-compatible (cl.exe or clang-cl), which uses the "
+                        "MSVC STL, not libstdc++; ignoring --gcc-install-dir "
+                        "override.")
+        return()
+    endif()
+
+    set(_dlp_any_clang FALSE)
+
+    if(DLP_COMPILER_CLANG)
+        target_compile_options(dlp_compiler_flags INTERFACE
+            $<$<COMPILE_LANGUAGE:C>:--gcc-install-dir=${DLP_GCC_TOOLCHAIN}>)
+        set(_dlp_any_clang TRUE)
+    endif()
+
+    if(DLP_CXX_COMPILER_CLANG)
+        target_compile_options(dlp_compiler_flags INTERFACE
+            $<$<COMPILE_LANGUAGE:CXX>:--gcc-install-dir=${DLP_GCC_TOOLCHAIN}>)
+        # Final .so always links via the CXX driver (#687).
+        target_link_options(dlp_compiler_flags INTERFACE
+            --gcc-install-dir=${DLP_GCC_TOOLCHAIN})
+        set(_dlp_any_clang TRUE)
+    endif()
+
+    if(NOT _dlp_any_clang)
+        message(WARNING "DLP_GCC_TOOLCHAIN is set but neither the C compiler "
+                        "('${CMAKE_C_COMPILER_ID}') nor the C++ compiler "
+                        "('${CMAKE_CXX_COMPILER_ID}') is Clang; ignoring "
+                        "--gcc-install-dir override.")
+        return()
+    endif()
+
+    message(STATUS "Clang GCC install-dir override "
+                   "(C=${CMAKE_C_COMPILER_ID}, CXX=${CMAKE_CXX_COMPILER_ID}): "
+                   "${DLP_GCC_TOOLCHAIN}")
+endfunction()
+
 # Function to apply global compiler flags to a target
 # Parameters:
 #   target - The target to apply flags to

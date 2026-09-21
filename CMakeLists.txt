@@ -44,6 +44,7 @@ include(cmake/dlp_install.cmake)
 include(cmake/dlp_extensions.cmake)
 include(cmake/dlp_core_options.cmake)
 include(cmake/dlp_build_options.cmake)
+include(cmake/dlp_toolchain_options.cmake)
 include(cmake/dlp_dependencies.cmake)
 include(cmake/dlp_documentation.cmake)
 include(cmake/dlp_testing.cmake)
@@ -77,6 +78,7 @@ dlp_define_benchmarking_options()
 dlp_define_build_options()
 dlp_define_documentation_options()
 dlp_define_pgo_options()
+dlp_define_toolchain_options()
 # Initialize Project dependant variables
 dlp_init_project_dep_var()
 # Add capability of openmp
@@ -85,6 +87,10 @@ dlp_setup_openmp()
 dlp_setup_pgo()
 # Run the ZnVer support detection
 dlp_check_znver_support()
+
+# Apply --gcc-install-dir override for Clang/AOCC if DLP_GCC_TOOLCHAIN is set
+# (mirrored in dlp_compiler_flags_linux.cmake and dlp_compiler_flags_windows.cmake)
+dlp_clang_gcc_toolchain()
 
 # Configure security hardening flags. Must run after project()
 # (languages enabled) and after the build options are defined (sanitizer

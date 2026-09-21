@@ -42,6 +42,47 @@ set(DLP_RELEASE_FLAGS -O3
                     #   -Werror
 )
 
+# Applies DLP_GCC_TOOLCHAIN (defined in dlp_toolchain_options.cmake), pinning
+# Clang/AOCC to a specific GCC install via --gcc-install-dir= (fixes e.g.
+# AOCC 5.2.0/clang-17 vs GCC 16 libstdc++ incompatibilities). Gated
+# per-language (DLP_COMPILER_CLANG/DLP_CXX_COMPILER_CLANG, from
+# dlp_platform.cmake) since gcc/g++ doesn't understand --gcc-install-dir= and
+# a mixed CC=gcc/CXX=clang++ build would break if both got it unconditionally.
+function(dlp_clang_gcc_toolchain)
+    if(NOT DLP_GCC_TOOLCHAIN)
+        return()
+    endif()
+
+    set(_dlp_any_clang FALSE)
+
+    if(DLP_COMPILER_CLANG)
+        target_compile_options(dlp_compiler_flags INTERFACE
+            $<$<COMPILE_LANGUAGE:C>:--gcc-install-dir=${DLP_GCC_TOOLCHAIN}>)
+        set(_dlp_any_clang TRUE)
+    endif()
+
+    if(DLP_CXX_COMPILER_CLANG)
+        target_compile_options(dlp_compiler_flags INTERFACE
+            $<$<COMPILE_LANGUAGE:CXX>:--gcc-install-dir=${DLP_GCC_TOOLCHAIN}>)
+        # Final .so always links via the CXX driver (#687).
+        target_link_options(dlp_compiler_flags INTERFACE
+            --gcc-install-dir=${DLP_GCC_TOOLCHAIN})
+        set(_dlp_any_clang TRUE)
+    endif()
+
+    if(NOT _dlp_any_clang)
+        message(WARNING "DLP_GCC_TOOLCHAIN is set but neither the C compiler "
+                        "('${CMAKE_C_COMPILER_ID}') nor the C++ compiler "
+                        "('${CMAKE_CXX_COMPILER_ID}') is Clang; ignoring "
+                        "--gcc-install-dir override.")
+        return()
+    endif()
+
+    message(STATUS "Clang/AOCC GCC install-dir override "
+                   "(C=${CMAKE_C_COMPILER_ID}, CXX=${CMAKE_CXX_COMPILER_ID}): "
+                   "${DLP_GCC_TOOLCHAIN}")
+endfunction()
+
 # --- Security hardening flags (CWE-693) -------------------------------------
 # The shipped 5.3 binary lacked standard exploit mitigations (no stack
 # canaries, no RELRO/BIND_NOW, no FORTIFY_SOURCE, no Intel CET). dlp_setup_

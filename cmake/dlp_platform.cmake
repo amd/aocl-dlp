@@ -99,6 +99,10 @@ else()
 endif()
 
 # Detect Compiler
+#
+# Detected independently per-language (DLP_COMPILER_* for C, DLP_CXX_COMPILER_*
+# for C++) since C and C++ may use different compiler families - see
+# dlp_clang_gcc_toolchain() in dlp_compiler_flags_linux/windows.cmake.
 if(CMAKE_C_COMPILER_ID MATCHES "GNU")
   set(DLP_COMPILER_GCC 1)
   set(DLP_COMPILER_NAME "GCC")
@@ -139,7 +143,72 @@ else()
   message(WARNING "Unsupported compiler: ${DLP_COMPILER_NAME} ${DLP_COMPILER_VERSION}")
 endif()
 
-message(STATUS "Compiler: ${DLP_COMPILER_NAME} ${DLP_COMPILER_VERSION}")
+message(STATUS "C compiler: ${DLP_COMPILER_NAME} ${DLP_COMPILER_VERSION}")
+
+# Detect C++ compiler independently - see comment above.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+  set(DLP_CXX_COMPILER_GCC 1)
+  set(DLP_CXX_COMPILER_NAME "GCC")
+  set(DLP_CXX_COMPILER_VERSION ${CMAKE_CXX_COMPILER_VERSION})
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.2")
+    message(FATAL_ERROR "Unsupported GCC version: ${CMAKE_CXX_COMPILER_VERSION}. AOCL-DLP requires GCC 11.2 or newer.")
+  endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(DLP_CXX_COMPILER_CLANG 1)
+  set(DLP_CXX_COMPILER_NAME "Clang")
+  set(DLP_CXX_COMPILER_VERSION ${CMAKE_CXX_COMPILER_VERSION})
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+  set(DLP_CXX_COMPILER_INTEL 1)
+  set(DLP_CXX_COMPILER_NAME "Intel")
+  set(DLP_CXX_COMPILER_VERSION ${CMAKE_CXX_COMPILER_VERSION})
+elseif(MSVC)
+  set(DLP_CXX_COMPILER_MSVC 1)
+  set(DLP_CXX_COMPILER_NAME "MSVC")
+  set(DLP_CXX_COMPILER_VERSION ${MSVC_VERSION})
+else()
+  set(DLP_CXX_COMPILER_NAME "${CMAKE_CXX_COMPILER_ID}")
+  set(DLP_CXX_COMPILER_VERSION ${CMAKE_CXX_COMPILER_VERSION})
+  message(WARNING "Unsupported C++ compiler: ${DLP_CXX_COMPILER_NAME} ${DLP_CXX_COMPILER_VERSION}")
+endif()
+
+message(STATUS "C++ compiler: ${DLP_CXX_COMPILER_NAME} ${DLP_CXX_COMPILER_VERSION}")
+
+# Warn (advisory only) on a heterogeneous or version-mismatched C/C++
+# toolchain. DLP assumes C and C++ come from the SAME compiler build, not
+# just the same family/version number: a separately-built toolchain (a SPACK
+# install, or a vendor package like AOCC bundling its own amdlibm/amdalloc)
+# can carry its own libgcc/libstdc++/CRT that doesn't match what the other
+# language's compiler was built against, even if both report "GCC 14" or
+# similar. That mismatch is a real, separate risk from anything
+# dlp_clang_gcc_toolchain() (DLP_GCC_TOOLCHAIN) addresses - pinning which GCC
+# headers/CRT Clang resolves does not make the pair one build, so this
+# warning fires regardless of whether DLP_GCC_TOOLCHAIN is set. Any drift is
+# far more often a stray compiler picked up unintentionally (e.g. a second
+# GCC dropped into /usr/local/bin by an unprivileged `make install`) than a
+# deliberate, supported choice - mixing is tolerated, not encouraged.
+if(NOT DLP_COMPILER_NAME STREQUAL DLP_CXX_COMPILER_NAME)
+  message(WARNING "Heterogeneous toolchain: C compiler is "
+                  "${DLP_COMPILER_NAME} ${DLP_COMPILER_VERSION}, C++ compiler "
+                  "is ${DLP_CXX_COMPILER_NAME} ${DLP_CXX_COMPILER_VERSION}. "
+                  "AOCL-DLP assumes C and C++ come from the same compiler "
+                  "build; a mismatched pair can link against different "
+                  "libgcc/libstdc++/CRT (e.g. a SPACK-built or vendor-"
+                  "packaged compiler with its own bundled runtime). This is "
+                  "supported for experimentation but not encouraged - verify "
+                  "it's intentional and that the runtime is compatible for "
+                  "your target environment.")
+elseif(NOT DLP_COMPILER_VERSION VERSION_EQUAL DLP_CXX_COMPILER_VERSION)
+  message(WARNING "C and C++ compilers are both ${DLP_COMPILER_NAME} but at "
+                  "different versions (C ${DLP_COMPILER_VERSION} vs C++ "
+                  "${DLP_CXX_COMPILER_VERSION}). AOCL-DLP assumes both "
+                  "languages come from the same compiler build; even a "
+                  "same-family version mismatch can pull in different "
+                  "libgcc/libstdc++/CRT and most often means a different "
+                  "compiler install was picked up unintentionally (e.g. a "
+                  "stray /usr/local/bin install ahead of the intended one on "
+                  "PATH) rather than a deliberate choice - verify "
+                  "CMAKE_C_COMPILER/CMAKE_CXX_COMPILER.")
+endif()
 
 # Detect Endian
 include(TestBigEndian)
