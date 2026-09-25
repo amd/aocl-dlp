@@ -249,6 +249,10 @@ aocl_gemm_s8s4s32of32(const char      order,
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
 
+    lcntx_g.thread_info.num_threads = rntm_g.num_threads;
+    lcntx_g.thread_info.ic_ways     = rntm_g.ic_ways;
+    lcntx_g.thread_info.jc_ways     = rntm_g.jc_ways;
+
     lcntx_g.dlp_quant_kernel_hndl.kernel_base = NULL;
 
     // Column major is not supported: it would require swapping A and B, which
@@ -278,6 +282,10 @@ aocl_gemm_s8s4s32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         goto err_hndl;
     }
+
+    // Reuse the split the DE used to select the nibble widening site.
+    rntm_g.ic_ways = lcntx_g.thread_info.ic_ways;
+    rntm_g.jc_ways = lcntx_g.thread_info.jc_ways;
 
     dlp_gemm_ops_bundle_t ops =
         DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);

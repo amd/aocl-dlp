@@ -151,7 +151,7 @@ class iDEBackend : public optimizer::gemmOptimizer
     }
 };
 
-class iQuantDEBackend
+class iQuantDEBackend : public thread_partition::gemmThreadPartitioner
 {
   public:
     virtual ~iQuantDEBackend() = default;
@@ -177,7 +177,8 @@ class iQuantDEBackend
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) = 0;
+        md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info) = 0;
 
     virtual dlp::kernel_frame::quantKernelInfo
     getGemvQuantKernelInfoForInputFastPath(
@@ -1798,6 +1799,23 @@ class quantS8FamilyDEBackendBase : public iQuantDEBackend
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
 
+    // Keep this faithful to dlp_gemm_s32o32_get_threading(): after the shared
+    // seed partition, INT8 only applies the panel-work rebalance.
+    DLP_ALWAYS_INLINE void adjustWays(md_t  mr,
+                                      md_t  nr,
+                                      md_t  m,
+                                      md_t  n,
+                                      md_t& nThreads,
+                                      md_t& icWays,
+                                      md_t& jcWays) const override final
+    {
+        const md_t mrBlks = (m + mr - 1) / mr;
+        if (mrBlks >= icWays) {
+            thread_partition::adjustIcJcWays(mr, nr, m, n, nThreads, icWays,
+                                             jcWays);
+        }
+    }
+
     // The concrete instruction preference to generate against, or nullopt when
     // the ISA cannot host these kernels at all and generation must be refused.
     DLP_ALWAYS_INLINE
@@ -1883,26 +1901,27 @@ class gemmQuantS8DEBackend : public quantS8FamilyDEBackendBase
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::quantKernelInfo getGemmQuantKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        [[maybe_unused]] md_t             n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        dlp_group_op*                     group_ops,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        dlp::kernel_frame::kernelDatatype        k_dtype,
+        [[maybe_unused]] md_t                    m,
+        [[maybe_unused]] md_t                    n,
+        md_t                                     k,
+        [[maybe_unused]] md_t                    rs_a,
+        [[maybe_unused]] md_t                    cs_a,
+        [[maybe_unused]] md_t                    rs_b,
+        [[maybe_unused]] md_t                    cs_b,
+        md_t                                     rs_c,
+        md_t                                     cs_c,
+        void*                                    alpha,
+        void*                                    beta,
+        AOCL_DLP_MEMORY_TAG                      mtag_a,
+        AOCL_DLP_MEMORY_TAG                      mtag_b,
+        dlp_gemm_post_op*                        metadata,
+        dlp_group_op*                            group_ops,
+        md_t                                     mr_hint,
+        md_t                                     nr_hint,
+        md_t                                     kc_hint,
+        md_t                                     c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t* thread_info) override final
     {
         if (!canGenerateKernelInfo || group_ops == nullptr) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
@@ -2042,7 +2061,8 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info) override final
     {
         if (!canGenerateKernelInfo || group_ops == nullptr) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
@@ -2079,15 +2099,34 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             *kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, group_ops);
 
+        static constexpr dlp_gemm_thread_info_t noThreadInfo{};
+        const dlp_gemm_thread_info_t&           threads =
+            (thread_info != nullptr) ? *thread_info : noThreadInfo;
+
+        md_t num_threads = threads.num_threads;
+        md_t ic_ways     = threads.ic_ways;
+        md_t jc_ways     = threads.jc_ways;
+
+        resolveWays(mr, nr, m, n, num_threads, ic_ways, jc_ways);
+
+        if (thread_info != nullptr) {
+            thread_info->num_threads = num_threads;
+            thread_info->ic_ways     = ic_ways;
+            thread_info->jc_ways     = jc_ways;
+        }
+
         // qKI.bQuant.mode is dequantInKernel from the shared fill, which is
         // the s8s8-sym B-load path: the frame/pack widens nibbles first.
-        // Opt into nibble loads only for GEMM with reordered B when M fits in
-        // one micro-tile (otherwise B would be widened once per M-tile) and
-        // VBMI is present. GEMV-shaped m==1 / n==1 stay on dequantInKernel:
+        // Opt into nibble loads only for GEMM with reordered B when each IC
+        // way fits in one micro-tile (otherwise B would be widened once per
+        // M-tile) and VBMI is present. GEMV-shaped m==1 / n==1 stay on
+        // dequantInKernel:
         // the GEMV generators do not load nibbles, and n==1 reorder is already
         // an s8 column.
+        const md_t mr_blks  = (m + mr - 1) / mr;
+        const md_t m_per_ic = ((mr_blks + ic_ways - 1) / ic_ways) * mr;
         const bool use_in_kernel =
-            (mtag_b == REORDERED) && (m > 1) && (n > 1) && (m <= mr)
+            (mtag_b == REORDERED) && (m > 1) && (n > 1) && (m_per_ic <= mr)
             && cpu_utils::cpuFeaturesInstance().hasFeature(
                 cpu_utils::isaFeature::avx512vbmi);
 

@@ -717,26 +717,27 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
 }
 
 DLP_ALWAYS_INLINE static quantKernelInfo
-dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype      kDType,
-                                       md_t                m,
-                                       md_t                n,
-                                       md_t                k,
-                                       md_t                rs_a,
-                                       md_t                cs_a,
-                                       md_t                rs_b,
-                                       md_t                cs_b,
-                                       md_t                rs_c,
-                                       md_t                cs_c,
-                                       void*               alpha,
-                                       void*               beta,
-                                       AOCL_DLP_MEMORY_TAG mtag_a,
-                                       AOCL_DLP_MEMORY_TAG mtag_b,
-                                       dlp_gemm_post_op*   metadata,
-                                       dlp_group_op*       group_ops,
-                                       md_t                mr_hint,
-                                       md_t                nr_hint,
-                                       md_t                kc_hint,
-                                       md_t                c_downscale)
+dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype          kDType,
+                                       md_t                    m,
+                                       md_t                    n,
+                                       md_t                    k,
+                                       md_t                    rs_a,
+                                       md_t                    cs_a,
+                                       md_t                    rs_b,
+                                       md_t                    cs_b,
+                                       md_t                    rs_c,
+                                       md_t                    cs_c,
+                                       void*                   alpha,
+                                       void*                   beta,
+                                       AOCL_DLP_MEMORY_TAG     mtag_a,
+                                       AOCL_DLP_MEMORY_TAG     mtag_b,
+                                       dlp_gemm_post_op*       metadata,
+                                       dlp_group_op*           group_ops,
+                                       md_t                    mr_hint,
+                                       md_t                    nr_hint,
+                                       md_t                    kc_hint,
+                                       md_t                    c_downscale,
+                                       dlp_gemm_thread_info_t* thread_info)
 {
     if ((kDType == kernelDatatype::s8s8s32of32_sym_quant)
         || (kDType == kernelDatatype::s8s8s32obf16_sym_quant)) {
@@ -745,7 +746,7 @@ dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype      kDType,
                 dlp::de::gemmQuantS8DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
-                c_downscale, kDType);
+                c_downscale, thread_info, kDType);
     } else if ((kDType == kernelDatatype::s8s4s32of32_sym_quant)
                || (kDType == kernelDatatype::s8s4s32obf16_sym_quant)) {
         return dlp::de::decisionEngineInstance()
@@ -753,7 +754,7 @@ dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype      kDType,
                 dlp::de::gemmQuantS8S4DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
-                c_downscale, kDType);
+                c_downscale, thread_info, kDType);
     } else {
         return dlp::kernel_frame::quantKernelInfo();
     }
@@ -839,7 +840,7 @@ dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t     k_dtype,
         dlp_get_gemm_quant_kernelInfo_by_dtype(
             kDType, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
             mtag_a, mtag_b, metadata, group_ops, cntx->blksz.MR, cntx->blksz.NR,
-            cntx->blksz.KC, c_downscale);
+            cntx->blksz.KC, c_downscale, &cntx->thread_info);
 
     if ((qKI.base.mr <= 0) || (qKI.base.nr <= 0)) {
         cntx->dlp_quant_kernel_hndl.kernel_base = nullptr;

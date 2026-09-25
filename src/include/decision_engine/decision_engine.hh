@@ -419,25 +419,26 @@ class decisionEngine
     // Quant fast path (routine gemm_quant)
     template<typename T>
     DLP_ALWAYS_INLINE dlp::kernel_frame::quantKernelInfo
-                      getGemmQuantKernelInfoForInputFastPath(md_t                m,
-                                                             md_t                n,
-                                                             md_t                k,
-                                                             md_t                rs_a,
-                                                             md_t                cs_a,
-                                                             md_t                rs_b,
-                                                             md_t                cs_b,
-                                                             md_t                rs_c,
-                                                             md_t                cs_c,
-                                                             void*               alpha,
-                                                             void*               beta,
-                                                             AOCL_DLP_MEMORY_TAG mtag_a,
-                                                             AOCL_DLP_MEMORY_TAG mtag_b,
-                                                             dlp_gemm_post_op*   metadata,
-                                                             dlp_group_op*       group_ops,
-                                                             md_t                mr_hint,
-                                                             md_t                nr_hint,
-                                                             md_t                kc_hint,
-                                                             md_t                c_downscale,
+                      getGemmQuantKernelInfoForInputFastPath(md_t                    m,
+                                                             md_t                    n,
+                                                             md_t                    k,
+                                                             md_t                    rs_a,
+                                                             md_t                    cs_a,
+                                                             md_t                    rs_b,
+                                                             md_t                    cs_b,
+                                                             md_t                    rs_c,
+                                                             md_t                    cs_c,
+                                                             void*                   alpha,
+                                                             void*                   beta,
+                                                             AOCL_DLP_MEMORY_TAG     mtag_a,
+                                                             AOCL_DLP_MEMORY_TAG     mtag_b,
+                                                             dlp_gemm_post_op*       metadata,
+                                                             dlp_group_op*           group_ops,
+                                                             md_t                    mr_hint,
+                                                             md_t                    nr_hint,
+                                                             md_t                    kc_hint,
+                                                             md_t                    c_downscale,
+                                                             dlp_gemm_thread_info_t* thread_info,
                                                              dlp::kernel_frame::kernelDatatype dt)
     {
         auto kTypeIdx = utils::getUnderlyingValueOfEnum(
@@ -474,7 +475,7 @@ class decisionEngine
             return backend->T::getGemmQuantKernelInfoForInputFastPath(
                 dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
-                c_downscale);
+                c_downscale, thread_info);
         }
 
         return INVALID_GEMM_QUANT_KERNEL_INFO;
