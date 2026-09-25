@@ -72,6 +72,19 @@ namespace {
         }
     }
 
+    DLP_PARAM_DIM_TYPE
+    bGranToOuterDim(BQuantGranularity g)
+    {
+        switch (g) {
+            case BQuantGranularity::PerChannel:
+                return DLP_PARAM_DIM_PER_CHANNEL;
+            case BQuantGranularity::PerTensor:
+                return DLP_PARAM_DIM_PER_TENSOR;
+            default:
+                return DLP_PARAM_DIM_PER_GROUP;
+        }
+    }
+
 } // namespace
 
 DlpUalPlan::DlpUalPlan()
@@ -1376,38 +1389,42 @@ DlpUalPlan::convertWOQOperations()
     md_t n             = getN();
     b_quant.group_size = group_size;
 
-    // Scale/zp buffers are sized num_groups * base_len. Kernels branch on the
-    // per-group length (1 vs n), so pass that logical length, not the full
-    // buffer size.
-    auto woqLogicalLen = [&](md_t total) -> md_t {
-        return WOQParam::logicalParamLen(total, n, k, group_size);
-    };
+    BQuantGranularity sf_gran = param.getBScaleGranularity();
+    BQuantGranularity zp_gran = param.getBZpGranularity();
+    md_t              ng      = WOQParam::numGroups(k, group_size);
+    md_t              sf_len  = WOQParam::logicalCount(sf_gran, n, ng);
+    md_t              zp_len  = WOQParam::logicalCount(zp_gran, n, ng);
 
-    // Scale factor assignment for B matrix
+    param.validateBuffers(n, k);
+
+    DLP_PARAM_DIM_TYPE sf_outer = bGranToOuterDim(sf_gran);
+    DLP_PARAM_DIM_TYPE zp_outer = bGranToOuterDim(zp_gran);
+
+    // Scale factor assignment for B matrix. Kernels index by outer_dim:
+    // PER_TENSOR=0, PER_CHANNEL=col, PER_GROUP=group*n+col. Pass collapsed
+    // buffers (len = 1 / n / ng*n) without tiling along K-groups.
     if (param.hasB_ScaleFactor()) {
         if (!b_quant.dequant_scale_factors) {
             b_quant.dequant_scale_factors = new dlp_qparam_t{};
         }
         auto* scl = b_quant.dequant_scale_factors;
-        scl->data = convertMatrixToPtr(*param.getB_ScaleFactor());
-        scl->len  = woqLogicalLen(param.getB_ScaleFactor()->getCols());
         scl->stor_type =
             getStorageType(param.getB_ScaleFactor()->getMatrixType());
-        scl->outer_dim =
-            getScalarOrVectorDim(scl->len, DLP_PARAM_DIM_PER_CHANNEL);
+        scl->outer_dim = sf_outer;
+        scl->len       = sf_len;
+        scl->data      = convertMatrixToPtr(*param.getB_ScaleFactor());
     }
 
-    // Zero point assignment for B matrix
+    // Zero point assignment for B matrix (independent of scale granularity).
     if (param.hasB_ZeroPoint()) {
         if (!b_quant.zero_point) {
             b_quant.zero_point = new dlp_qparam_t{};
         }
         auto* zp      = b_quant.zero_point;
-        zp->data      = convertMatrixToPtr(*param.getB_ZeroPoint());
-        zp->len       = woqLogicalLen(param.getB_ZeroPoint()->getCols());
         zp->stor_type = getStorageType(param.getB_ZeroPoint()->getMatrixType());
-        zp->outer_dim =
-            getScalarOrVectorDim(zp->len, DLP_PARAM_DIM_PER_CHANNEL);
+        zp->outer_dim = zp_outer;
+        zp->len       = zp_len;
+        zp->data      = convertMatrixToPtr(*param.getB_ZeroPoint());
     }
 }
 
@@ -1448,8 +1465,8 @@ DlpUalPlan::convertGroupScaleOperations()
     // each scale factor's own outer_dim (PER_TOKEN for A, PER_CHANNEL for B);
     // the frame carries those per-matrix dims through to the kernels. A and B
     // granularity are independent.
-    AScaleGranularity a_gran = m_group_scale->getAGranularity();
-    BScaleGranularity b_gran = m_group_scale->getBGranularity();
+    AQuantGranularity a_gran = m_group_scale->getAScaleGranularity();
+    BQuantGranularity b_gran = m_group_scale->getBScaleGranularity();
 
     // The sym_quant kernel indexes scale factors as 2D arrays:
     //   A scale: a_scale[row * num_groups + group], needing m * num_groups
@@ -1475,9 +1492,12 @@ DlpUalPlan::convertGroupScaleOperations()
     md_t ng = (k == 0) ? 0 : (k + eff_gs - 1) / eff_gs; // number of groups
 
     // Per-matrix group counts. A PER_TOKEN -> one scale per row (a_ng=1);
-    // B PER_CHANNEL -> one scale per column (b_ng=1); else per-group.
-    md_t a_ng = (a_gran == AScaleGranularity::PerToken) ? 1 : ng;
-    md_t b_ng = (b_gran == BScaleGranularity::PerChannel) ? 1 : ng;
+    // B PER_CHANNEL / PER_TENSOR collapse over K (b_ng=1); else per-group.
+    md_t a_ng = (a_gran == AQuantGranularity::PerToken) ? 1 : ng;
+    md_t b_ng = (b_gran == BQuantGranularity::PerChannel
+                 || b_gran == BQuantGranularity::PerTensor)
+                    ? 1
+                    : ng;
 
     // Set A scale factor
     if (param.hasAScaleFactor()) {
@@ -1490,11 +1510,9 @@ DlpUalPlan::convertGroupScaleOperations()
             getStorageType(param.getAScaleFactor()->getMatrixType());
         // PER_TOKEN collapses A to one scale per row regardless of the number
         // of K-groups, so it takes precedence over the per-group layout.
-        scl->outer_dim =
-            (a_gran == AScaleGranularity::PerToken) ? DLP_PARAM_DIM_PER_TOKEN
-            : (ng > 1)
-                ? DLP_PARAM_DIM_PER_GROUP
-                : getScalarOrVectorDim(a_sf_len, DLP_PARAM_DIM_PER_TOKEN);
+        scl->outer_dim = (a_gran == AQuantGranularity::PerToken)
+                             ? DLP_PARAM_DIM_PER_TOKEN
+                             : DLP_PARAM_DIM_PER_GROUP;
 
         md_t eff_a_sf_len = m * a_ng;
         if (a_sf_len == 1 && eff_a_sf_len > 1) {
@@ -1525,16 +1543,19 @@ DlpUalPlan::convertGroupScaleOperations()
         md_t  b_sf_len = param.getBScaleFactor()->getCols();
         scl->stor_type =
             getStorageType(param.getBScaleFactor()->getMatrixType());
-        // PER_CHANNEL collapses B to one scale per column regardless of the
-        // number of K-groups, so it takes precedence over the per-group layout.
-        scl->outer_dim =
-            (b_gran == BScaleGranularity::PerChannel)
-                ? DLP_PARAM_DIM_PER_CHANNEL
-            : (ng > 1)
-                ? DLP_PARAM_DIM_PER_GROUP
-                : getScalarOrVectorDim(b_sf_len, DLP_PARAM_DIM_PER_CHANNEL);
+        // PER_CHANNEL / PER_TENSOR collapse B over K; otherwise per-group.
+        // Do not infer PER_TENSOR from len==1: int8 sym_quant rejects it, and
+        // a GEMV (n==1) PER_CHANNEL scale of length 1 must stay PER_CHANNEL.
+        if (b_gran == BQuantGranularity::PerChannel) {
+            scl->outer_dim = DLP_PARAM_DIM_PER_CHANNEL;
+        } else if (b_gran == BQuantGranularity::PerTensor) {
+            scl->outer_dim = DLP_PARAM_DIM_PER_TENSOR;
+        } else {
+            scl->outer_dim = DLP_PARAM_DIM_PER_GROUP;
+        }
 
-        md_t eff_b_sf_len = n * b_ng;
+        md_t eff_b_sf_len =
+            (b_gran == BQuantGranularity::PerTensor) ? 1 : (n * b_ng);
         if (b_sf_len == 1 && eff_b_sf_len > 1) {
             // Broadcast scalar to n elements (one per column, single group)
             size_t elem_size = (scl->stor_type == DLP_BF16) ? sizeof(int16_t)

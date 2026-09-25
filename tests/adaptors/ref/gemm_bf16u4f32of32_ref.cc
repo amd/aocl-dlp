@@ -27,6 +27,7 @@
  */
 
 #include "adaptors/ref/gemm_ref.hh"
+#include "classic/aocl_gemm_metadata.h"
 #include "utils/conversion_utils.hh"
 #include <cmath>
 #include <iostream>
@@ -87,7 +88,9 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
                             framework::MatrixType sf_type,
                             framework::MatrixType zp_type,
                             bool                  reorder_b,
-                            md_t                  group_size)
+                            md_t                  group_size,
+                            DLP_PARAM_DIM_TYPE    b_scale_dim,
+                            DLP_PARAM_DIM_TYPE    b_zp_dim)
 {
     if (b_scale_data == nullptr) {
         std::cerr << "bf16u4f32of32_ref: Missing required B scale factors"
@@ -134,17 +137,25 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
     if (gs_eff <= 0) {
         gs_eff = (k > 0) ? k : 1;
     }
-    bool per_tensor_scale = (sf_len == 1);
-    bool per_tensor_zp    = (zp_len == 1);
-    auto getScale         = [&](md_t j, md_t k_idx) -> float {
+    (void)sf_len;
+    (void)zp_len;
+    auto paramIndex = [&](md_t j, md_t k_idx, DLP_PARAM_DIM_TYPE dim) -> md_t {
         md_t group = k_idx / gs_eff;
-        md_t idx   = per_tensor_scale ? group : (group * n + j);
-        return getValueFromBuffer(b_scale_data, sf_type, idx);
+        if (dim == DLP_PARAM_DIM_PER_TENSOR) {
+            return 0;
+        }
+        if (dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            return j;
+        }
+        return group * n + j;
+    };
+    auto getScale = [&](md_t j, md_t k_idx) -> float {
+        return getValueFromBuffer(b_scale_data, sf_type,
+                                  paramIndex(j, k_idx, b_scale_dim));
     };
     auto getZp = [&](md_t j, md_t k_idx) -> float {
-        md_t group = k_idx / gs_eff;
-        md_t idx   = per_tensor_zp ? group : (group * n + j);
-        return getValueFromBuffer(b_zp_data, zp_type, idx);
+        return getValueFromBuffer(b_zp_data, zp_type,
+                                  paramIndex(j, k_idx, b_zp_dim));
     };
 
     const bool float_domain_zp = (zp_type == framework::MatrixType::bf16);

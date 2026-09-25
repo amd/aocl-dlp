@@ -215,9 +215,13 @@ DLP_GEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 
             // Calculate offsets
             md_t pre_op_sf_off = 0;
-            if (pre_ops_attr.scale_factor_len > 1) {
-                pre_op_sf_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_sf_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     // load scale factor vectors
@@ -255,7 +259,7 @@ DLP_GEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
                 scale7 = _mm512_permutex2var_ps(scale6, mask_scale2, scale6);
                 scale6 = _mm512_permutex2var_ps(scale6, mask_scale1, scale6);
             } else {
-                pre_op_sf_off = group;
+                pre_op_sf_off = 0;
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     scale0 = _mm512_set1_ps(

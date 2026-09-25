@@ -1683,8 +1683,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["64", "128"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_CHANNEL"]
 
   # 15.2: same combination with bf16-stored scale factors (ref widens bf16->f32
   # losslessly, mirroring the kernel's DLP_BF16 branch).
@@ -1714,8 +1714,8 @@ gemm_tests:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
             group_size: ["64", "128"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_CHANNEL"]
 
   # 15.3: MIXED granularity -- A PER_TOKEN x B PER_GROUP (B still tiled by
   # group, A collapsed to per-row). Exercises a_grp_mul=0 with b_grp_mul=1.
@@ -1745,8 +1745,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["64"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP"]
 
   # 15.4: MIXED granularity -- A PER_GROUP x B PER_CHANNEL (A tiled by group, B
   # collapsed to per-column). Exercises a_grp_mul=1 with b_grp_mul=0.
@@ -1776,8 +1776,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["64"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_CHANNEL"]
 
   # 15.5: transA / transB with per-token/per-channel, multi-group. Drives the
   # A VNNI-pack (transA) and col-major B packer (transB) paths under the new
@@ -1808,8 +1808,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["64"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_CHANNEL"]
 
   # 15.6: single-group degenerate (group_size 0 -> K, and ==K): with ng==1,
   # PER_TOKEN/PER_CHANNEL and PER_GROUP coincide in length but exercise the
@@ -1840,8 +1840,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["0", "128"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_CHANNEL"]
 
   # 15.7: MULTI-PANEL crossing (MC=144 / NC=1024 / KC=2048) with per-token/
   # per-channel, multi-group. Ensures the collapsed A/B scale indexing stays
@@ -1872,5 +1872,5 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["64"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_CHANNEL"]

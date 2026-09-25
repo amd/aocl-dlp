@@ -102,6 +102,22 @@ typedef struct
     dlp_quant_op_t* b_post_quant_op;
 } dlp_group_op;
 
+// Used as an internal structure. B-side WOQ (bf16s4) scale / zp metadata.
+typedef struct dlp_gemm_pre_op_t
+{
+    uint64_t                  op_code;
+    uint64_t                  group_size;
+    void*                     scale_factor;
+    uint64_t                  scale_factor_len;
+    DLP_PARAM_DIM_TYPE        scale_factor_dim;
+    uint64_t                  scale_factor_type;
+    void*                     zero_point;
+    uint64_t                  zero_point_len;
+    DLP_PARAM_DIM_TYPE        zero_point_dim;
+    uint64_t                  zero_point_type;
+    struct dlp_gemm_pre_op_t* next;
+} dlp_gemm_pre_op;
+
 // Used as an internal structure.
 typedef struct dlp_gemm_post_op_attr_t
 {
@@ -151,6 +167,24 @@ typedef struct dlp_gemm_grp_post_op_attr_t
     DLP_TYPE sf_stor_type;
     DLP_TYPE zp_stor_type;
 } dlp_gemm_grp_post_op_attr;
+
+// Runtime B-side WOQ (bf16s4) scale / zp tile state, consumed by the
+// quant execute path. s8 group-quant callers pass a zeroed struct.
+typedef struct dlp_gemm_pre_op_attr_t
+{
+    void*              scale_factor;
+    md_t               scale_factor_len;
+    md_t               scale_factor_type;
+    DLP_PARAM_DIM_TYPE scale_factor_dim;
+    void*              zero_point;
+    md_t               zero_point_len;
+    md_t               zero_point_type;
+    DLP_PARAM_DIM_TYPE zero_point_dim;
+    md_t               pre_op_b_i;
+    md_t               pre_op_b_j;
+    md_t               group_size;
+    md_t               pre_op_ld;
+} dlp_gemm_pre_op_attr;
 
 // Type definitions that can be used by both C and C++ code. The enum tokens
 // should follow the exact sequence as in kernelDatatype(kernel_frame_base.h).

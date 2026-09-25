@@ -134,6 +134,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
     pre_ops_attr.scale_factor      = pre_op_list->scale_factor;
     pre_ops_attr.scale_factor_len  = pre_op_list->scale_factor_len;
     pre_ops_attr.scale_factor_type = pre_op_list->scale_factor_type;
+    pre_ops_attr.scale_factor_dim  = pre_op_list->scale_factor_dim;
     pre_ops_attr.group_size        = group_size;
     pre_ops_attr.pre_op_ld         = n;
 

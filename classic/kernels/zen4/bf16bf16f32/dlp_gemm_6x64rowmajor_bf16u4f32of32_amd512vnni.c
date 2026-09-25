@@ -236,9 +236,13 @@ DLP_GEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
 
             int16_t a_kfringe_buf;
 
-            if (pre_ops_attr.scale_factor_len > 1) {
-                pre_op_sf_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_sf_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     // load scale factor vectors
@@ -276,7 +280,7 @@ DLP_GEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
                 scale7 = _mm512_permutex2var_ps(scale6, mask_scale2, scale6);
                 scale6 = _mm512_permutex2var_ps(scale6, mask_scale1, scale6);
             } else {
-                pre_op_sf_off = group;
+                pre_op_sf_off = 0;
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     scale0 = _mm512_set1_ps(
@@ -297,9 +301,13 @@ DLP_GEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
                 scale7 = scale0;
             }
 
-            if (pre_ops_attr.zero_point_len > 1) {
-                pre_op_zp_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.zero_point_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_zp_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
                 if (float_domain_zp == true) {
                     // ZP type is DLP_BF16, load and convert to DLP_F32 type
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
@@ -333,7 +341,7 @@ DLP_GEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
                                                            zero_point);
                 }
             } else {
-                pre_op_zp_off = group;
+                pre_op_zp_off = 0;
 
                 if (float_domain_zp == true) {
                     // ZP type is DLP_BF16, load and convert to DLP_F32 type

@@ -725,7 +725,8 @@ namespace dlp { namespace testing { namespace utils {
             }
 
             // Parse quant operations and post-operations if present. Quant
-            // operations (for example WOQ for bf16s4) are emitted before
+            // operations (for example WOQ for bf16s4/bf16u4, or GroupScale
+            // for s8s8/s8s4) are emitted before
             // regular post-operations so both appear in the generated test name
             // and are applied in execution order.
             std::unique_ptr<PostOpsIterator> postops_iterator = nullptr;

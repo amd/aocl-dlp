@@ -39,8 +39,9 @@
 
 /*
  * Shape- and capability-aware mtag_b selector for BF16S4/BF16U4 MP GEMM.
- * UNPACKED when: m_ic in [MC, 4*MC], n_jc in [1024, 10240], k <= 8.
- * Outside this region packing B recovers enough reuse to offset the overhead.
+ * UNPACKED when: m_ic <= MR or m_ic in [MR, 6*MR], n_jc in [1024, 10*1024], k
+ * >= 2048. Outside this region packing B recovers enough reuse to offset the
+ * overhead.
  *
  * Capability override: even when shape says UNPACKED, force PACK_KC if any
  * post-op has op_code > DLP_CLASSIC_MAX_POST_OP_CODE. The classic UNPACKED
@@ -57,30 +58,30 @@ dlp_mtag_b_pick(md_t                    m,
                 md_t                    k,
                 md_t                    ic_ways,
                 md_t                    jc_ways,
-                AOCL_DLP_OPERATION_TYPE mc_op_type,
+                AOCL_DLP_OPERATION_TYPE mr_op_type,
                 const dlp_gemm_post_op* post_op_list)
 {
-    // NOTE: mc_op_type in this case is not the one corresponding to the API.
+    // NOTE: mr_op_type in this case is not the one corresponding to the API.
     // Need to add a mechanism to ensure this wont result in undefined states.
-    md_t MC = dlp_gemm_get_block_size_MC_global_cntx(mc_op_type);
+    md_t MR = dlp_gemm_get_block_size_MR_global_cntx(mr_op_type);
 
     md_t m_ic = m / ic_ways;
     md_t n_jc = n / jc_ways;
 
     AOCL_DLP_MEMORY_TAG mtag;
-    if (m_ic < MC) {
+    if (m_ic <= MR) {
         mtag = UNPACKED;
     } else {
         // Thresholds
-        const md_t m_ic_panels  = 4;    // max MC-multiples for medium-M
+        const md_t m_ir_panels  = 6;    // max MR-multiples for medium-M
         const md_t n_jc_min     = 1024; // minimum n_jc: ~1 NC
         const md_t n_jc_max_mul = 10;   // maximum n_jc: ~10 NC
-        const md_t k_shallow    = 8;    // shallow K: too little compute
-                                        // to justify packing
+        const md_t k_large      = 2048; // large weight matrix causes
+                                        // cache thrashing
 
         bool fits_unpacked =
-            (m_ic <= m_ic_panels * MC && n_jc >= n_jc_min
-             && n_jc <= n_jc_max_mul * n_jc_min && k <= k_shallow);
+            ((m_ic <= m_ir_panels * MR) && (n_jc >= n_jc_min)
+             && (n_jc <= n_jc_max_mul * n_jc_min) && (k >= k_large));
 
         mtag = fits_unpacked ? UNPACKED : PACK_KC;
     }
@@ -1208,12 +1209,12 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
  * bf16s4f32of32)
  * @param THREADING_SFX   Suffix for threading function (may differ from
  * DLP_GEMM_SFX)
- * @param HAS_MC_LOGIC    1 to enable MC-based mtag_b decision (MP variant), 0
- * otherwise
+ * @param HAS_MTAG_B_LOGIC    1 to enable dimension based mtag_b decision (MP
+ * variant), 0 otherwise
  */
 #define GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(                                 \
     A_type, B_type, C_type, C_type_actual, DLP_GEMM_SFX, THREADING_SFX,        \
-    HAS_MC_LOGIC, MC_OP_TYPE)                                                  \
+    HAS_MTAG_B_LOGIC, MR_OP_TYPE)                                              \
                                                                                \
     void dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(                    \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
@@ -1241,11 +1242,11 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
             m, n, k, ic_ways, jc_ways, &mtag_a, &mtag_b, rntm_g, lcntx);       \
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
-        if (HAS_MC_LOGIC) {                                                    \
+        if (HAS_MTAG_B_LOGIC) {                                                \
             /* The cntx queried here is not the one corresponding to the API   \
              but rather that of the underlying kernel used. Hence any updates  \
              to the API cntx via metadata will be nullified here. */           \
-            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE,    \
+            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MR_OP_TYPE,    \
                                      ops ? ops->post_op_list : NULL);          \
         }                                                                      \
                                                                                \
@@ -1360,12 +1361,12 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
  * @param DLP_GEMM_SFX       Suffix for function name
  * @param THREADING_SFX    Suffix for threading function (may differ from
  * DLP_GEMM_SFX)
- * @param HAS_MC_LOGIC     1 to enable MC-based mtag_b decision (MP variant), 0
- * otherwise
+ * @param HAS_MTAG_B_LOGIC     1 to enable dimension based mtag_b decision (MP
+ * variant), 0 otherwise
  */
 #define GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(                           \
-    A_type, B_type, C_type, DLP_GEMM_SFX, THREADING_SFX, HAS_MC_LOGIC,         \
-    MC_OP_TYPE)                                                                \
+    A_type, B_type, C_type, DLP_GEMM_SFX, THREADING_SFX, HAS_MTAG_B_LOGIC,     \
+    MR_OP_TYPE)                                                                \
     void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
@@ -1404,12 +1405,12 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
         /* m/n/k are scalar pointers shared across all batch GEMMs;            \
          * compute mtag_b once before the parallel region. */                  \
         AOCL_DLP_MEMORY_TAG mtag_b_mp = UNPACKED;                              \
-        if (HAS_MC_LOGIC) {                                                    \
+        if (HAS_MTAG_B_LOGIC) {                                                \
             /* The cntx queried here is not the one corresponding to the API   \
              but rather that of the underlying kernel used. Hence any updates  \
              to the API cntx via metadata will be nullified here. */           \
             mtag_b_mp =                                                        \
-                dlp_mtag_b_pick(*m, *n, *k, ic_ways, jc_ways, MC_OP_TYPE,      \
+                dlp_mtag_b_pick(*m, *n, *k, ic_ways, jc_ways, MR_OP_TYPE,      \
                                 ops ? ops->post_op_list : NULL);               \
         }                                                                      \
                                                                                \
@@ -1438,7 +1439,7 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
                                   &gemm_end);                                  \
                                                                                \
             for (iter_t i = gemm_start; i < gemm_end; i++) {                   \
-                if (HAS_MC_LOGIC) {                                            \
+                if (HAS_MTAG_B_LOGIC) {                                        \
                     mtag_b[i] = mtag_b_mp;                                     \
                 }                                                              \
                                                                                \
@@ -1723,10 +1724,12 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
  * @param C_type          Type used for alpha/beta scalars
  * @param C_type_actual   Actual type of C matrix
  * @param DLP_GEMM_SFX      Suffix for function names
- * @param HAS_MC_LOGIC    1 to enable MC-based mtag_b decision, 0 otherwise
+ * @param HAS_MTAG_B_LOGIC    1 to enable dimension based mtag_b decision, 0
+ * otherwise
  */
 #define GEN_DLP_GEMM_DECORATOR_UNIFIED(A_type, B_type, C_type, C_type_actual,  \
-                                       DLP_GEMM_SFX, HAS_MC_LOGIC, MC_OP_TYPE) \
+                                       DLP_GEMM_SFX, HAS_MTAG_B_LOGIC,         \
+                                       MR_OP_TYPE)                             \
                                                                                \
     DLP_ALIGN_FUNC(64)                                                         \
     void dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                           \
@@ -1748,11 +1751,11 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
             m, n, k, ic_ways, jc_ways, &mtag_a, &mtag_b, rntm_g, lcntx);       \
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
-        if (HAS_MC_LOGIC) {                                                    \
+        if (HAS_MTAG_B_LOGIC) {                                                \
             /* The cntx queried here is not the one corresponding to the API   \
              but rather that of the underlying kernel used. Hence any updates  \
              to the API cntx via metadata will be nullified here. */           \
-            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE,    \
+            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MR_OP_TYPE,    \
                                      ops ? ops->post_op_list : NULL);          \
         }                                                                      \
                                                                                \

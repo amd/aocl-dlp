@@ -181,31 +181,30 @@ aocl_gemm_s8s4s32of32(const char      order,
     }
 
     // Validate scale-factor granularity up front. A (M x K) varies over rows
-    // and is grouped along K, so PER_TENSOR / PER_TOKEN / PER_GROUP are valid
-    // but PER_CHANNEL (a column/N concept) is not. B (K x N) varies over
-    // columns, so PER_TENSOR / PER_CHANNEL / PER_GROUP are valid but PER_TOKEN
-    // (a row/M concept) is not. Reject cross-assigned dims instead of silently
-    // coercing them to PER_GROUP. (s8s4 is row-major only, so the column-major
-    // scale swap/transpose used by s8s8 is intentionally not needed here.)
+    // and is grouped along K, so PER_TOKEN / PER_GROUP are valid but
+    // PER_CHANNEL (a column/N concept) and PER_TENSOR are not. B (K x N)
+    // varies over columns, so PER_CHANNEL / PER_GROUP are valid but PER_TOKEN
+    // (a row/M concept) and PER_TENSOR are not. Reject cross-assigned dims
+    // instead of silently coercing them to PER_GROUP. (s8s4 is row-major only,
+    // so the column-major scale swap/transpose used by s8s8 is intentionally
+    // not needed here.)
     {
         DLP_PARAM_DIM_TYPE a_dim =
             metadata->a_quant_op->dequant_scale_factors->outer_dim;
         DLP_PARAM_DIM_TYPE b_dim =
             metadata->b_quant_op->dequant_scale_factors->outer_dim;
-        if ((a_dim != DLP_PARAM_DIM_PER_TENSOR)
-            && (a_dim != DLP_PARAM_DIM_PER_TOKEN)
+        if ((a_dim != DLP_PARAM_DIM_PER_TOKEN)
             && (a_dim != DLP_PARAM_DIM_PER_GROUP)) {
-            dlp_print_msg(" A scale factor outer_dim must be PER_TENSOR, "
-                          "PER_TOKEN or PER_GROUP for sym_quant. Exiting..",
+            dlp_print_msg(" A scale factor outer_dim must be PER_TOKEN or "
+                          "PER_GROUP for sym_quant. Exiting..",
                           __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
             goto err_hndl;
         }
-        if ((b_dim != DLP_PARAM_DIM_PER_TENSOR)
-            && (b_dim != DLP_PARAM_DIM_PER_CHANNEL)
+        if ((b_dim != DLP_PARAM_DIM_PER_CHANNEL)
             && (b_dim != DLP_PARAM_DIM_PER_GROUP)) {
-            dlp_print_msg(" B scale factor outer_dim must be PER_TENSOR, "
-                          "PER_CHANNEL or PER_GROUP for sym_quant. Exiting..",
+            dlp_print_msg(" B scale factor outer_dim must be PER_CHANNEL or "
+                          "PER_GROUP for sym_quant. Exiting..",
                           __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
             goto err_hndl;

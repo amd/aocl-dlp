@@ -742,15 +742,26 @@ generateTestName(const MicroTest&   microTest,
 
     if (auto group_scale = microTest.getGroupScaleParam()) {
         const char* a_gran_str =
-            (group_scale->getAGranularity() == AScaleGranularity::PerToken)
+            (group_scale->getAScaleGranularity() == AQuantGranularity::PerToken)
                 ? "AToken"
                 : "AGroup";
-        const char* b_gran_str =
-            (group_scale->getBGranularity() == BScaleGranularity::PerChannel)
-                ? "BChannel"
-                : "BGroup";
+        const char* b_gran_str = "BGroup";
+        if (group_scale->getBScaleGranularity()
+            == BQuantGranularity::PerChannel)
+            b_gran_str = "BChannel";
+        else if (group_scale->getBScaleGranularity()
+                 == BQuantGranularity::PerTensor)
+            b_gran_str = "BTensor";
         name << "_GroupScale" << group_scale->getGroupSize() << "_"
              << a_gran_str << "_" << b_gran_str;
+    }
+
+    if (auto woq = microTest.getWOQParam()) {
+        name << "_WOQgs" << woq->getGroupSize() << "_sf"
+             << bQuantGranularityName(woq->getBScaleGranularity());
+        if (woq->hasB_ZeroPoint()) {
+            name << "_zp" << bQuantGranularityName(woq->getBZpGranularity());
+        }
     }
 
     // Add config index for uniqueness

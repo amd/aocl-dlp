@@ -30,8 +30,8 @@
  * Example: BF16×S4→F32 GEMM with symmetric weight-only quantization (WOQ).
  *
  * B is packed (two s4 nibbles per byte), reordered for the kernel, with scales
- * in metadata.b_quant_op.dequant_scale_factors (per-tensor or per-channel on
- * N).
+ * in metadata.b_quant_op.dequant_scale_factors (per-tensor, per-channel, or
+ * per-group on N).
  */
 
 #include "aocl_dlp.h"
@@ -321,6 +321,65 @@ main()
     print_f32_matrix_section("Result Matrix C (F32)", c, m, n, ldc, 3, 3);
 
     free(b_scale_channel);
+
+    // =======================================================================
+    // Example 3: WOQ per-group B scales (len = ng * n)
+    // =======================================================================
+    printf("\n--- Example 3: WOQ per-group B scales (len=ng * n) ---\n\n");
+
+    md_t group_size = 16;
+    md_t ng         = (k + group_size - 1) / group_size;
+
+    float* b_scale_group =
+        (float*)malloc((size_t)ng * (size_t)n * sizeof(float));
+    if (!b_scale_group) {
+        printf("Group scale allocation failed\n");
+        goto cleanup;
+    }
+    // Layout is group-major along K, then N: index = group * n + col.
+    for (md_t g = 0; g < ng; g++) {
+        for (md_t j = 0; j < n; j++) {
+            b_scale_group[g * n + j] = 0.5f + 0.01f * (float)(g * n + j);
+        }
+    }
+
+    dlp_qparam_t b_scl_group = { .data      = b_scale_group,
+                                 .len       = ng * n,
+                                 .stor_type = DLP_F32,
+                                 .outer_dim = DLP_PARAM_DIM_PER_GROUP };
+
+    printf("B WOQ: group_size=%ld, num_groups=%ld, scale_factor_len=%ld "
+           "(per-group), first 3: %.6f, %.6f, %.6f\n",
+           (long)group_size, (long)ng, (long)(ng * n), b_scale_group[0],
+           b_scale_group[1], b_scale_group[2]);
+    printf("  ... (scales for all %ld groups * %ld columns)\n\n", (long)ng,
+           (long)n);
+
+    memset(&metadata, 0, sizeof(metadata));
+    dlp_quant_op_t b_quant_op_group = { .quant_op_kind =
+                                            DLP_QUANT_OP_DEQUANTIZE,
+                                        .src_type              = DLP_S4,
+                                        .dst_type              = DLP_BF16,
+                                        .group_size            = group_size,
+                                        .quant_scale_factors   = NULL,
+                                        .dequant_scale_factors = &b_scl_group,
+                                        .zero_point            = NULL };
+    metadata.b_quant_op             = &b_quant_op_group;
+    memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
+
+    aocl_gemm_bf16s4f32of32('R', 'N', 'N', m, n, k, 1.0f, a, lda, 'N',
+                            b_reordered, ldb_gemm, 'R', 0.0f, c, ldc,
+                            &metadata);
+    if (metadata.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+        printf("GEMM failed, error_code=%d\n",
+               (int)metadata.error_hndl.error_code);
+        free(b_scale_group);
+        goto cleanup;
+    }
+
+    print_f32_matrix_section("Result Matrix C (F32)", c, m, n, ldc, 3, 3);
+
+    free(b_scale_group);
 
 cleanup:
     free(a);

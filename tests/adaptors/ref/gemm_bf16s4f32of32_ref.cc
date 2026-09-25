@@ -27,6 +27,7 @@
  */
 
 #include "adaptors/ref/gemm_ref.hh"
+#include "classic/aocl_gemm_metadata.h"
 #include "utils/conversion_utils.hh"
 #include <iostream>
 
@@ -80,7 +81,8 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
                             md_t                  sf_len,
                             framework::MatrixType sf_type,
                             bool                  reorder_b,
-                            md_t                  group_size)
+                            md_t                  group_size,
+                            DLP_PARAM_DIM_TYPE    b_scale_dim)
 {
     // Validate WOQ metadata (scale required; S4 has no zero-point).
     if (b_scale_data == nullptr) {
@@ -124,10 +126,17 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
     if (gs_eff <= 0) {
         gs_eff = (k > 0) ? k : 1;
     }
-    bool per_tensor_scale = (sf_len == 1);
-    auto getScale         = [&](md_t j, md_t k_idx) -> float {
+    (void)sf_len;
+    auto getScale = [&](md_t j, md_t k_idx) -> float {
         md_t group = k_idx / gs_eff;
-        md_t idx   = per_tensor_scale ? group : (group * n + j);
+        md_t idx   = 0;
+        if (b_scale_dim == DLP_PARAM_DIM_PER_TENSOR) {
+            idx = 0;
+        } else if (b_scale_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            idx = j;
+        } else {
+            idx = group * n + j;
+        }
         return getValueFromBuffer(b_scale_data, sf_type, idx);
     };
 

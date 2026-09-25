@@ -32,6 +32,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace dlp::testing::framework {
@@ -55,7 +56,7 @@ enum class OperationType : uint8_t
 };
 
 /**
- * @enum AScaleGranularity
+ * @enum AQuantGranularity
  * @brief Granularity of the A (activation) scale factor for GroupScale.
  *
  * A is M x K, so its scale varies over rows (M) and is grouped along K. The two
@@ -64,28 +65,47 @@ enum class OperationType : uint8_t
  *   - PerGroup: one scale per (row, K-group)   -> DLP_PARAM_DIM_PER_GROUP
  *   - PerToken: one scale per row (K collapsed) -> DLP_PARAM_DIM_PER_TOKEN
  */
-enum class AScaleGranularity : uint8_t
+enum class AQuantGranularity : uint8_t
 {
     PerGroup = 0,
     PerToken = 1,
 };
 
 /**
- * @enum BScaleGranularity
+ * @enum BQuantGranularity
  * @brief Granularity of the B (weight) scale factor for GroupScale.
  *
  * B is K x N, so its scale varies over columns (N) and is grouped along K. The
- * two meaningful choices are independent of A and map directly onto the B scale
- * factor's DLP_PARAM_DIM_TYPE outer_dim in the unified C API:
+ * three meaningful choices are independent of A and map directly onto the B
+ * scale factor's DLP_PARAM_DIM_TYPE outer_dim in the unified C API:
  *   - PerGroup:   one scale per (K-group, col)   -> DLP_PARAM_DIM_PER_GROUP
  *   - PerChannel: one scale per column (K collapsed) ->
  * DLP_PARAM_DIM_PER_CHANNEL
+ *   - PerTensor:  one scale for the whole B tensor -> DLP_PARAM_DIM_PER_TENSOR
+ *
+ * Weight-only (bf16s4/bf16u4) APIs accept all three. Symmetric int8 quant
+ * APIs (s8s8_sym_quant / s8s4_sym_quant) accept PerGroup and PerChannel only
+ * and early-return on PerTensor.
  */
-enum class BScaleGranularity : uint8_t
+enum class BQuantGranularity : uint8_t
 {
     PerGroup   = 0,
     PerChannel = 1,
+    PerTensor  = 2,
 };
+
+inline const char*
+bQuantGranularityName(BQuantGranularity g)
+{
+    switch (g) {
+        case BQuantGranularity::PerChannel:
+            return "BChannel";
+        case BQuantGranularity::PerTensor:
+            return "BTensor";
+        default:
+            return "BGroup";
+    }
+}
 
 /**
  * @brief Check if an operation type is a pre-GEMM (quantisation) operation
@@ -405,7 +425,10 @@ class AQuantParam : public IOperationParam
 /**
  * @class WOQParam
  * @brief Parameter class for Weight-Only Quantization (WOQ) pre-operations
- * Used for bf16s4 quantization with scale factors and zero points for B matrix
+ * Used for bf16s4/bf16u4 quantization with scale factors and optional
+ * zero points for B. Scale and zero-point each have an independent
+ * BQuantGranularity: PER_GROUP -> ng*n values, PER_CHANNEL -> n values,
+ * PER_TENSOR -> 1 value.
  */
 class WOQParam : public IOperationParam
 {
@@ -413,12 +436,16 @@ class WOQParam : public IOperationParam
     std::unique_ptr<Matrix> m_b_scale_factor;
     std::unique_ptr<Matrix> m_b_zero_point;
     md_t                    m_group_size = 0; // 0 means one group over full K
+    BQuantGranularity       m_b_scale_granularity = BQuantGranularity::PerGroup;
+    BQuantGranularity       m_b_zp_granularity    = BQuantGranularity::PerGroup;
 
   public:
     WOQParam() = default;
 
     WOQParam(const WOQParam& other)
         : m_group_size(other.m_group_size)
+        , m_b_scale_granularity(other.m_b_scale_granularity)
+        , m_b_zp_granularity(other.m_b_zp_granularity)
     {
         if (other.m_b_scale_factor) {
             m_b_scale_factor =
@@ -447,12 +474,35 @@ class WOQParam : public IOperationParam
     }
 
     void setGroupSize(md_t groupSize) { m_group_size = groupSize; }
+    void setBScaleGranularity(BQuantGranularity g)
+    {
+        m_b_scale_granularity = g;
+    }
+    void setBZpGranularity(BQuantGranularity g) { m_b_zp_granularity = g; }
 
     const Matrix* getB_ScaleFactor() const { return m_b_scale_factor.get(); }
     const Matrix* getB_ZeroPoint() const { return m_b_zero_point.get(); }
     bool hasB_ScaleFactor() const { return m_b_scale_factor != nullptr; }
     bool hasB_ZeroPoint() const { return m_b_zero_point != nullptr; }
     md_t getGroupSize() const { return m_group_size; }
+    BQuantGranularity getBScaleGranularity() const
+    {
+        return m_b_scale_granularity;
+    }
+    BQuantGranularity getBZpGranularity() const { return m_b_zp_granularity; }
+
+    // Logical number of B scale/zp values for the given granularity.
+    // PER_TENSOR: 1, PER_CHANNEL: n, PER_GROUP: ng * n.
+    static md_t logicalCount(BQuantGranularity gran, md_t n, md_t ng)
+    {
+        if (gran == BQuantGranularity::PerTensor) {
+            return 1;
+        }
+        if (gran == BQuantGranularity::PerChannel) {
+            return n;
+        }
+        return ng * n;
+    }
 
     // WOQ kernels treat group_size 0 (or a value larger than K) as one group
     // spanning K. The scale/zp buffers are laid out as num_groups * base_len.
@@ -465,19 +515,38 @@ class WOQParam : public IOperationParam
         return (k + gs_eff - 1) / gs_eff;
     }
 
-    static md_t logicalParamLen(md_t total_elems,
-                                md_t n,
-                                md_t k,
-                                md_t group_size)
+    static md_t bufferElemCount(const Matrix& buf)
     {
-        md_t ng = numGroups(k, group_size);
-        if (total_elems == ng) {
-            return 1;
+        return buf.getRows() * buf.getCols();
+    }
+
+    // Fail if the scale/zp allocations do not match the declared granularity.
+    // convertWOQ publishes logicalCount as qparam.len; a shorter buffer would
+    // then be indexed out of range in pack/ref/kernels.
+    void validateBuffers(md_t n, md_t k) const
+    {
+        md_t ng = numGroups(k, m_group_size);
+        if (!m_b_scale_factor) {
+            throw std::runtime_error("WOQ scale factor buffer is required");
         }
-        if (n > 0 && total_elems == ng * n) {
-            return n;
+        md_t want_sf = logicalCount(m_b_scale_granularity, n, ng);
+        md_t have_sf = bufferElemCount(*m_b_scale_factor);
+        if (have_sf != want_sf) {
+            throw std::runtime_error(
+                "WOQ scale factor buffer has " + std::to_string(have_sf)
+                + " elements, expected " + std::to_string(want_sf)
+                + " for declared B scale granularity");
         }
-        return 0;
+        if (m_b_zero_point) {
+            md_t want_zp = logicalCount(m_b_zp_granularity, n, ng);
+            md_t have_zp = bufferElemCount(*m_b_zero_point);
+            if (have_zp != want_zp) {
+                throw std::runtime_error(
+                    "WOQ zero-point buffer has " + std::to_string(have_zp)
+                    + " elements, expected " + std::to_string(want_zp)
+                    + " for declared B zero-point granularity");
+            }
+        }
     }
 };
 
@@ -566,16 +635,16 @@ class GroupScaleParam : public IOperationParam
     md_t                    m_group_size = 0; // 0 means full k dimension
     // A and B granularity are fully independent (they map onto each scale
     // factor's own outer_dim), so they are tracked separately.
-    AScaleGranularity m_a_granularity = AScaleGranularity::PerGroup;
-    BScaleGranularity m_b_granularity = BScaleGranularity::PerGroup;
+    AQuantGranularity m_a_scale_granularity = AQuantGranularity::PerGroup;
+    BQuantGranularity m_b_scale_granularity = BQuantGranularity::PerGroup;
 
   public:
     GroupScaleParam() = default;
 
     GroupScaleParam(const GroupScaleParam& other)
         : m_group_size(other.m_group_size)
-        , m_a_granularity(other.m_a_granularity)
-        , m_b_granularity(other.m_b_granularity)
+        , m_a_scale_granularity(other.m_a_scale_granularity)
+        , m_b_scale_granularity(other.m_b_scale_granularity)
     {
         if (other.m_a_scale_factor) {
             m_a_scale_factor =
@@ -605,16 +674,28 @@ class GroupScaleParam : public IOperationParam
     }
 
     void setGroupSize(md_t groupSize) { m_group_size = groupSize; }
-    void setAGranularity(AScaleGranularity g) { m_a_granularity = g; }
-    void setBGranularity(BScaleGranularity g) { m_b_granularity = g; }
+    void setAScaleGranularity(AQuantGranularity g)
+    {
+        m_a_scale_granularity = g;
+    }
+    void setBScaleGranularity(BQuantGranularity g)
+    {
+        m_b_scale_granularity = g;
+    }
 
     const Matrix* getAScaleFactor() const { return m_a_scale_factor.get(); }
     const Matrix* getBScaleFactor() const { return m_b_scale_factor.get(); }
     bool hasAScaleFactor() const { return m_a_scale_factor != nullptr; }
     bool hasBScaleFactor() const { return m_b_scale_factor != nullptr; }
     md_t getGroupSize() const { return m_group_size; }
-    AScaleGranularity getAGranularity() const { return m_a_granularity; }
-    BScaleGranularity getBGranularity() const { return m_b_granularity; }
+    AQuantGranularity getAScaleGranularity() const
+    {
+        return m_a_scale_granularity;
+    }
+    BQuantGranularity getBScaleGranularity() const
+    {
+        return m_b_scale_granularity;
+    }
 };
 
 /**
@@ -1235,7 +1316,11 @@ class WOQBuilder
   private:
     std::unique_ptr<Matrix> m_b_scale_factor;
     std::unique_ptr<Matrix> m_b_zero_point;
-    md_t                    m_group_size = 0;
+    md_t                    m_group_size          = 0;
+    BQuantGranularity       m_b_scale_granularity = BQuantGranularity::PerGroup;
+    BQuantGranularity       m_b_zp_granularity    = BQuantGranularity::PerGroup;
+    bool                    m_scale_granularity_set = false;
+    bool                    m_zp_granularity_set    = false;
 
   public:
     WOQBuilder& setB_ScaleFactor(const Matrix& sf)
@@ -1256,11 +1341,33 @@ class WOQBuilder
         return *this;
     }
 
+    WOQBuilder& setBScaleGranularity(BQuantGranularity g)
+    {
+        m_b_scale_granularity   = g;
+        m_scale_granularity_set = true;
+        return *this;
+    }
+
+    WOQBuilder& setBZpGranularity(BQuantGranularity g)
+    {
+        m_b_zp_granularity   = g;
+        m_zp_granularity_set = true;
+        return *this;
+    }
+
     std::unique_ptr<IOperationParam> build()
     {
         if (!m_b_scale_factor) {
             throw std::runtime_error(
                 "B_ScaleFactor is required for WOQ operation");
+        }
+        if (!m_scale_granularity_set) {
+            throw std::runtime_error(
+                "b_scale_granularity is required for WOQ operation");
+        }
+        if (m_b_zero_point && !m_zp_granularity_set) {
+            throw std::runtime_error(
+                "b_zp_granularity is required when a WOQ zero-point is set");
         }
         auto param = std::make_unique<WOQParam>();
         param->setB_ScaleFactor(*m_b_scale_factor);
@@ -1268,6 +1375,16 @@ class WOQBuilder
             param->setB_ZeroPoint(*m_b_zero_point);
         }
         param->setGroupSize(m_group_size);
+        param->setBScaleGranularity(m_b_scale_granularity);
+        param->setBZpGranularity(m_b_zp_granularity);
+        return param;
+    }
+
+    // Same as build(), then checks scale/zp sizes against n, K, and group_size.
+    std::unique_ptr<IOperationParam> build(md_t n, md_t k)
+    {
+        auto param = build();
+        static_cast<WOQParam&>(*param).validateBuffers(n, k);
         return param;
     }
 };
@@ -1281,9 +1398,11 @@ class GroupScaleBuilder
   private:
     std::unique_ptr<Matrix> m_a_scale_factor;
     std::unique_ptr<Matrix> m_b_scale_factor;
-    md_t                    m_group_size    = 0;
-    AScaleGranularity       m_a_granularity = AScaleGranularity::PerGroup;
-    BScaleGranularity       m_b_granularity = BScaleGranularity::PerGroup;
+    md_t                    m_group_size          = 0;
+    AQuantGranularity       m_a_scale_granularity = AQuantGranularity::PerGroup;
+    BQuantGranularity       m_b_scale_granularity = BQuantGranularity::PerGroup;
+    bool                    m_a_scale_granularity_set = false;
+    bool                    m_b_scale_granularity_set = false;
 
   public:
     GroupScaleBuilder& setAScaleFactor(const Matrix& sf)
@@ -1304,15 +1423,17 @@ class GroupScaleBuilder
         return *this;
     }
 
-    GroupScaleBuilder& setAGranularity(AScaleGranularity g)
+    GroupScaleBuilder& setAScaleGranularity(AQuantGranularity g)
     {
-        m_a_granularity = g;
+        m_a_scale_granularity     = g;
+        m_a_scale_granularity_set = true;
         return *this;
     }
 
-    GroupScaleBuilder& setBGranularity(BScaleGranularity g)
+    GroupScaleBuilder& setBScaleGranularity(BQuantGranularity g)
     {
-        m_b_granularity = g;
+        m_b_scale_granularity     = g;
+        m_b_scale_granularity_set = true;
         return *this;
     }
 
@@ -1322,14 +1443,19 @@ class GroupScaleBuilder
             throw std::runtime_error(
                 "GroupScaleBuilder: both A and B scale factors are required");
         }
+        if (!m_a_scale_granularity_set || !m_b_scale_granularity_set) {
+            throw std::runtime_error(
+                "GroupScaleBuilder: a_scale_granularity and "
+                "b_scale_granularity are required");
+        }
         auto param = std::make_unique<GroupScaleParam>();
         param->setAScaleFactor(*m_a_scale_factor);
         param->setBScaleFactor(*m_b_scale_factor);
         if (m_group_size > 0) {
             param->setGroupSize(m_group_size);
         }
-        param->setAGranularity(m_a_granularity);
-        param->setBGranularity(m_b_granularity);
+        param->setAScaleGranularity(m_a_scale_granularity);
+        param->setBScaleGranularity(m_b_scale_granularity);
         return param;
     }
 };

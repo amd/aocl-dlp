@@ -110,10 +110,13 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
@@ -135,7 +138,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -1112,10 +1115,13 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
@@ -1137,7 +1143,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -1989,10 +1995,13 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
@@ -2014,7 +2023,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16)
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -2744,10 +2753,13 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2xlt16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
@@ -2769,7 +2781,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2xlt16)
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -3383,10 +3395,13 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1xlt16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
@@ -3408,7 +3423,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1xlt16)
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -3900,9 +3915,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -3918,7 +3937,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
             scale1 = _mm512_permutex2var_ps(scale0, mask_scale2, scale0);
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -4875,9 +4894,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -4893,7 +4916,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
             scale1 = _mm512_permutex2var_ps(scale0, mask_scale2, scale0);
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -5740,9 +5763,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -5758,7 +5785,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x16)
             scale1 = _mm512_permutex2var_ps(scale0, mask_scale2, scale0);
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -6473,9 +6500,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -6491,7 +6522,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x16)
             scale1 = _mm512_permutex2var_ps(scale0, mask_scale2, scale0);
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -7082,9 +7113,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x16)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -7100,7 +7135,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x16)
             scale1 = _mm512_permutex2var_ps(scale0, mask_scale2, scale0);
             scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -7586,9 +7621,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -7611,7 +7650,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
             scale3 = _mm512_permutex2var_ps(scale2, mask_scale2, scale2);
             scale2 = _mm512_permutex2var_ps(scale2, mask_scale1, scale2);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -8890,9 +8929,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -8915,7 +8958,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
             scale3 = _mm512_permutex2var_ps(scale2, mask_scale2, scale2);
             scale2 = _mm512_permutex2var_ps(scale2, mask_scale1, scale2);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -10013,9 +10056,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x32)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -10037,7 +10084,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x32)
             scale3 = _mm512_permutex2var_ps(scale2, mask_scale2, scale2);
             scale2 = _mm512_permutex2var_ps(scale2, mask_scale1, scale2);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -10953,9 +11000,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x32)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -10978,7 +11029,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x32)
             scale3 = _mm512_permutex2var_ps(scale2, mask_scale2, scale2);
             scale2 = _mm512_permutex2var_ps(scale2, mask_scale1, scale2);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -11709,9 +11760,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x32)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -11734,7 +11789,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x32)
             scale3 = _mm512_permutex2var_ps(scale2, mask_scale2, scale2);
             scale2 = _mm512_permutex2var_ps(scale2, mask_scale1, scale2);
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -12337,9 +12392,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -12370,7 +12429,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
             scale4 = _mm512_permutex2var_ps(scale4, mask_scale1, scale4);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -13955,9 +14014,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -13988,7 +14051,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
             scale4 = _mm512_permutex2var_ps(scale4, mask_scale1, scale4);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -15335,9 +15398,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -15368,7 +15435,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48)
             scale4 = _mm512_permutex2var_ps(scale4, mask_scale1, scale4);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -16482,9 +16549,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x48)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -16515,7 +16586,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x48)
             scale4 = _mm512_permutex2var_ps(scale4, mask_scale1, scale4);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(
@@ -17408,9 +17479,13 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x48)
         int16_t a_kfringe_buf = 0;
 
         md_t pre_op_sf_off = 0;
-        if (pre_ops_attr.scale_factor_len > 1) {
-            pre_op_sf_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+            } else {
+                pre_op_sf_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 // load scale factor vectors
@@ -17441,7 +17516,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x48)
             scale4 = _mm512_permutex2var_ps(scale4, mask_scale1, scale4);
 
         } else {
-            pre_op_sf_off = group;
+            pre_op_sf_off = 0;
 
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 scale0 = _mm512_set1_ps(

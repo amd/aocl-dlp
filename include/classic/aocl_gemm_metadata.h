@@ -230,8 +230,11 @@ typedef struct
 {
     void* zero_point;     /**< Pointer to zero-point values */
     md_t  zero_point_len; /**< Length of zero-point array (1 for per-tensor, n
-                             for per-channel) */
-    DLP_TYPE zero_point_type; /**< Data type of zero-point values */
+                             for per-channel, ng * n for per-group) */
+    DLP_TYPE           zero_point_type; /**< Data type of zero-point values */
+    DLP_PARAM_DIM_TYPE zero_point_dim;  /**< Granularity. Required for the
+                                             Asymmetric quantization only. See
+                                             ::DLP_PARAM_DIM_TYPE. */
 } dlp_zp_t;
 
 /**

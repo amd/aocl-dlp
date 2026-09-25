@@ -31,7 +31,8 @@
  *
  * B is packed (two u4 nibbles per byte), reordered with the same helper
  * as bf16s4; GEMM uses aocl_gemm_bf16u4f32of32 with mem_format_b 'R' and
- * metadata.b_quant_op (dequant scale factors and zero point). Supported ZP
+ * metadata.b_quant_op (dequant scale factors and zero point). Scale and ZP
+ * may be per-tensor, per-channel, or per-group independently. Supported ZP
  * types include DLP_S8 and DLP_BF16; this example uses s8 ZPs.
  */
 
@@ -340,6 +341,81 @@ main()
 
     free(b_scale_ch);
     free(b_zp_ch);
+
+    // =======================================================================
+    // Example 3: per-group B scale and ZP (len = ng * n)
+    // =======================================================================
+    printf(
+        "\n--- Example 3: WOQ per-group B scale and ZP (len=ng * n) ---\n\n");
+
+    md_t group_size = 16;
+    md_t ng         = (k + group_size - 1) / group_size;
+
+    float* b_scale_group =
+        (float*)malloc((size_t)ng * (size_t)n * sizeof(float));
+    int8_t* b_zp_group =
+        (int8_t*)malloc((size_t)ng * (size_t)n * sizeof(int8_t));
+    if (!b_scale_group || !b_zp_group) {
+        printf("Group WOQ allocation failed\n");
+        free(b_scale_group);
+        free(b_zp_group);
+        goto cleanup;
+    }
+    // Layout is group-major along K, then N: index = group * n + col.
+    for (md_t g = 0; g < ng; g++) {
+        for (md_t j = 0; j < n; j++) {
+            md_t idx           = g * n + j;
+            b_scale_group[idx] = 0.08f + 0.0005f * (float)idx;
+            b_zp_group[idx]    = (int8_t)(7 + (idx % 3));
+        }
+    }
+
+    dlp_qparam_t b_scl_group  = { .data      = b_scale_group,
+                                  .len       = ng * n,
+                                  .stor_type = DLP_F32,
+                                  .outer_dim = DLP_PARAM_DIM_PER_GROUP };
+    dlp_qparam_t b_zp_t_group = { .data      = b_zp_group,
+                                  .len       = ng * n,
+                                  .stor_type = DLP_S8,
+                                  .outer_dim = DLP_PARAM_DIM_PER_GROUP };
+
+    printf("B WOQ: group_size=%ld, num_groups=%ld, scale_factor_len=%ld, "
+           "first 3: %.6f, %.6f, %.6f\n",
+           (long)group_size, (long)ng, (long)(ng * n), b_scale_group[0],
+           b_scale_group[1], b_scale_group[2]);
+    printf("       zero_point_len=%ld (s8), first 3: %d, %d, %d\n",
+           (long)(ng * n), (int)b_zp_group[0], (int)b_zp_group[1],
+           (int)b_zp_group[2]);
+    printf("  ... (scales and ZPs for all %ld groups * %ld columns)\n\n",
+           (long)ng, (long)n);
+
+    memset(&metadata, 0, sizeof(metadata));
+    dlp_quant_op_t b_quant_op_group = { .quant_op_kind =
+                                            DLP_QUANT_OP_DEQUANTIZE,
+                                        .src_type              = DLP_U4,
+                                        .dst_type              = DLP_BF16,
+                                        .group_size            = group_size,
+                                        .quant_scale_factors   = NULL,
+                                        .dequant_scale_factors = &b_scl_group,
+                                        .zero_point = &b_zp_t_group };
+    metadata.b_quant_op             = &b_quant_op_group;
+    memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
+
+    aocl_gemm_bf16u4f32of32('R', 'N', 'N', m, n, k, 1.0f, a, lda, 'N',
+                            b_reordered, ldb_gemm, 'R', 0.0f, c, ldc,
+                            &metadata);
+    if (metadata.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+        printf("GEMM failed, error_code=%d\n",
+               (int)metadata.error_hndl.error_code);
+        free(b_scale_group);
+        free(b_zp_group);
+        goto cleanup;
+    }
+
+    print_f32_matrix_section("Result Matrix C (F32)", c, m, n, ldc, 3, 3);
+
+    free(b_scale_group);
+    free(b_zp_group);
 
 cleanup:
     free(a);

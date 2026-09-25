@@ -27,6 +27,7 @@
  */
 
 #include "dlp_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 #include "gemm_utils/dlp_gemm_utils.h"
 
@@ -114,6 +115,7 @@ dlp_gemm_qparam_to_zp(const dlp_qparam_t* qparam)
     if (qparam != NULL) {
         zp.zero_point_len  = qparam->len;
         zp.zero_point_type = qparam->stor_type;
+        zp.zero_point_dim  = qparam->outer_dim;
         // Keep len/type so caller-side validation can report the error when a
         // non-empty qparam has no backing data.
         if (qparam->data != NULL) {
@@ -124,22 +126,26 @@ dlp_gemm_qparam_to_zp(const dlp_qparam_t* qparam)
 }
 
 DLP_INLINE void
-dlp_gemm_set_pre_ops_node_params(dlp_gemm_pre_op* pre_op_node,
-                                 md_t             group_size,
-                                 void*            zero_point,
-                                 void*            scale_factor,
-                                 md_t             zero_point_len,
-                                 md_t             scale_factor_len,
-                                 md_t             scale_factor_type,
-                                 md_t             zero_point_type)
+dlp_gemm_set_pre_ops_node_params(dlp_gemm_pre_op*   pre_op_node,
+                                 md_t               group_size,
+                                 DLP_PARAM_DIM_TYPE scale_factor_dim,
+                                 DLP_PARAM_DIM_TYPE zero_point_dim,
+                                 void*              zero_point,
+                                 void*              scale_factor,
+                                 md_t               zero_point_len,
+                                 md_t               scale_factor_len,
+                                 md_t               scale_factor_type,
+                                 md_t               zero_point_type)
 {
     pre_op_node->group_size        = group_size;
     pre_op_node->scale_factor      = scale_factor;
     pre_op_node->scale_factor_len  = scale_factor_len;
-    pre_op_node->zp                = zero_point;
-    pre_op_node->zp_len            = zero_point_len;
+    pre_op_node->scale_factor_dim  = scale_factor_dim;
     pre_op_node->scale_factor_type = scale_factor_type;
-    pre_op_node->zp_type           = zero_point_type;
+    pre_op_node->zero_point_dim    = zero_point_dim;
+    pre_op_node->zero_point        = zero_point;
+    pre_op_node->zero_point_len    = zero_point_len;
+    pre_op_node->zero_point_type   = zero_point_type;
     pre_op_node->next              = NULL;
 }
 
@@ -300,8 +306,12 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
             && (b_scl_ptr->scale_factor == NULL))
             return DLP_CLSC_NULL_POINTER;
 
-        if (b_scl_ptr->scale_factor_len < (n * b_num_groups))
+        if (b_scl_ptr->scale_factor_len < (n * b_num_groups)) {
+            dlp_print_msg(" B scale factor length is less than the number of "
+                          "groups. Exiting..",
+                          __FILE__, __LINE__);
             return DLP_CLSC_INVALID_SF_LEN;
+        }
     }
 
     if ((a_scl_ptr != NULL) && (b_scl_ptr != NULL)
@@ -361,10 +371,7 @@ dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
     (void)(m); // Unused for now, potential to be used later.
 
     if (b_quant_op == NULL) {
-        dlp_gemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
-                                         DLP_INVALID, DLP_INVALID);
-
-        return DLP_CLSC_SUCCESS;
+        return DLP_CLSC_NULL_POINTER;
     }
 
     if ((b_quant_op->quant_op_kind != DLP_QUANT_OP_DEQUANTIZE)
@@ -398,43 +405,122 @@ dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
     }
 
     for (iter_t i = 0; i < 1; ++i) {
-        if (b_zp_ptr != NULL) {
-            /* check for validity of pre-ops */
-            if ((b_zp_ptr->zero_point_len > 0)
-                && (b_zp_ptr->zero_point == NULL))
-                return DLP_CLSC_NULL_POINTER;
-            if ((b_zp_ptr->zero_point_len != 1)
-                && (b_zp_ptr->zero_point_len != n)) {
-                return DLP_CLSC_INVALID_ZP_LEN;
-            }
-        }
-
         if ((b_quant_op->quant_op_kind == DLP_QUANT_OP_DEQUANTIZE)
             && (b_scl_ptr == NULL)) {
             return DLP_CLSC_NULL_POINTER;
         }
 
+        md_t               num_groups = (k + group_size - 1) / group_size;
+        DLP_PARAM_DIM_TYPE b_scale_factor_dim =
+            (b_scl_ptr != NULL) ? b_scl_ptr->scale_factor_dim
+                                : DLP_PARAM_DIM_INVALID;
+
+        DLP_PARAM_DIM_TYPE b_zero_point_dim = (b_zp_ptr != NULL)
+                                                  ? b_zp_ptr->zero_point_dim
+                                                  : DLP_PARAM_DIM_INVALID;
+
+        DLP_TYPE b_sf_stor_type = DLP_INVALID;
+        DLP_TYPE b_zp_stor_type = DLP_INVALID;
+
         if (b_scl_ptr != NULL) {
             if ((b_scl_ptr->scale_factor_len > 0)
                 && (b_scl_ptr->scale_factor == NULL))
                 return DLP_CLSC_NULL_POINTER;
-            // check if scale factor length is valid
-            if ((b_scl_ptr->scale_factor_len != 1)
-                && (b_scl_ptr->scale_factor_len != n)) {
+
+            // B (K x N) varies over columns: PER_TENSOR / PER_CHANNEL /
+            // PER_GROUP are valid, PER_TOKEN is not.
+            if ((b_scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR)
+                && (b_scale_factor_dim != DLP_PARAM_DIM_PER_CHANNEL)
+                && (b_scale_factor_dim != DLP_PARAM_DIM_PER_GROUP)) {
+                dlp_print_msg("Invalid scale-factor granularity for B matrix. "
+                              "Exiting..",
+                              __FILE__, __LINE__);
+                return DLP_CLSC_NOT_SUPPORTED;
+            }
+
+            if ((b_scale_factor_dim == DLP_PARAM_DIM_PER_GROUP)
+                && (b_scl_ptr->scale_factor_len != (n * num_groups))) {
+                dlp_print_msg(
+                    " Invalid B scale factor length for PER_GROUP. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_INVALID_SF_LEN;
+            } else if ((b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL)
+                       && (b_scl_ptr->scale_factor_len != (n))) {
+                dlp_print_msg(
+                    " Invalid B scale factor length for PER_CHANNEL. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_INVALID_SF_LEN;
+            } else if ((b_scale_factor_dim == DLP_PARAM_DIM_PER_TENSOR)
+                       && (b_scl_ptr->scale_factor_len != (1))) {
+                dlp_print_msg(
+                    " Invalid B scale factor length for PER_TENSOR. Exiting..",
+                    __FILE__, __LINE__);
                 return DLP_CLSC_INVALID_SF_LEN;
             }
+
+            b_sf_stor_type =
+                dlp_gemm_get_stor_type(b_scl_ptr->scale_factor_type);
+            if (b_sf_stor_type != DLP_BF16 && b_sf_stor_type != DLP_F32) {
+                dlp_print_msg(
+                    " B scale factor type must be BF16 or F32. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_NOT_SUPPORTED;
+            }
         }
+
+        if (b_zp_ptr != NULL) {
+            /* check for validity of pre-ops */
+            if ((b_zp_ptr->zero_point_len > 0)
+                && (b_zp_ptr->zero_point == NULL))
+                return DLP_CLSC_NULL_POINTER;
+
+            // Same column-oriented allowlist as scale. s4 rejects zp before
+            // calling this helper, so this path is u4 (and any future zp WOQ).
+            if ((b_zero_point_dim != DLP_PARAM_DIM_PER_TENSOR)
+                && (b_zero_point_dim != DLP_PARAM_DIM_PER_CHANNEL)
+                && (b_zero_point_dim != DLP_PARAM_DIM_PER_GROUP)) {
+                dlp_print_msg("Invalid zero-point granularity for B matrix. "
+                              "Exiting..",
+                              __FILE__, __LINE__);
+                return DLP_CLSC_NOT_SUPPORTED;
+            }
+
+            if ((b_zero_point_dim == DLP_PARAM_DIM_PER_GROUP)
+                && (b_zp_ptr->zero_point_len != (n * num_groups))) {
+                dlp_print_msg(
+                    " Invalid B zero point length for PER_GROUP. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_INVALID_ZP_LEN;
+            } else if ((b_zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL)
+                       && (b_zp_ptr->zero_point_len != (n))) {
+                dlp_print_msg(
+                    " Invalid B zero point length for PER_CHANNEL. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_INVALID_ZP_LEN;
+            } else if ((b_zero_point_dim == DLP_PARAM_DIM_PER_TENSOR)
+                       && (b_zp_ptr->zero_point_len != (1))) {
+                dlp_print_msg(
+                    " Invalid B zero point length for PER_TENSOR. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_INVALID_ZP_LEN;
+            }
+
+            b_zp_stor_type = dlp_gemm_get_stor_type(b_zp_ptr->zero_point_type);
+            if (b_zp_stor_type != DLP_BF16 && b_zp_stor_type != DLP_S8) {
+                dlp_print_msg(
+                    " B zero point type must be BF16 or S8. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_NOT_SUPPORTED;
+            }
+        }
+
         dlp_gemm_set_pre_ops_node_params(
-            (pre_op_list + i), group_size,
+            (pre_op_list + i), group_size, b_scale_factor_dim, b_zero_point_dim,
             (b_zp_ptr == NULL) ? NULL : b_zp_ptr->zero_point,
             (b_scl_ptr == NULL) ? NULL : b_scl_ptr->scale_factor,
             (b_zp_ptr == NULL) ? 0 : b_zp_ptr->zero_point_len,
             (b_scl_ptr == NULL) ? 0 : b_scl_ptr->scale_factor_len,
-            (b_scl_ptr == NULL)
-                ? DLP_INVALID
-                : ((b_scl_ptr->scale_factor_type == DLP_BF16) ? DLP_BF16
-                                                              : DLP_F32),
-            (b_zp_ptr == NULL) ? DLP_INVALID : b_zp_ptr->zero_point_type);
+            b_sf_stor_type, b_zp_stor_type);
 
         (pre_op_list + i)->next = NULL;
     }

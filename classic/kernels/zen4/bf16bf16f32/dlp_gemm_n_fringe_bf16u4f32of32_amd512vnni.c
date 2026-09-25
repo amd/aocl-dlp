@@ -139,10 +139,13 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6xlt16m)
 
             int16_t a_kfringe_buf = 0;
 
-            if (pre_ops_attr.scale_factor_len > 1) {
-
-                pre_op_sf_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_sf_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
 
                 __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
@@ -164,7 +167,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6xlt16m)
                 scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
 
             } else {
-                pre_op_sf_off = group;
+                pre_op_sf_off = 0;
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     scale0 = _mm512_set1_ps(
@@ -178,9 +181,13 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6xlt16m)
                 scale1 = scale0;
             }
 
-            if (pre_ops_attr.zero_point_len > 1) {
-                pre_op_zp_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.zero_point_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_zp_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
 
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(
@@ -196,7 +203,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6xlt16m)
                                                            zero_point);
                 }
             } else {
-                pre_op_zp_off = group;
+                pre_op_zp_off = 0;
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(*(
                         (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
@@ -1436,9 +1443,13 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x16m)
 
             int16_t a_kfringe_buf = 0;
 
-            if (pre_ops_attr.scale_factor_len > 1) {
-                pre_op_sf_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_sf_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     // load scale factor vectors
@@ -1456,7 +1467,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x16m)
                 scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
 
             } else {
-                pre_op_sf_off = group;
+                pre_op_sf_off = 0;
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     scale0 = _mm512_set1_ps(
@@ -1470,9 +1481,13 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x16m)
                 scale1 = scale0;
             }
 
-            if (pre_ops_attr.zero_point_len > 1) {
-                pre_op_zp_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.zero_point_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_zp_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
                         (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
@@ -1485,7 +1500,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x16m)
                                                            zero_point);
                 }
             } else {
-                pre_op_zp_off = group;
+                pre_op_zp_off = 0;
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(*(
                         (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
@@ -2690,9 +2705,13 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x32m)
 
             int16_t a_kfringe_buf = 0;
 
-            if (pre_ops_attr.scale_factor_len > 1) {
-                pre_op_sf_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_sf_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     // load scale factor vectors
@@ -2716,7 +2735,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x32m)
                 scale3 = _mm512_permutex2var_ps(scale2, mask_scale2, scale2);
                 scale2 = _mm512_permutex2var_ps(scale2, mask_scale1, scale2);
             } else {
-                pre_op_sf_off = group;
+                pre_op_sf_off = 0;
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     scale0 = _mm512_set1_ps(
@@ -2732,9 +2751,13 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x32m)
                 scale3 = scale0;
             }
 
-            if (pre_ops_attr.zero_point_len > 1) {
-                pre_op_zp_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.zero_point_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_zp_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
                         (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
@@ -2752,7 +2775,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x32m)
                                                            zero_point);
                 }
             } else {
-                pre_op_zp_off = group;
+                pre_op_zp_off = 0;
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(*(
                         (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
@@ -4365,9 +4388,13 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x48m)
 
             int16_t a_kfringe_buf = 0;
 
-            if (pre_ops_attr.scale_factor_len > 1) {
-                pre_op_sf_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_sf_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_sf_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     // load scale factor vectors
@@ -4399,7 +4426,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x48m)
                 scale4 = _mm512_permutex2var_ps(scale4, mask_scale1, scale4);
 
             } else {
-                pre_op_sf_off = group;
+                pre_op_sf_off = 0;
 
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     scale0 = _mm512_set1_ps(
@@ -4417,9 +4444,13 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x48m)
                 scale5 = scale0;
             }
 
-            if (pre_ops_attr.zero_point_len > 1) {
-                pre_op_zp_off =
-                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            if (pre_ops_attr.zero_point_dim != DLP_PARAM_DIM_PER_TENSOR) {
+                if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                    pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+                } else {
+                    pre_op_zp_off =
+                        (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                }
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
                         (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
@@ -4445,7 +4476,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x48m)
                                                            zero_point);
                 }
             } else {
-                pre_op_zp_off = group;
+                pre_op_zp_off = 0;
                 if (float_domain_zp == true) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(*(
                         (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));

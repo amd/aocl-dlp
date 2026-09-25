@@ -61,7 +61,8 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
 {
     md_t NR = 48;
 
-    md_t pre_op_off = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_off    = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_zp_off = pre_ops_attr.pre_op_b_j;
 
     /* Regs to load int4 elements */
     __m256i ymm0, ymm1;
@@ -115,14 +116,26 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
     packb_group = packb_bf16;
 
     for (iter_t group = group_start; group <= group_end; group++) {
-        /* offset if pre_op_len == 'n' */
-        pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        pre_op_off = 0;
+        if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
+        pre_op_zp_off = 0;
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_zp_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
 
         /* load zero_point values */
-        if (pre_ops_attr.zero_point_len == 1) {
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_TENSOR) {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
                 zp_1 = zp_0;
                 zp_2 = zp_0;
                 zp_3 = zp_0;
@@ -130,7 +143,7 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
                 zp_5 = zp_0;
             } else {
                 zero_point = _mm512_set1_epi8(
-                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point1 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
@@ -140,11 +153,11 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 zp_2 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off + 16));
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 16));
                 zp_4 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off + 32));
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 32));
                 zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
                 zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
                 zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
@@ -154,7 +167,7 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
             } else {
                 zero_point = _mm512_maskz_loadu_epi8(
                     0xFFFFFFFFFFFF,
-                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
+                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point1 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
@@ -163,7 +176,7 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
             }
         }
 
-        if (pre_ops_attr.scale_factor_len > 1) {
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
                                        + pre_op_off);
@@ -190,10 +203,10 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_set1_ps(
-                    *((float*)pre_ops_attr.scale_factor + group));
+                    *((float*)pre_ops_attr.scale_factor + pre_op_off));
             } else {
                 zmm4 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)pre_ops_attr.scale_factor + group)));
+                    *((bfloat16*)pre_ops_attr.scale_factor + pre_op_off)));
             }
 
             zmm5 = zmm4;
@@ -344,7 +357,8 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
 {
     md_t NR = 32;
 
-    md_t pre_op_off = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_off    = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_zp_off = pre_ops_attr.pre_op_b_j;
 
     /* Regs to load int4 elements */
     __m256i ymm0;
@@ -390,20 +404,32 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
     packb_group = packb_bf16;
 
     for (iter_t group = group_start; group <= group_end; group++) {
-        /* offset if pre_op_len == 'n' */
-        pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        pre_op_off = 0;
+        if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
+        pre_op_zp_off = 0;
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_zp_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
 
         /* load zero_point values */
-        if (pre_ops_attr.zero_point_len == 1) {
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_TENSOR) {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
                 zp_1 = zp_0;
                 zp_2 = zp_0;
                 zp_3 = zp_0;
             } else {
                 zero_point = _mm512_set1_epi8(
-                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
@@ -411,9 +437,9 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 zp_2 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off + 16));
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 16));
                 zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
                 zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
                 zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
@@ -421,14 +447,14 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
             } else {
                 zero_point = _mm512_maskz_loadu_epi8(
                     0xFFFFFFFF,
-                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
+                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
             }
         }
 
-        if (pre_ops_attr.scale_factor_len > 1) {
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
                                        + pre_op_off);
@@ -449,10 +475,10 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_set1_ps(
-                    *((float*)pre_ops_attr.scale_factor + group));
+                    *((float*)pre_ops_attr.scale_factor + pre_op_off));
             } else {
                 zmm4 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)pre_ops_attr.scale_factor + group)));
+                    *((bfloat16*)pre_ops_attr.scale_factor + pre_op_off)));
             }
 
             zmm5 = zmm4;
@@ -562,8 +588,9 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
                                 bool                 signed_upscale,
                                 dlp_gemm_pre_op_attr pre_ops_attr)
 {
-    md_t NR         = 16;
-    md_t pre_op_off = pre_ops_attr.pre_op_b_j;
+    md_t NR            = 16;
+    md_t pre_op_off    = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_zp_off = pre_ops_attr.pre_op_b_j;
 
     /* Regs to load int4 elements */
     __m256i ymm0;
@@ -609,18 +636,30 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
     packb_group = packb_bf16;
 
     for (iter_t group = group_start; group <= group_end; group++) {
-        /* offset if pre_op_len == 'n' */
-        pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        pre_op_off = 0;
+        if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
+        pre_op_zp_off = 0;
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_zp_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
 
         /* load zero_point values */
-        if (pre_ops_attr.zero_point_len == 1) {
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_TENSOR) {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
                 zp_1 = zp_0;
             } else {
                 zero_point = _mm512_set1_epi8(
-                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
@@ -628,19 +667,20 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
                 zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
             } else {
                 zero_point = _mm512_maskz_loadu_epi8(
-                    0xFFFF, (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
+                    0xFFFF,
+                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
             }
         }
 
-        if (pre_ops_attr.scale_factor_len > 1) {
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
                                        + pre_op_off);
@@ -654,10 +694,10 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_set1_ps(
-                    *((float*)pre_ops_attr.scale_factor + group));
+                    *((float*)pre_ops_attr.scale_factor + pre_op_off));
             } else {
                 zmm4 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)pre_ops_attr.scale_factor + group)));
+                    *((bfloat16*)pre_ops_attr.scale_factor + pre_op_off)));
             }
 
             zmm5 = zmm4;
@@ -746,8 +786,9 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
                                   bool                 signed_upscale,
                                   dlp_gemm_pre_op_attr pre_ops_attr)
 {
-    md_t NR         = 16;
-    md_t pre_op_off = pre_ops_attr.pre_op_b_j;
+    md_t NR            = 16;
+    md_t pre_op_off    = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_zp_off = pre_ops_attr.pre_op_b_j;
 
     /* Regs to load int4 elements */
     __m256i ymm0;
@@ -796,37 +837,51 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
     packb_group = packb_bf16;
 
     for (iter_t group = group_start; group <= group_end; group++) {
-        /* offset if pre_op_len == 'n' */
-        pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        pre_op_off = 0;
+        if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
+        pre_op_zp_off = 0;
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_zp_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
 
         /* load zero_point values */
-        if (pre_ops_attr.zero_point_len == 1) {
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_TENSOR) {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
                 zp_1 = zp_0;
             } else {
                 zero_point = _mm512_set1_epi8(
-                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
             }
         } else {
             if (float_domain_zp) {
-                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    lmask,
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
                 zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
             } else {
                 zero_point = _mm512_maskz_loadu_epi8(
-                    lmask, (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
+                    (__mmask64)lmask,
+                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
             }
         }
-        if (pre_ops_attr.scale_factor_len > 1) {
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_maskz_loadu_ps(
                     lmask, (float*)(pre_ops_attr.scale_factor) + pre_op_off);
@@ -841,10 +896,10 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_set1_ps(
-                    *((float*)pre_ops_attr.scale_factor + group));
+                    *((float*)pre_ops_attr.scale_factor + pre_op_off));
             } else {
                 zmm4 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)pre_ops_attr.scale_factor + group)));
+                    *((bfloat16*)pre_ops_attr.scale_factor + pre_op_off)));
             }
 
             zmm5 = zmm4;
@@ -946,7 +1001,8 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
     /* Asymmetric u4: interpret as unsigned 0..15 for scale*(u4 - zero_point) */
     bool signed_upscale = false;
 
-    md_t pre_op_off = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_off    = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_zp_off = pre_ops_attr.pre_op_b_j;
 
     md_t group_start = pre_ops_attr.pre_op_b_i / pre_ops_attr.group_size;
     md_t group_end =
@@ -1004,15 +1060,27 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
         packb_group = packb_bf16;
 
         for (iter_t group = group_start; group <= group_end; group++) {
-            /* offset if pre_op_len == 'n' */
-            pre_op_off =
-                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            pre_op_off = 0;
+            if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_off = pre_ops_attr.pre_op_b_j;
+            } else if (pre_ops_attr.scale_factor_dim
+                       == DLP_PARAM_DIM_PER_GROUP) {
+                pre_op_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
+            pre_op_zp_off = 0;
+            if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+                pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+            } else if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_GROUP) {
+                pre_op_zp_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+            }
 
             /* load zero_point values */
-            if (pre_ops_attr.zero_point_len == 1) {
+            if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_TENSOR) {
                 if (float_domain_zp) {
-                    zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                        *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                    zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(*(
+                        (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
                     zp_1 = zp_0;
                     zp_2 = zp_0;
                     zp_3 = zp_0;
@@ -1022,7 +1090,7 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
                     zp_7 = zp_0;
                 } else {
                     zero_point = _mm512_set1_epi8(
-                        *((int8_t*)(pre_ops_attr.zero_point) + group));
+                        *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                     /* interleave zero-point values */
                     zero_point1 = _mm512_permutex2var_epi8(zero_point, mask_zp2,
                                                            zero_point);
@@ -1033,16 +1101,16 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
                 if (float_domain_zp) {
                     zp_0 = CVT_BF16_F32_INT_SHIFT(
                         _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
-                                           + pre_op_off + jr));
+                                           + pre_op_zp_off + jr));
                     zp_2 = CVT_BF16_F32_INT_SHIFT(
                         _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
-                                           + pre_op_off + jr + 16));
+                                           + pre_op_zp_off + jr + 16));
                     zp_4 = CVT_BF16_F32_INT_SHIFT(
                         _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
-                                           + pre_op_off + jr + 32));
+                                           + pre_op_zp_off + jr + 32));
                     zp_6 = CVT_BF16_F32_INT_SHIFT(
                         _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
-                                           + pre_op_off + jr + 48));
+                                           + pre_op_zp_off + jr + 48));
                     zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
                     zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
                     zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
@@ -1053,7 +1121,7 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
                     zp_6 = _mm512_permutex2var_ps(zp_6, mask_scale1, zp_6);
                 } else {
                     zero_point = _mm512_loadu_si512(
-                        (const int8_t*)(pre_ops_attr.zero_point) + pre_op_off
+                        (const int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off
                         + jr); /* interleave zero-point values */
                     zero_point1 = _mm512_permutex2var_epi8(zero_point, mask_zp2,
                                                            zero_point);
@@ -1063,7 +1131,7 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
             }
 
             /* load scale factor values */
-            if (pre_ops_attr.scale_factor_len > 1) {
+            if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     // load and interleave scale factor vectors
                     zmm4  = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
@@ -1102,10 +1170,10 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
             } else {
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     zmm4 = _mm512_set1_ps(
-                        *((float*)pre_ops_attr.scale_factor + group));
+                        *((float*)pre_ops_attr.scale_factor + pre_op_off));
                 } else {
-                    zmm4 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                        *(((bfloat16*)pre_ops_attr.scale_factor) + group)));
+                    zmm4 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(*(
+                        ((bfloat16*)pre_ops_attr.scale_factor) + pre_op_off)));
                 }
 
                 zmm5  = zmm4;
@@ -1347,8 +1415,9 @@ dlp_packsclb_nr1_bf16u4f32of32(bfloat16*            packb_bf16,
                                const md_t           KC,
                                dlp_gemm_pre_op_attr pre_ops_attr)
 {
-    md_t NR         = 16;
-    md_t pre_op_off = pre_ops_attr.pre_op_b_j;
+    md_t NR            = 16;
+    md_t pre_op_off    = pre_ops_attr.pre_op_b_j;
+    md_t pre_op_zp_off = pre_ops_attr.pre_op_b_j;
 
     __m256i  ymm0;
     __m512i  zero_point, zero_point0;
@@ -1387,37 +1456,52 @@ dlp_packsclb_nr1_bf16u4f32of32(bfloat16*            packb_bf16,
     packb_group = packb_bf16;
 
     for (iter_t group = group_start; group <= group_end; group++) {
-        pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        pre_op_off = 0;
+        if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.scale_factor_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
+        pre_op_zp_off = 0;
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+            pre_op_zp_off = pre_ops_attr.pre_op_b_j;
+        } else if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_GROUP) {
+            pre_op_zp_off =
+                (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+        }
 
         /* load zero_point values */
-        if (pre_ops_attr.zero_point_len == 1) {
+        if (pre_ops_attr.zero_point_dim == DLP_PARAM_DIM_PER_TENSOR) {
             if (float_domain_zp) {
                 zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
                 zp_1 = zp_0;
             } else {
                 zero_point = _mm512_set1_epi8(
-                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
             }
         } else {
             if (float_domain_zp) {
-                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
-                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    lmask,
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
                 zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
                 zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
             } else {
                 zero_point = _mm512_maskz_loadu_epi8(
-                    0xFFFF, (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
+                    (__mmask64)lmask,
+                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_zp_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
             }
         }
 
-        if (pre_ops_attr.scale_factor_len > 1) {
+        if (pre_ops_attr.scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_maskz_loadu_ps(
                     lmask, (float*)(pre_ops_attr.scale_factor) + pre_op_off);
@@ -1431,10 +1515,10 @@ dlp_packsclb_nr1_bf16u4f32of32(bfloat16*            packb_bf16,
         } else {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_set1_ps(
-                    *((float*)pre_ops_attr.scale_factor + group));
+                    *((float*)pre_ops_attr.scale_factor + pre_op_off));
             } else {
                 zmm4 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
-                    *((bfloat16*)pre_ops_attr.scale_factor + group)));
+                    *((bfloat16*)pre_ops_attr.scale_factor + pre_op_off)));
             }
             zmm5 = zmm4;
         }

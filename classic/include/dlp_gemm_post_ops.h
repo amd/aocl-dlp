@@ -32,20 +32,6 @@
 #include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 
-// Used as an internal structure.
-typedef struct dlp_gemm_pre_op_t
-{
-    uint64_t                  op_code;
-    uint64_t                  group_size;
-    void*                     scale_factor;
-    uint64_t                  scale_factor_len;
-    uint64_t                  scale_factor_type;
-    void*                     zp;
-    uint64_t                  zp_len;
-    uint64_t                  zp_type;
-    struct dlp_gemm_pre_op_t* next;
-} dlp_gemm_pre_op;
-
 // Used as an internal structure
 typedef struct dlp_gemm_group_post_op_t
 {
@@ -64,20 +50,6 @@ typedef struct dlp_gemm_group_post_op_t
     DLP_TYPE                         zp_stor_type;
     struct dlp_gemm_group_post_op_t* next;
 } dlp_gemm_group_post_op;
-
-typedef struct dlp_gemm_pre_op_attr_t
-{
-    void* scale_factor;
-    md_t  scale_factor_len;
-    md_t  scale_factor_type;
-    void* zero_point;
-    md_t  zero_point_len;
-    md_t  zero_point_type;
-    md_t  pre_op_b_i;
-    md_t  pre_op_b_j;
-    md_t  group_size;
-    md_t  pre_op_ld;
-} dlp_gemm_pre_op_attr;
 
 /* Terminal GLU op (GatedSwiglu / GatedSwigluAndMul) translator. This should
  * be the last node in the post-op list, and its expected post_op_list[last]

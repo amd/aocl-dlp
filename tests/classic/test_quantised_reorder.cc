@@ -158,6 +158,8 @@ TEST_F(QuantisedReorderTest, ReorderS8S4GroupScale)
                         .setAScaleFactor(a_scale)
                         .setBScaleFactor(b_scale)
                         .setGroupSize(16)
+                        .setAScaleGranularity(AQuantGranularity::PerGroup)
+                        .setBScaleGranularity(BQuantGranularity::PerGroup)
                         .build();
     auto* group_scale =
         static_cast<dlp::testing::framework::GroupScaleParam*>(gs_param.get());

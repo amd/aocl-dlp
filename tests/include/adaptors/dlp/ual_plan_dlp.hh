@@ -156,9 +156,7 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
                | (static_cast<uint64_t>(C) << 16) | static_cast<uint64_t>(Acc);
     }
 
-    // Broadcast buffers for scalar scale factors (kept alive for metadata
-    // lifetime). When scale_factor_len=1 the kernel still indexes per-channel,
-    // so we replicate the scalar to the expected buffer size.
+    // Lifetime for scalar A/B scale broadcast in GroupScale (int8) GEMM.
     std::vector<uint8_t> m_broadcast_a_scale;
     std::vector<uint8_t> m_broadcast_b_scale;
 

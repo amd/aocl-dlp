@@ -197,6 +197,13 @@ generateBenchmarkName(const GemmBenchConfig& config)
         if (gs != 0) {
             name << ",gs:" << gs;
         }
+        name << ",sf:"
+             << bQuantGranularityName(config.woq_param->getBScaleGranularity());
+        if (config.woq_param->hasB_ZeroPoint()) {
+            name << ",zp:"
+                 << bQuantGranularityName(
+                        config.woq_param->getBZpGranularity());
+        }
     }
 
     // Add detailed post_ops information

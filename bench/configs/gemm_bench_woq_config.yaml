@@ -3,17 +3,18 @@
 # quantized weights, with optional fused post-ops where defined below.
 # ==============================================================================
 # Symmetric WOQ (bf16s4f32of32):
-#   - Weights: s4; dequant uses scale factors only (per-tensor or per-channel via
-#     scale_factor_len). No zero_point parameters.
+#   - Weights: s4; dequant uses scale factors only. Granularity is set via
+#     b_scale_granularity (PER_GROUP / PER_CHANNEL / PER_TENSOR). Scale length is
+#     ng*n / n / 1 respectively. No zero_point parameters.
 #
 # Asymmetric WOQ (bf16u4f32of32):
-#   - Weights: u4; dequant uses scale plus zero_point (per-tensor or per-channel
-#     via scale_factor_len / zero_point_len; zero_point_type s8 or bf16).
+#   - Weights: u4; dequant uses scale plus zero_point. Scale and zero-point
+#     granularities are independent (b_scale_granularity vs
+#     b_zp_granularity); each
+#     buffer is sized ng*n / n / 1. b_zp_type s8 or bf16.
 #
-# Common: A=bf16, C=f32, acc=f32, row-major; per-tensor ("1") and per-channel
-# ("n") scale (and zero-point where applicable) combinations via cartesian=false
-# WOQ param lists. group_size 0 is one group over full K; otherwise scale/zp
-# buffers are num_groups * (1 or n). group_size must be even unless it equals K.
+# Common: A=bf16, C=f32, acc=f32, row-major. group_size 0 is one group over
+# full K. group_size must be even unless it equals K.
 # ==============================================================================
 
 gemm_tests:
@@ -46,8 +47,8 @@ gemm_tests:
       operations:
         - type: "WOQ"
           params:
-            scale_factor_len: ["1", "n"]
-            scale_factor_type: ["f32"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL", "PER_TENSOR"]
+            b_scale_type: ["f32"]
             group_size: ["0", "16", "12","32","128"]
     post_operations:
       cartesian: false
@@ -88,10 +89,10 @@ gemm_tests:
       operations:
         - type: "WOQ"
           params:
-            scale_factor_len: ["1", "n"]
-            scale_factor_type: ["f32"]
-            zero_point_len: ["1", "n"]
-            zero_point_type: ["s8", "bf16"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL", "PER_TENSOR"]
+            b_scale_type: ["f32"]
+            b_zp_granularity: ["PER_GROUP", "PER_CHANNEL", "PER_TENSOR"]
+            b_zp_type: ["s8", "bf16"]
             group_size: ["0", "16", "12","32","128"]
     post_operations:
       cartesian: false

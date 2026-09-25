@@ -8,9 +8,8 @@ gemm_tests:
   #                                 A and B must match; bf16 is widened to f32
   #                                 losslessly before the dequant multiply.
   #   group_size                  : K-group size; "0" == full K (single group).
-  #   a_granularity               : PER_GROUP | PER_TOKEN   (A: M x ng | M x 1)
-  #   b_granularity               : PER_GROUP | PER_CHANNEL (B: ng x N | 1 x N)
-  # Both granularities default to PER_GROUP when omitted.
+  #   a_scale_granularity         : PER_GROUP | PER_TOKEN   (A: M x ng | M x 1)
+  #   b_scale_granularity         : PER_GROUP | PER_CHANNEL (B: ng x N | 1 x N)
   # ==========================================================================
 
   # Mixed granularity: per-token A (one scale per row) + per-group B
@@ -41,8 +40,8 @@ gemm_tests:
             group_size: ["8", "16", "32", "64"]
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP"]
     product_type: "cartesian"
 
   # Mixed granularity: per-group A + per-channel B (one scale per column)
@@ -72,8 +71,8 @@ gemm_tests:
             group_size: ["8", "16", "32", "64"]
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_CHANNEL"]
     product_type: "cartesian"
 
   # Test 1: Small matrices - f32 output
@@ -104,8 +103,8 @@ gemm_tests:
             group_size: ["0", "8", "16", "32", "64"]
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP"]
     post_operations:
       cartesian: false
       operations:
@@ -141,8 +140,8 @@ gemm_tests:
             group_size: ["0", "8", "16", "32", "64"]
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP"]
     post_operations:
       cartesian: false
       operations:
@@ -181,8 +180,8 @@ gemm_tests:
             group_size: ["0", "16", "32", "64"]
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
     tolerances:
       relative: 200.0
       absolute: 50.0

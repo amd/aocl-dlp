@@ -29,6 +29,8 @@
 #include "adaptors/ref/ual_plan_ref.hh"
 #include "adaptors/ref/gemm_ref.hh"
 #include "adaptors/ref/ual_ref.hh"
+#include "classic/aocl_gemm_metadata.h"
+#include "framework/operation.hh"
 #include "utils/conversion_utils.hh"
 #include "utils/matrix_conversion_utils.hh"
 #include <cassert>
@@ -154,14 +156,31 @@ RefUalPlan::execute()
             return UALError::UAL_FAILURE;
         }
 
-        md_t n      = B.getEffectiveCols();
-        md_t sf_len = WOQParam::logicalParamLen(b_scale_factor.getRows()
-                                                    * b_scale_factor.getCols(),
-                                                n, k, group_size);
-        md_t zp_len = WOQParam::logicalParamLen(
-            b_zero_point.getRows() * b_zero_point.getCols(), n, k, group_size);
+        md_t              n       = B.getEffectiveCols();
+        md_t              ng      = WOQParam::numGroups(k, group_size);
+        BQuantGranularity sf_gran = m_woq->getBScaleGranularity();
+        BQuantGranularity zp_gran = m_woq->getBZpGranularity();
+        md_t              sf_len  = WOQParam::logicalCount(sf_gran, n, ng);
+        md_t              zp_len  = WOQParam::logicalCount(zp_gran, n, ng);
+
+        auto toDim = [](BQuantGranularity g) {
+            if (g == BQuantGranularity::PerChannel) {
+                return DLP_PARAM_DIM_PER_CHANNEL;
+            }
+            if (g == BQuantGranularity::PerTensor) {
+                return DLP_PARAM_DIM_PER_TENSOR;
+            }
+            return DLP_PARAM_DIM_PER_GROUP;
+        };
+        DLP_PARAM_DIM_TYPE b_scale_dim = toDim(sf_gran);
+        DLP_PARAM_DIM_TYPE b_zp_dim    = toDim(zp_gran);
 
         if (sf_len == 0 || (b_zp_data != nullptr && zp_len == 0)) {
+            return UALError::UAL_FAILURE;
+        }
+        try {
+            m_woq->validateBuffers(n, k);
+        } catch (const std::runtime_error&) {
             return UALError::UAL_FAILURE;
         }
 
@@ -200,7 +219,7 @@ RefUalPlan::execute()
                 static_cast<int>(B.getLeadingDimension()), beta_f32,
                 reinterpret_cast<float*>(tempC_f32.getData()),
                 static_cast<int>(tempC_f32.getLeadingDimension()), b_scale_data,
-                sf_len, sf_type, B.isReordered(), group_size);
+                sf_len, sf_type, B.isReordered(), group_size, b_scale_dim);
         } else {
             if (b_zp_data == nullptr) {
                 return UALError::UAL_FAILURE;
@@ -217,7 +236,7 @@ RefUalPlan::execute()
                 reinterpret_cast<float*>(tempC_f32.getData()),
                 static_cast<int>(tempC_f32.getLeadingDimension()), b_scale_data,
                 b_zp_data, sf_len, zp_len, sf_type, zp_type, B.isReordered(),
-                group_size);
+                group_size, b_scale_dim, b_zp_dim);
         }
 
         applyPostOps(tempC_f32);

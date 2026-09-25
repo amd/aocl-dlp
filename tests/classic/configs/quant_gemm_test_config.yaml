@@ -13,12 +13,18 @@
 # maps directly onto that scale factor's DLP_PARAM_DIM_TYPE `outer_dim` in the
 # unified C API, so the two axes are fully orthogonal:
 #
-#   a_granularity:
+#   a_scale_granularity:
 #     PER_GROUP - one A scale per (row, K-group)    (A scales: M x ng)
 #     PER_TOKEN - one A scale per row, K collapsed   (A scales: M x 1)
-#   b_granularity:
+#   b_scale_granularity:
 #     PER_GROUP   - one B scale per (K-group, col)   (B scales: ng x N)
 #     PER_CHANNEL - one B scale per col, K collapsed  (B scales: 1 x N)
+#
+#   PER_TENSOR (one B scale for the whole matrix) is accepted by the YAML
+#   parser and by weight-only bf16s4/bf16u4 APIs, but the int8 sym_quant
+#   APIs (s8s8 / s8s4) early-return DLP_CLSC_NOT_SUPPORTED. Do not list
+#   PER_TENSOR under GroupScale in this file; that rejection is covered by
+#   the dedicated C-API unit tests.
 #
 # The full space is 2 x 2 = 4 combinations:
 #     (A PER_GROUP , B PER_GROUP  )   fully grouped, both sides
@@ -32,10 +38,11 @@
 # 2. group_size AS AN INDEPENDENT CARTESIAN AXIS
 # ----------------------------------------------------------------------------
 # `group_size` is expanded as its own cartesian axis, exactly like
-# `a_granularity` and `b_granularity`. The generated case count for a
+# `a_scale_granularity` and `b_scale_granularity`. The generated case count for a
 # GroupScale op is therefore the product of every param list:
 #
-#   #cases = len(group_size) x len(a_granularity) x len(b_granularity) x ...
+#   #cases = len(group_size) x len(a_scale_granularity)
+#          x len(b_scale_granularity) x ...
 #
 # There is NO logic that inspects granularity to decide whether a group_size
 # value is meaningful - every group_size value is always run against every
@@ -50,8 +57,8 @@
 # ----------------------------------------------------------------------------
 # 3. IMPORTANT: group_size + granularity redundancy (design decision)
 # ----------------------------------------------------------------------------
-# When BOTH sides collapse over K (a_granularity=PER_TOKEN AND
-# b_granularity=PER_CHANNEL), the dequantized result is:
+# When BOTH sides collapse over K (a_scale_granularity=PER_TOKEN AND
+# b_scale_granularity=PER_CHANNEL), the dequantized result is:
 #
 #     C[i][j] = a_scale[i] * b_scale[j] * sum_k( A[i][k] * B[k][j] )
 #
@@ -153,8 +160,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["16", "32", "64"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP"]
 
   # --------------------------------------------------------------------------
   # [2] Row-major s8 x s8 -> f32, per-channel B, group_size SWEEP.
@@ -190,8 +197,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["16", "32", "64"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [3] Row-major s8 x s8 -> bf16, multi-group (obf16 API). Full 2 x 2 matrix
@@ -225,8 +232,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [4] Both-collapse case (A PER_TOKEN + B PER_CHANNEL) on the single-group
@@ -260,8 +267,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["0"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [5] Single-group / full-K degenerate path (group_size=0 -> ng==1) across
@@ -294,8 +301,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["0"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [6] Column-major s8 x s8 -> f32, multi-group. The API transposes the scale
@@ -329,8 +336,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [7] Column-major s8 x s8 -> bf16, multi-group (obf16 transpose swap).
@@ -362,14 +369,14 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [8] N==1 GEMV (decoder hot path), multi-group, group_size SWEEP. Exercises
   # the specialized N==1 micro-kernel. M sweep crosses the MR=16 tile boundary.
   #
-  # KNOWN LIMITATION: a_granularity PER_TOKEN is excluded here - the N==1 GEMV
+  # KNOWN LIMITATION: a_scale_granularity PER_TOKEN is excluded here - the N==1 GEMV
   # kernel does not correctly apply a per-token A scale with >1 K-group and M>1.
   # A is pinned PER_GROUP; B sweeps PER_GROUP / PER_CHANNEL (B PER_CHANNEL is
   # fine since A stays grouped, so group_size remains meaningful). N==1
@@ -401,8 +408,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32", "64"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [9] N==1 GEMV, PER_TOKEN A on the single-group (full-K) path. group_size=0
@@ -435,8 +442,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["0"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [10] Odd / fringe M/N dimensions, multi-group. k is a multiple of the group
@@ -471,8 +478,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP"]
 
   # --------------------------------------------------------------------------
   # [11] BF16 SCALE FACTORS, multi-group, group_size SWEEP. Same coverage idea
@@ -510,8 +517,8 @@ gemm_tests:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
             group_size: ["16", "32", "64"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [12] BF16 SCALE FACTORS, both-collapse (A PER_TOKEN + B PER_CHANNEL) on the
@@ -544,8 +551,8 @@ gemm_tests:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
             group_size: ["0"]
-            a_granularity: ["PER_TOKEN"]
-            b_granularity: ["PER_CHANNEL"]
+            a_scale_granularity: ["PER_TOKEN"]
+            b_scale_granularity: ["PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [13] M==1 GEMV, multi-group, group_size SWEEP. Counterpart of entry [8] for
@@ -583,8 +590,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["16", "32", "64"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [14] M==1 GEMV with BF16-stored scale factors. Mirrors [13] on a reduced
@@ -618,8 +625,8 @@ gemm_tests:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
             group_size: ["32", "64"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [15] N==1 GEMV with BF16-stored scale factors. The N==1 kernel builds its
@@ -654,8 +661,8 @@ gemm_tests:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
             group_size: ["32", "64"]
-            a_granularity: ["PER_GROUP", "PER_TOKEN"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [16] JIT-only post-op on GEMV shapes.
@@ -700,8 +707,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP"]
         - type: "Elementwise-MISH"
 
   # --------------------------------------------------------------------------
@@ -744,8 +751,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_GROUP"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP"]
         - type: "Scale"
           params:
             scale_factor_len: ["m"]
@@ -795,8 +802,8 @@ gemm_tests:
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
             group_size: ["32", "64"]
-            a_granularity: ["PER_GROUP"]
-            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
   # [19] beta==0 / NaN-C regression: verifies beta==0 never reads C.
@@ -838,8 +845,8 @@ gemm_tests:
             group_size: ["0", "32"]
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
-            a_granularity: ["PER_TOKEN", "PER_GROUP"]
-            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+            a_scale_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_scale_granularity: ["PER_CHANNEL", "PER_GROUP"]
     fill_pattern:
       - apply_matrix: ["C"]
         type: "static"
@@ -868,8 +875,8 @@ gemm_tests:
             group_size: ["0", "32"]
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
-            a_granularity: ["PER_TOKEN", "PER_GROUP"]
-            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+            a_scale_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_scale_granularity: ["PER_CHANNEL", "PER_GROUP"]
     fill_pattern:
       - apply_matrix: ["C"]
         type: "static"
@@ -898,8 +905,8 @@ gemm_tests:
             group_size: ["0", "32"]
             a_scale_type: ["f32"]
             b_scale_type: ["f32"]
-            a_granularity: ["PER_TOKEN", "PER_GROUP"]
-            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+            a_scale_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_scale_granularity: ["PER_CHANNEL", "PER_GROUP"]
     fill_pattern:
       - apply_matrix: ["C"]
         type: "static"
@@ -928,8 +935,8 @@ gemm_tests:
             group_size: ["0", "32"]
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
-            a_granularity: ["PER_TOKEN", "PER_GROUP"]
-            b_granularity: ["PER_CHANNEL", "PER_GROUP"]
+            a_scale_granularity: ["PER_TOKEN", "PER_GROUP"]
+            b_scale_granularity: ["PER_CHANNEL", "PER_GROUP"]
     fill_pattern:
       - apply_matrix: ["C"]
         type: "static"

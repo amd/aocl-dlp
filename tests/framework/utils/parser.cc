@@ -35,7 +35,10 @@
 #include <iostream>
 #include <random>
 #include <stdexcept>
+#include <string>
 
+using dlp::testing::framework::AQuantGranularity;
+using dlp::testing::framework::BQuantGranularity;
 using dlp::testing::framework::GluOperation;
 using dlp::testing::framework::postops::createAQuant;
 using dlp::testing::framework::postops::createBias;
@@ -56,6 +59,38 @@ using dlp::testing::framework::postops::createTanh;
 using dlp::testing::framework::postops::createWOQ;
 
 namespace dlp::testing::utils {
+
+namespace {
+
+    BQuantGranularity parseBScaleGranularity(const std::string& s)
+    {
+        if (s == "PER_CHANNEL") {
+            return BQuantGranularity::PerChannel;
+        }
+        if (s == "PER_TENSOR") {
+            return BQuantGranularity::PerTensor;
+        }
+        if (s == "PER_GROUP") {
+            return BQuantGranularity::PerGroup;
+        }
+        throw std::runtime_error(
+            "Unknown B scale granularity '" + s
+            + "'; expected PER_GROUP, PER_CHANNEL, or PER_TENSOR");
+    }
+
+    AQuantGranularity parseAScaleGranularity(const std::string& s)
+    {
+        if (s == "PER_TOKEN") {
+            return AQuantGranularity::PerToken;
+        }
+        if (s == "PER_GROUP") {
+            return AQuantGranularity::PerGroup;
+        }
+        throw std::runtime_error("Unknown A scale granularity '" + s
+                                 + "'; expected PER_GROUP or PER_TOKEN");
+    }
+
+} // namespace
 
 // Constants for reproducible random quantization parameters
 constexpr unsigned int RANDOM_SEED = 12345; // Fixed seed for reproducibility
@@ -1084,11 +1119,6 @@ MicroTest::createOperationParam(
             }
         }
 
-        // Parse A and B granularity independently (each defaults to PER_GROUP).
-        // A accepts PER_GROUP / PER_TOKEN; B accepts PER_GROUP / PER_CHANNEL.
-        AScaleGranularity a_granularity = AScaleGranularity::PerGroup;
-        BScaleGranularity b_granularity = BScaleGranularity::PerGroup;
-
         auto read_param = [&](const char* key) -> std::string {
             auto it = config.params.find(key);
             if (it == config.params.end() || it->second.empty()) {
@@ -1100,20 +1130,26 @@ MicroTest::createOperationParam(
             return std::any_cast<std::string>(it->second[idx]);
         };
 
-        std::string a_gran_str = read_param("a_granularity");
-        if (a_gran_str == "PER_TOKEN")
-            a_granularity = AScaleGranularity::PerToken;
-        else if (a_gran_str == "PER_GROUP")
-            a_granularity = AScaleGranularity::PerGroup;
+        // Parse A and B granularity independently. Both keys are required;
+        // do not silently default to PER_GROUP.
+        std::string a_gran_str = read_param("a_scale_granularity");
+        if (a_gran_str.empty()) {
+            throw std::runtime_error("GroupScale requires a_scale_granularity "
+                                     "(PER_GROUP or PER_TOKEN)");
+        }
+        AQuantGranularity a_scale_granularity =
+            parseAScaleGranularity(a_gran_str);
 
-        std::string b_gran_str = read_param("b_granularity");
-        if (b_gran_str == "PER_CHANNEL")
-            b_granularity = BScaleGranularity::PerChannel;
-        else if (b_gran_str == "PER_GROUP")
-            b_granularity = BScaleGranularity::PerGroup;
+        std::string b_gran_str = read_param("b_scale_granularity");
+        if (b_gran_str.empty()) {
+            throw std::runtime_error("GroupScale requires b_scale_granularity "
+                                     "(PER_GROUP, PER_CHANNEL, or PER_TENSOR)");
+        }
+        BQuantGranularity b_scale_granularity =
+            parseBScaleGranularity(b_gran_str);
 
         // Per-matrix group counts. A PER_TOKEN -> one scale per row;
-        // B PER_CHANNEL -> one scale per column; otherwise per-group.
+        // B PER_CHANNEL / PER_TENSOR collapse over K; otherwise per-group.
         //
         // gs_eff mirrors the frame's normalization in
         // dlp_gemm_s8s8s32_sym_quant.c: a group_size of 0 or one larger than K
@@ -1122,14 +1158,15 @@ MicroTest::createOperationParam(
         // grp_post_op_lda, and the mismatch is indistinguishable from a kernel
         // indexing bug. K == 0 is rejected by the API's dimension checks, so
         // report zero groups rather than dividing by a gs_eff that is also 0.
-        md_t k_dim  = getK();
-        md_t gs_eff = ((group_size == 0) || (group_size > k_dim)) ? k_dim
-                                                                  : group_size;
-        md_t ng     = (k_dim == 0) ? 0 : (k_dim + gs_eff - 1) / gs_eff;
-        md_t a_ng   = (a_granularity == AScaleGranularity::PerToken) ? 1 : ng;
-        md_t b_ng   = (b_granularity == BScaleGranularity::PerChannel) ? 1 : ng;
+        md_t k_dim   = getK();
+        md_t gs_eff  = ((group_size == 0) || (group_size > k_dim)) ? k_dim
+                                                                   : group_size;
+        md_t ng      = (k_dim == 0) ? 0 : (k_dim + gs_eff - 1) / gs_eff;
+        md_t a_ng    = (a_scale_granularity == AQuantGranularity::PerToken) ? 1
+                                                                            : ng;
+        md_t b_count = WOQParam::logicalCount(b_scale_granularity, getN(), ng);
 
-        // A scale is (M x a_ng), B scale is (b_ng x N). Distinct random values
+        // A scale is (M x a_ng), B scale is b_count. Distinct random values
         // so each row / group / channel is exercised independently. The ref
         // path tiles M->M*ng and N->ng*N, which matches PER_TOKEN/PER_CHANNEL.
         std::mt19937                          gen(RANDOM_SEED);
@@ -1140,7 +1177,7 @@ MicroTest::createOperationParam(
             v = dist(gen);
         Matrix a_sf_matrix = Matrix::fromVector(a_sf_data, a_sf_type);
 
-        std::vector<float> b_sf_data(b_ng * getN());
+        std::vector<float> b_sf_data(b_count);
         for (auto& v : b_sf_data)
             v = dist(gen);
         Matrix b_sf_matrix = Matrix::fromVector(b_sf_data, b_sf_type);
@@ -1149,27 +1186,31 @@ MicroTest::createOperationParam(
             .setAScaleFactor(a_sf_matrix)
             .setBScaleFactor(b_sf_matrix)
             .setGroupSize(group_size)
-            .setAGranularity(a_granularity)
-            .setBGranularity(b_granularity)
+            .setAScaleGranularity(a_scale_granularity)
+            .setBScaleGranularity(b_scale_granularity)
             .build();
 
     } else if (config.type == "WOQ") {
-        // WOQ: Weight-Only Quantization for bf16s4/bf16u4
-        // Parse scale_factor_len
-        std::string sf_len    = "1"; // default
-        auto        sf_len_it = config.params.find("scale_factor_len");
-        if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
-            auto   idx_it = param_indices.find("scale_factor_len");
+        // WOQ: Weight-Only Quantization for bf16s4/bf16u4.
+        // Scale and zero-point granularities are independent and required:
+        //   b_scale_granularity -> scale (len = ng*n / n / 1)
+        //   b_zp_granularity    -> zp when a zp is present.
+        auto read_woq_param = [&](const char* key) -> std::string {
+            auto it = config.params.find(key);
+            if (it == config.params.end() || it->second.empty()) {
+                return {};
+            }
+            auto   idx_it = param_indices.find(key);
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
-            idx        = std::min(idx, sf_len_it->second.size() - 1);
-            sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
-        }
+            idx        = std::min(idx, it->second.size() - 1);
+            return std::any_cast<std::string>(it->second[idx]);
+        };
 
-        // Parse scale_factor_type
+        // Parse b_scale_type
         MatrixType sf_type    = MatrixType::f32; // default
-        auto       sf_type_it = config.params.find("scale_factor_type");
+        auto       sf_type_it = config.params.find("b_scale_type");
         if (sf_type_it != config.params.end() && !sf_type_it->second.empty()) {
-            auto   idx_it = param_indices.find("scale_factor_type");
+            auto   idx_it = param_indices.find("b_scale_type");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
             idx        = std::min(idx, sf_type_it->second.size() - 1);
             auto type_str = std::any_cast<std::string>(sf_type_it->second[idx]);
@@ -1193,17 +1234,22 @@ MicroTest::createOperationParam(
             }
         }
 
-        // Scale/zp buffers are num_groups * base_len. Kernels index as
-        //   per-tensor (len=1): scale[group]
-        //   per-channel (len=n): scale[group * n + col]
-        md_t ng          = WOQParam::numGroups(getK(), group_size);
-        md_t base_sf_len = (sf_len == "n") ? getN() : 1;
+        std::string scale_gran_str = read_woq_param("b_scale_granularity");
+        if (scale_gran_str.empty()) {
+            throw std::runtime_error("WOQ requires b_scale_granularity "
+                                     "(PER_GROUP, PER_CHANNEL, or PER_TENSOR)");
+        }
+        BQuantGranularity scale_granularity =
+            parseBScaleGranularity(scale_gran_str);
+
+        md_t ng       = WOQParam::numGroups(getK(), group_size);
+        md_t sf_count = WOQParam::logicalCount(scale_granularity, getN(), ng);
 
         Matrix sf_matrix;
         // Use fixed seed for reproducible random values across DLP and REF
         std::mt19937                          gen(RANDOM_SEED);
         std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
-        std::vector<float>                    sf_data(ng * base_sf_len);
+        std::vector<float>                    sf_data(sf_count);
         for (auto& v : sf_data) {
             v = dist(gen);
         }
@@ -1214,25 +1260,18 @@ MicroTest::createOperationParam(
         }
 
         // Parse optional zero point for asymmetric quantization
-        Matrix      zp_matrix;
-        bool        has_zp = false;
-        std::string zp_len = "1";
+        Matrix zp_matrix;
+        bool   has_zp = false;
 
-        // Parse zero_point_len
         auto zp_len_it = config.params.find("zero_point_len");
         if (zp_len_it != config.params.end() && !zp_len_it->second.empty()) {
-            auto   idx_it = param_indices.find("zero_point_len");
-            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
-            idx        = std::min(idx, zp_len_it->second.size() - 1);
-            zp_len     = std::any_cast<std::string>(zp_len_it->second[idx]);
-            has_zp     = true;
+            has_zp = true;
         }
 
-        // Parse zero_point_type
         MatrixType zp_type    = MatrixType::f32;
-        auto       zp_type_it = config.params.find("zero_point_type");
+        auto       zp_type_it = config.params.find("b_zp_type");
         if (zp_type_it != config.params.end() && !zp_type_it->second.empty()) {
-            auto   idx_it = param_indices.find("zero_point_type");
+            auto   idx_it = param_indices.find("b_zp_type");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
             idx        = std::min(idx, zp_type_it->second.size() - 1);
             auto zp_type_str =
@@ -1241,12 +1280,28 @@ MicroTest::createOperationParam(
             has_zp  = true;
         }
 
+        if (!read_woq_param("b_zp_granularity").empty()) {
+            has_zp = true;
+        }
+
         WOQBuilder woq_builder;
-        woq_builder.setB_ScaleFactor(sf_matrix).setGroupSize(group_size);
+        woq_builder.setB_ScaleFactor(sf_matrix)
+            .setGroupSize(group_size)
+            .setBScaleGranularity(scale_granularity);
 
         if (has_zp) {
-            md_t               base_zp_len = (zp_len == "n") ? getN() : 1;
-            std::vector<float> zp_data(ng * base_zp_len);
+            std::string zp_gran_str = read_woq_param("b_zp_granularity");
+            if (zp_gran_str.empty()) {
+                throw std::runtime_error(
+                    "WOQ with a zero-point requires b_zp_granularity "
+                    "(PER_GROUP, PER_CHANNEL, or PER_TENSOR)");
+            }
+            BQuantGranularity b_zp_granularity =
+                parseBScaleGranularity(zp_gran_str);
+
+            md_t zp_count =
+                WOQParam::logicalCount(b_zp_granularity, getN(), ng);
+            std::vector<float> zp_data(zp_count);
             for (auto& v : zp_data) {
                 v = dist(gen);
             }
@@ -1255,9 +1310,10 @@ MicroTest::createOperationParam(
             } else {
                 zp_matrix = Matrix::fromVector(zp_data, zp_type);
             }
-            woq_builder.setB_ZeroPoint(zp_matrix);
+            woq_builder.setB_ZeroPoint(zp_matrix).setBZpGranularity(
+                b_zp_granularity);
         }
-        return woq_builder.build();
+        return woq_builder.build(getN(), getK());
     }
     throw std::runtime_error("Unknown operation type: " + config.type);
 }
