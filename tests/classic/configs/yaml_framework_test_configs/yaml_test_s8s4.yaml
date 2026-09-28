@@ -24,18 +24,21 @@
 #   [H] KC straddle ............. K > KC(2048) with 2048 % gs != 0
 #   [I] partial trailing group .. k % gs != 0 (ceil last group)
 #   [J] K padding ............... k % 4 != 0 / odd nibble (s4 pack tail)
-#   [K] scale layout ............ A: 1/m ; B: 1/n (per-row/col only single-group)
+#   [K] scale granularity ....... A: PER_GROUP / PER_TOKEN;
+#                                B: PER_GROUP / PER_CHANNEL / PER_TENSOR
 #   [L] M fringe (MR=6) ......... m remainders + MC(144) blocking
 #   [M] N fringe (NR=64) ........ 16/32/48 sub-kernels, <16, >64, NC(1024)
 #   [N] beta .................... 0 (overwrite) / 1 (accumulate)
 #   [O] alpha ................... 1 and !=1
 #   [P] post-ops ................ GroupScale + each supported epilogue op
 #
-# GroupScale scale-length note: with a_scale_len "m" / b_scale_len "n" the
-# harness produces only m / n scale values. That is exact ONLY for a single
-# group (num_groups==1, i.e. group_size 0 or ==k), because a multi-group kernel
-# indexes a_scale[row*ng+g] / b_scale[g*n+col]. Multi-group sets therefore use
-# scalar scales (len "1"), which both DLP and ref adaptors broadcast.
+# GroupScale granularity note:
+#   A PER_GROUP produces m*ng values; A PER_TOKEN produces m values.
+#   B PER_GROUP produces ng*n values; B PER_CHANNEL produces n values.
+# Here ng is ceil(k / effective_group_size), with group_size 0 (or >k)
+# normalized to one full-K group. Multi-group cases use PER_GROUP to exercise
+# per-K-group scale indexing; PER_TOKEN/PER_CHANNEL intentionally reuse one
+# scale per row/column across all K-groups.
 #
 # GEMV fast-path eligibility (API front-end): mtagB==reorder AND (m==1 OR n==1)
 # AND group_size>0(after 0->k) AND k % gs == 0 AND KC(2048) % gs == 0. Group
@@ -77,9 +80,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1", "m"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1", "n"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
             group_size: ["128"]
 
   # Defect 1 (deeper): group_size 256 gives k_iter == 4 inside one group.
@@ -107,9 +110,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1", "m"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1", "n"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
             group_size: ["256"]
 
   # Defect 3: row-major + transA with N==1 forces A-packing (A-gather path).
@@ -138,15 +141,15 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1", "m"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1", "n"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
             group_size: ["128"]
 
   # Defect 2: group straddles a KC(2048) boundary. K > 2048 and 2048 % gs != 0
   # (2048 % 20 == 8). s8s4 5-loop only GROWS KC to group_size, it never shrinks
   # to a multiple of gs (unlike s8s8), so this exercises the divergent path.
-  # Multi-group => scalar scales.
+  # Multi-group => per-group scales.
   - name: "regress_symquant_defect2_kc_straddle_gs20"
     a_type: ["s8"]
     b_type: ["s4"]
@@ -171,9 +174,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["20"]
 
   # Defect 2 (larger group): 2048 % 160 == 128, K == 2560 (16 groups).
@@ -201,9 +204,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["160"]
 
   # Defect 4 (OOB): single-group KC-GROW to a non-multiple-of-4. When
@@ -237,9 +240,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "2050"]
 
   # Defect 4 (max overrun +3). k=4097 > KC on Zen4/5 (2048) AND Zen6 (4096);
@@ -268,9 +271,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "4097"]
 
 # ============================================================================
@@ -278,9 +281,9 @@ gemm_tests:
 # Path: API front-end -> s8s8 sym-quant GEMV-N kernel (reordered B consumed
 # directly: tight s8 column + per-group colsums). M sweep covers the >=4/>=8/
 # primary(16)/multi-tile(>16) micro-kernel unrolls. group_size sweep covers a
-# single k-iter group (32/64) vs multi-iter (128), and gs==0(->k) per-tensor.
-# Both output dtypes. Per-row A / per-col B scales are exact here (single group
-# only for gs>=k; multi-group rows still use scalar via len "1").
+# single k-iter group (32/64) vs multi-iter (128), and gs==0(->k) single-group.
+# Both output dtypes. This set uses PER_GROUP scales to exercise the scale
+# advance across K-groups.
 # ============================================================================
   - name: "gemv_n1_reorder_dtype_gs_sweep"
     a_type: ["s8"]
@@ -306,9 +309,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "32", "64", "128"]
 
 # ============================================================================
@@ -342,9 +345,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1", "m"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1", "n"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
             group_size: ["0", "128"]
 
 # ============================================================================
@@ -377,9 +380,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "64"]
 
 # ============================================================================
@@ -387,7 +390,8 @@ gemm_tests:
 # reorder => per-NR-panel widen into b_panel_s8 scratch; pack/none => runtime
 # parallel PACK with fused s4->s8 widen-on-load (row-major packer, cs_b==1).
 # Full N-fringe sweep hits the 6x64 / 6x48 / 6x32 / 6x16 / 6x<16 sub-kernels
-# and >64 NR tiling. group_size single group (per-row/col scales exact).
+# and >64 NR tiling. group_size is a single group, so grouped and per-row/
+# per-column layouts have the same scale counts.
 # ============================================================================
   - name: "gemm_5loop_bpath_nfringe"
     a_type: ["s8"]
@@ -413,16 +417,16 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1", "m"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1", "n"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
             group_size: ["0"]
 
 # ============================================================================
 # SECTION 5 -- General 5-loop GEMM: M fringe (MR=6) and MC(144) blocking.
 # m remainders 1..5 after each 6-row block, plus m>144 to cross the MC panel
-# boundary (multi-panel A). Multi-group scalar scales included to exercise the
-# in-kernel per-group scale advance across MC panels.
+# boundary (multi-panel A). Multi-group PER_GROUP scales exercise the in-kernel
+# per-group scale advance across MC panels.
 # ============================================================================
   - name: "gemm_5loop_mfringe_mc_block"
     a_type: ["s8"]
@@ -448,9 +452,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["64"]
 
 # ============================================================================
@@ -482,9 +486,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "128"]
 
 # ============================================================================
@@ -515,16 +519,17 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "32", "64", "128"]
 
 # ============================================================================
 # SECTION 8 -- group_size structural variants (multi-group, 5-loop).
 # Covers: gs==k (single group), gs<k evenly dividing (full groups), and gs<k
-# NOT dividing k => partial trailing group (num_groups=ceil(k/gs)). Multi-group
-# => scalar scales. group_size sweep of 16/32/64 (all multiples of 4).
+# NOT dividing k => partial trailing group (num_groups=ceil(k/gs)).
+# Multi-group PER_GROUP scales are swept with group_size 16/32/64 (all
+# multiples of 4).
 # ============================================================================
   - name: "gemm_groupsize_multigroup_and_partial"
     a_type: ["s8"]
@@ -552,9 +557,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["16", "32", "64"]
 
 # ============================================================================
@@ -588,9 +593,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
 
 # ============================================================================
@@ -622,9 +627,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "128"]
 
 # ============================================================================
@@ -655,9 +660,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
 
 # ============================================================================
@@ -697,6 +702,8 @@ gemm_tests:
           params:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "64"]
 
   # 12.2: bf16 scales on the OFFSET-INDEXED paths -- the distinct bf16 concern
@@ -730,6 +737,8 @@ gemm_tests:
           params:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["64", "192"]
 
   # 12.3: bf16 scales with transA / transB and a fused post-op chain, multi-
@@ -760,6 +769,8 @@ gemm_tests:
           params:
             a_scale_type: ["bf16"]
             b_scale_type: ["bf16"]
+            a_scale_granularity: ["PER_GROUP"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["64"]
         - type: "Bias"
           params:
@@ -801,9 +812,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "64"]
         - type: "Bias"
           params:
@@ -836,9 +847,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-RELU"
 
@@ -866,9 +877,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-GELU-TANH"
 
@@ -896,9 +907,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-GELU-ERF"
 
@@ -926,9 +937,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-TANH"
 
@@ -956,9 +967,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-SIGMOID"
 
@@ -987,9 +998,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-PRELU"
           params:
@@ -1020,9 +1031,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-SWISH"
           params:
@@ -1053,9 +1064,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Elementwise-CLIP"
           params:
@@ -1089,9 +1100,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Scale"
           params:
@@ -1131,9 +1142,9 @@ gemm_tests:
   #       - type: "GroupScale"
   #         params:
   #           a_scale_type: ["f32"]
-  #           a_scale_len: ["1"]
+  #           a_scale_granularity: ["PER_GROUP"]
   #           b_scale_type: ["f32"]
-  #           b_scale_len: ["1"]
+  #           b_scale_granularity: ["PER_GROUP"]
   #           group_size: ["0"]
   #       - type: "Matrix-Add"
   #         params:
@@ -1163,9 +1174,9 @@ gemm_tests:
   #       - type: "GroupScale"
   #         params:
   #           a_scale_type: ["f32"]
-  #           a_scale_len: ["1"]
+  #           a_scale_granularity: ["PER_GROUP"]
   #           b_scale_type: ["f32"]
-  #           b_scale_len: ["1"]
+  #           b_scale_granularity: ["PER_GROUP"]
   #           group_size: ["0"]
   #       - type: "Matrix-Mul"
   #         params:
@@ -1197,9 +1208,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Bias"
           params:
@@ -1231,9 +1242,10 @@ gemm_tests:
 # slow, but full path coverage is the priority. If a quick pass is needed, use
 # --gtest_filter to exclude "*multipanel*".
 #
-# Scale-length rule (see file header): per-row/col scales (len "m"/"n") are
-# exact ONLY for a single group, so multi-group sets here use scalar scales
-# (len "1"); per-row/col scales are swept only in the gs=0 single-group set.
+# Granularity rule (see file header): PER_TOKEN/PER_CHANNEL provide one scale
+# per row/column across all K-groups, while PER_GROUP provides one scale per
+# K-group. Multi-group sets here use PER_GROUP; PER_TOKEN/PER_CHANNEL are swept
+# only in the gs=0 single-group set.
 #
 # Tolerance is the file-standard relative:100 / absolute:50 (multipliers on
 # epsilon*k). Tighter multipliers were tried but produce false positives at
@@ -1272,9 +1284,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["64", "128"]
 
   # 14.0b: GEMV M==1 fast path at panel crossing. n=1088 crosses NC, k=2176
@@ -1303,14 +1315,14 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["64", "128"]
 
   # 14.1: base 5-loop, FULL m x n x k crossing product (all 8 combinations incl.
   # triple), across every B path (reorder/pack/none), both dtypes, both beta,
-  # single group (gs=0) and clean multi-group (gs=128). Scalar scales.
+  # single group (gs=0) and clean multi-group (gs=128). PER_GROUP scales.
   - name: "multipanel_base_full"
     a_type: ["s8"]
     b_type: ["s4"]
@@ -1335,14 +1347,15 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "128"]
 
   # 14.2: base 5-loop, per-row (A) / per-col (B) scale factors at full crossing.
-  # Single group only (gs=0) so len "m"/"n" scales are exact; per-col B scales
-  # must be indexed correctly across the 2nd NC panel.
+  # Single group only (gs=0), so PER_TOKEN/PER_CHANNEL have the same scale
+  # counts as PER_GROUP; per-column B scales must be indexed correctly across
+  # the 2nd NC panel.
   - name: "multipanel_base_rowcol_scales"
     a_type: ["s8"]
     b_type: ["s4"]
@@ -1367,9 +1380,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1", "m"]
+            a_scale_granularity: ["PER_GROUP", "PER_TOKEN"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1", "n"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL"]
             group_size: ["0"]
 
   # 14.3: transA=true (A VNNI-pack) at full crossing, reorder+pack, both dtypes,
@@ -1398,9 +1411,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "128"]
 
   # 14.4: transB=true (col-major s4 packer) at full crossing, pack path only.
@@ -1428,15 +1441,15 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "128"]
 
   # 14.5: multi-group group-scale pointer advance ACROSS the 2nd K-panel with
   # partial/straddle groups, combined with MC and NC crossing. gs=20 and gs=160
   # straddle KC(2048) (2048%20=8, 2048%160=128); gs=192 also gives a partial
-  # trailing group at k=2176 (2176%192=64). Scalar scales.
+  # trailing group at k=2176 (2176%192=64). PER_GROUP scales.
   - name: "multipanel_groupstraddle_full"
     a_type: ["s8"]
     b_type: ["s4"]
@@ -1461,9 +1474,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["20", "160", "192"]
 
   # 14.6: alpha != 1 (integer accumulator scale) + beta accumulate at full
@@ -1492,9 +1505,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
 
   # 14.7: Bias (per-N) epilogue at full crossing. The bias vector is indexed by
@@ -1524,9 +1537,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Bias"
           params:
@@ -1559,9 +1572,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Scale"
           params:
@@ -1595,9 +1608,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0"]
         - type: "Bias"
           params:
@@ -1637,9 +1650,9 @@ gemm_tests:
         - type: "GroupScale"
           params:
             a_scale_type: ["f32"]
-            a_scale_len: ["1"]
+            a_scale_granularity: ["PER_GROUP"]
             b_scale_type: ["f32"]
-            b_scale_len: ["1"]
+            b_scale_granularity: ["PER_GROUP"]
             group_size: ["0", "128"]
 
 # ============================================================================
@@ -1648,7 +1661,7 @@ gemm_tests:
 # one scale per row (a_grp_mul=0, grp_post_op_lda=1); B PER_CHANNEL = one scale
 # per column (b_grp_mul=0). This is the multi-group + per-row/col combination
 # the earlier sections deliberately avoided (a single scale is reused across
-# ALL K-groups). The harness derives scale lengths from granularity: A -> M,
+# ALL K-groups). The harness derives buffer sizes from granularity: A -> M,
 # B -> N (independent of num_groups); the reference tiles M->M*ng / N->ng*N,
 # giving an exact oracle. s8s4 is ROW-MAJOR only, so the column-major scale
 # swap/transpose used by s8s8 is intentionally not exercised (and not needed).
