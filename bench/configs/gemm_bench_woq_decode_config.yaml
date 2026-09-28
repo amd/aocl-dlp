@@ -1,0 +1,130 @@
+# GEMM benchmarking configuration for weight-only quantization (WOQ) at
+# token-decode shapes: m = 1 (one token), bf16 activations x symmetric int4
+# weights, per-group bf16 scales with group size 128, reordered B.
+# The (n, k) pairs are the projection shapes of common LLMs:
+#   Llama-3.1-8B: q/o 4096x4096, gate/up 4096->14336, down 14336->4096
+#   Qwen3-4B:     gate/up 2560->9728
+# At m = 1 every weight is read once per call, so these runs are bound by
+# memory bandwidth; compare time per call (or effective GB/s of B read).
+# ==============================================================================
+
+gemm_tests:
+  - name: "bf16s4f32of32_decode_llama_qo"
+    a_type: "bf16"
+    b_type: "s4"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1]
+    n: [4096]
+    k: [4096]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 4096
+    ldb: 4096
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_granularity: ["PER_GROUP"]
+            b_scale_type: ["bf16"]
+            group_size: ["128"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+
+  - name: "bf16s4f32of32_decode_llama_gate_up"
+    a_type: "bf16"
+    b_type: "s4"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1]
+    n: [14336]
+    k: [4096]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 4096
+    ldb: 14336
+    ldc: 14336
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_granularity: ["PER_GROUP"]
+            b_scale_type: ["bf16"]
+            group_size: ["128"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+
+  - name: "bf16s4f32of32_decode_llama_down"
+    a_type: "bf16"
+    b_type: "s4"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1]
+    n: [4096]
+    k: [14336]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 14336
+    ldb: 4096
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_granularity: ["PER_GROUP"]
+            b_scale_type: ["bf16"]
+            group_size: ["128"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+
+  - name: "bf16s4f32of32_decode_qwen3_4b_gate_up"
+    a_type: "bf16"
+    b_type: "s4"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1]
+    n: [9728]
+    k: [2560]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 2560
+    ldb: 9728
+    ldc: 9728
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_granularity: ["PER_GROUP"]
+            b_scale_type: ["bf16"]
+            group_size: ["128"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
