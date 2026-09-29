@@ -39,10 +39,7 @@
 
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "sys_utils/dlp_gemm_sys.h"
-
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
+#include "threading/dlp_omp_runtime.h"
 
 #if DLP_OS_LINUX
 #include <sys/types.h>
@@ -53,7 +50,7 @@ uint64_t
 dlp_gemm_gettid(void)
 {
 #ifdef DLP_ENABLE_OPENMP
-    return (uint64_t)omp_get_thread_num();
+    return (uint64_t)dlp_omp_get_thread_num();
 #else
 #ifdef DLP_ENABLE_PTHREADS
 #if !DLP_CLOCK_USE_QPC

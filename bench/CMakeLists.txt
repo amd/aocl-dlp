@@ -33,6 +33,8 @@ set(BENCH_INCLUDE_DIRS
     ${PROJECT_BINARY_DIR}/tests/classic
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/classic/include
+    ${PROJECT_BINARY_DIR}/include/private
     ${CLASSIC_INCLUDES}
 )
 

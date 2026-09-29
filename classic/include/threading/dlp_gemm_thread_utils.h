@@ -37,8 +37,10 @@
 typedef struct DLP_ALIGNED_STRUCT(64)
 {
     int* tid_core_grp_id_list;
+    /* OpenMP runtime/team availability, independent of affinity topology. */
     int  tid_cnt;
     bool openmp_enabled;
+    /* These fields remain false/null when topology is unavailable. */
     bool tid_distr_nearly_seq;
     bool tid_core_grp_load_high;
 } dlp_gemm_thread_attrs_t;

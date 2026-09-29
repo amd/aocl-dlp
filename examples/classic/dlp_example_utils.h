@@ -40,6 +40,52 @@
 #ifndef DLP_EXAMPLE_UTILS_H
 #define DLP_EXAMPLE_UTILS_H
 
+#include <stdbool.h>
+
+#ifdef DLP_EXAMPLE_ENABLE_OPENMP
+/* Consumer-side helper only; the installed example cannot use DLP's private
+ * library wrapper. */
+#include <omp.h>
+
+#ifndef DLP_EXAMPLE_OPENMP_HAS_ACTIVE_LEVELS
+#define DLP_EXAMPLE_OPENMP_HAS_ACTIVE_LEVELS 0
+#endif
+
+#ifndef DLP_EXAMPLE_OPENMP_HAS_NESTING
+#define DLP_EXAMPLE_OPENMP_HAS_NESTING 0
+#endif
+
+static inline void
+dlp_example_set_nested_parallelism(bool enabled)
+{
+#if DLP_EXAMPLE_OPENMP_HAS_ACTIVE_LEVELS
+    omp_set_max_active_levels(enabled ? 2 : 1);
+#elif DLP_EXAMPLE_OPENMP_HAS_NESTING
+    omp_set_nested(enabled ? 1 : 0);
+#else
+    (void)enabled;
+#endif
+}
+
+static inline int
+dlp_example_get_thread_num(void)
+{
+    return omp_get_thread_num();
+}
+#else
+static inline void
+dlp_example_set_nested_parallelism(bool enabled)
+{
+    (void)enabled;
+}
+
+static inline int
+dlp_example_get_thread_num(void)
+{
+    return 0;
+}
+#endif
+
 /* ----------------------------------------------------------------------
  * High-resolution monotonic timer (elapsed seconds since an unspecified
  * epoch). Intended for measuring durations in the examples, not for

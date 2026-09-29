@@ -1,136 +1,283 @@
 #
 # Copyright © Advanced Micro Devices, Inc., or its affiliates.
 #
-# Redistribution and use in source and binary forms, with or without modification,
-# are permitted provided that the following conditions are met:
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
 # 1. Redistributions of source code must retain the above copyright notice, this
 #    list of conditions and the following disclaimer.
 # 2. Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
 #    and/or other materials provided with the distribution.
 # 3. Neither the name of the copyright holder nor the names of its contributors
-#    may be used to endorse or promote products derived from this software without
-#    specific prior written permission.
+#    may be used to endorse or promote products derived from this software
+#    without specific prior written permission.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
-# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
-# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
 # AoclDlpConfig.cmake - CMake configuration file for AOCL-DLP
-#
-# This file is used by find_package(AoclDlp) to locate and configure
-# the AOCL Deep Learning Primitives library.
-#
-# After successful configuration, the following targets are available:
-#   AoclDlp::aocl-dlp        - Shared library target
-#   AoclDlp::aocl-dlp_static - Static library target
-#
-# Variables set by this configuration:
-#   AoclDlp_FOUND         - True if AOCL-DLP was found
-#   AoclDlp_VERSION       - Version of AOCL-DLP found
-#   AoclDlp_INCLUDE_DIRS  - Include directories for AOCL-DLP
-#   AoclDlp_LIBRARIES     - Libraries to link against (for legacy support)
 
 @PACKAGE_INIT@
 
-# Include required CMake modules
 include(CMakeFindDependencyMacro)
 
-# Set version information
+if(NOT DEFINED DLP_OPENMP_ROOT)
+    set(DLP_OPENMP_ROOT "@DLP_OPENMP_ROOT@" CACHE PATH
+        "Path to custom OpenMP installation root"
+    )
+endif()
+get_property(_AoclDlp_root_cache_defined
+    CACHE DLP_OPENMP_ROOT
+    PROPERTY TYPE
+    SET
+)
+if(_AoclDlp_root_cache_defined)
+    set_property(CACHE DLP_OPENMP_ROOT PROPERTY TYPE PATH)
+endif()
+
+function(_AoclDlp_openmp_flags_match_runtime flags runtime frontend out_var)
+    set(_AoclDlp_matches FALSE)
+    if("${runtime}" STREQUAL "LLVM")
+        if("${frontend}" STREQUAL "CLANG_CL"
+           AND ("${flags}" MATCHES "[-/]openmp:llvm"
+                OR "${flags}" MATCHES
+                   "(^|[ ;])-fopenmp((=|:)libomp)?($|[ ;])"))
+            set(_AoclDlp_matches TRUE)
+        elseif("${frontend}" STREQUAL "MSVC"
+               AND "${flags}" MATCHES "[-/]openmp:llvm")
+            set(_AoclDlp_matches TRUE)
+        endif()
+    elseif("${runtime}" STREQUAL "VCOMP")
+        if(("${frontend}" STREQUAL "MSVC"
+            OR "${frontend}" STREQUAL "CLANG_CL")
+           AND "${flags}" MATCHES "[-/]openmp($|[^:])")
+            set(_AoclDlp_matches TRUE)
+        endif()
+    endif()
+    set(${out_var} ${_AoclDlp_matches} PARENT_SCOPE)
+endfunction()
+
 set(AoclDlp_VERSION @PROJECT_VERSION@)
 set(AoclDlp_VERSION_MAJOR @PROJECT_VERSION_MAJOR@)
 set(AoclDlp_VERSION_MINOR @PROJECT_VERSION_MINOR@)
 set(AoclDlp_VERSION_PATCH @PROJECT_VERSION_PATCH@)
 
-# Find required dependencies
-# These dependencies are required for AOCL-DLP to function properly
-
-# Find Threads (required for multi-threading support)
 find_dependency(Threads REQUIRED)
 
-# Find OpenMP if it was enabled during build
-# Note: OpenMP might be optional depending on build configuration
-set(DLP_ENABLE_OPENMP @DLP_ENABLE_OPENMP@)
-if(DLP_ENABLE_OPENMP)
-    # Try to find OpenMP with the same configuration as used during build
-    set(DLP_USE_LLVM_OPENMP @DLP_USE_LLVM_OPENMP@)
-    set(DLP_OPENMP_ROOT "@DLP_OPENMP_ROOT@")
+# Stable consumer metadata.  The private capability header is intentionally
+# not installed; consumers receive these CMake variables and the exported
+# AoclDlp::openmp target instead.
+set(AoclDlp_OPENMP_ENABLED @DLP_OPENMP_ENABLED@)
+set(AoclDlp_OPENMP_WIN_RUNTIME "@DLP_OPENMP_WIN_RUNTIME_SELECTED@")
+set(AoclDlp_OPENMP_WIN_FRONTEND "@DLP_OPENMP_WIN_FRONTEND_SELECTED@")
+set(AoclDlp_OPENMP_HAS_ACTIVE_LEVELS @DLP_OPENMP_HAS_ACTIVE_LEVELS@)
+set(AoclDlp_OPENMP_HAS_NESTING @DLP_OPENMP_HAS_NESTING@)
+set(AoclDlp_STATIC_REQUIRES_CXX 1)
+set(AoclDlp_STATIC_AVAILABLE FALSE)
+get_property(_AoclDlp_enabled_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+list(FIND _AoclDlp_enabled_languages CXX _AoclDlp_cxx_language_index)
+if(NOT _AoclDlp_cxx_language_index EQUAL -1)
+    set(AoclDlp_STATIC_AVAILABLE TRUE)
+endif()
 
-        # Store original CMAKE_PREFIX_PATH to restore later if needed
-    set(_AoclDlp_original_prefix_path "${CMAKE_PREFIX_PATH}")
-
-    # If custom OpenMP root was specified during build, add it to prefix path
-    if(DLP_OPENMP_ROOT AND NOT DLP_OPENMP_ROOT STREQUAL "")
-        list(APPEND CMAKE_PREFIX_PATH "${DLP_OPENMP_ROOT}")
+if(AoclDlp_OPENMP_ENABLED)
+    set(_AoclDlp_openmp_components)
+    list(FIND _AoclDlp_enabled_languages C _AoclDlp_c_language_index)
+    if(NOT _AoclDlp_c_language_index EQUAL -1)
+        list(APPEND _AoclDlp_openmp_components C)
+    endif()
+    if(NOT _AoclDlp_cxx_language_index EQUAL -1)
+        list(APPEND _AoclDlp_openmp_components CXX)
+    endif()
+    if(NOT _AoclDlp_openmp_components)
+        message(FATAL_ERROR
+            "AOCL-DLP requires a C or CXX consumer language when OpenMP is "
+            "enabled."
+        )
     endif()
 
-    find_dependency(OpenMP)
+    set(_AoclDlp_openmp_frontend "COMPILER")
+    if((CMAKE_C_COMPILER_ID MATCHES "Clang"
+        OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+       AND (CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"
+            OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+        set(_AoclDlp_openmp_frontend "CLANG_CL")
+    elseif(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+           OR CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        set(_AoclDlp_openmp_frontend "MSVC")
+    endif()
+    if(WIN32
+       AND AoclDlp_OPENMP_WIN_RUNTIME STREQUAL "LLVM"
+       AND _AoclDlp_openmp_frontend STREQUAL "COMPILER")
+        message(FATAL_ERROR
+            "AOCL-DLP LLVM OpenMP packages require an MSVC or clang-cl "
+            "consumer frontend."
+        )
+    endif()
 
-    # Restore original prefix path
-    if(DLP_OPENMP_ROOT AND NOT DLP_OPENMP_ROOT STREQUAL "")
-        set(CMAKE_PREFIX_PATH "${_AoclDlp_original_prefix_path}")
+    # Reject pre-discovered incompatible Windows runtime state instead of
+    # silently selecting a second runtime for the DLP package.
+    set(_AoclDlp_runtime_was_defined FALSE)
+    if(DEFINED OpenMP_RUNTIME_MSVC)
+        set(_AoclDlp_runtime_was_defined TRUE)
+        set(_AoclDlp_saved_runtime_ms
+            "${OpenMP_RUNTIME_MSVC}"
+        )
+    endif()
+
+    if(WIN32
+       AND AoclDlp_OPENMP_WIN_RUNTIME STREQUAL "LLVM"
+       AND _AoclDlp_openmp_frontend STREQUAL "MSVC")
+        if(CMAKE_VERSION VERSION_LESS "3.30")
+            message(FATAL_ERROR
+                "The consumer uses cl.exe with an AOCL-DLP LLVM OpenMP "
+                "package and requires CMake 3.30 or newer."
+            )
+        endif()
+        if(_AoclDlp_runtime_was_defined
+           AND NOT _AoclDlp_saved_runtime_ms STREQUAL ""
+           AND NOT _AoclDlp_saved_runtime_ms STREQUAL "llvm")
+            message(FATAL_ERROR
+                "AOCL-DLP requires the LLVM OpenMP runtime, but "
+                "OpenMP_RUNTIME_MSVC was already set to "
+                "'${_AoclDlp_saved_runtime_ms}'. Configure a fresh consumer."
+            )
+        endif()
+        foreach(_AoclDlp_flag_var OpenMP_C_FLAGS OpenMP_CXX_FLAGS)
+            _AoclDlp_openmp_flags_match_runtime(
+                "${${_AoclDlp_flag_var}}"
+                "VCOMP"
+                "${_AoclDlp_openmp_frontend}"
+                _AoclDlp_stale_vcomp_flags
+            )
+            if(DEFINED ${_AoclDlp_flag_var} AND _AoclDlp_stale_vcomp_flags)
+                message(FATAL_ERROR
+                    "AOCL-DLP requires LLVM OpenMP flags, but "
+                    "${_AoclDlp_flag_var} was pre-discovered with different "
+                    "OpenMP flags. Configure a fresh consumer."
+                )
+            endif()
+        endforeach()
+        set(OpenMP_RUNTIME_MSVC llvm)
+    elseif(WIN32 AND AoclDlp_OPENMP_WIN_RUNTIME STREQUAL "VCOMP")
+        if(_AoclDlp_runtime_was_defined
+           AND NOT _AoclDlp_saved_runtime_ms STREQUAL "")
+            message(FATAL_ERROR
+                "AOCL-DLP requires the VCOMP OpenMP runtime, but "
+                "OpenMP_RUNTIME_MSVC was already set to "
+                "'${_AoclDlp_saved_runtime_ms}'. Configure a fresh consumer."
+            )
+        endif()
+        foreach(_AoclDlp_flag_var OpenMP_C_FLAGS OpenMP_CXX_FLAGS)
+            _AoclDlp_openmp_flags_match_runtime(
+                "${${_AoclDlp_flag_var}}"
+                "LLVM"
+                "${_AoclDlp_openmp_frontend}"
+                _AoclDlp_stale_llvm_flags
+            )
+            if(DEFINED ${_AoclDlp_flag_var} AND _AoclDlp_stale_llvm_flags)
+                message(FATAL_ERROR
+                    "AOCL-DLP requires VCOMP, but "
+                    "${_AoclDlp_flag_var} was pre-discovered as LLVM OpenMP. "
+                    "Configure a fresh consumer."
+                )
+            endif()
+        endforeach()
+        unset(OpenMP_RUNTIME_MSVC)
+    endif()
+
+    if(WIN32 AND AoclDlp_OPENMP_WIN_RUNTIME STREQUAL "VCOMP"
+       AND _AoclDlp_openmp_frontend STREQUAL "CLANG_CL")
+        message(FATAL_ERROR
+            "AOCL-DLP VCOMP packages require an MSVC frontend; clang-cl "
+            "must use the LLVM OpenMP runtime."
+        )
+    endif()
+
+    set(_AoclDlp_original_prefix_path "${CMAKE_PREFIX_PATH}")
+    if(DLP_OPENMP_ROOT)
+        list(APPEND CMAKE_PREFIX_PATH "${DLP_OPENMP_ROOT}")
+    endif()
+    find_dependency(OpenMP REQUIRED COMPONENTS ${_AoclDlp_openmp_components})
+    set(CMAKE_PREFIX_PATH "${_AoclDlp_original_prefix_path}")
+
+    foreach(_AoclDlp_component IN LISTS _AoclDlp_openmp_components)
+        if(_AoclDlp_component STREQUAL "C")
+            set(_AoclDlp_component_flags "${OpenMP_C_FLAGS}")
+        else()
+            set(_AoclDlp_component_flags "${OpenMP_CXX_FLAGS}")
+        endif()
+        if(WIN32
+           AND (AoclDlp_OPENMP_WIN_RUNTIME STREQUAL "LLVM"
+                OR AoclDlp_OPENMP_WIN_RUNTIME STREQUAL "VCOMP"))
+            _AoclDlp_openmp_flags_match_runtime(
+                "${_AoclDlp_component_flags}"
+                "${AoclDlp_OPENMP_WIN_RUNTIME}"
+                "${_AoclDlp_openmp_frontend}"
+                _AoclDlp_component_runtime_match
+            )
+            if(NOT _AoclDlp_component_runtime_match)
+                message(FATAL_ERROR
+                    "FindOpenMP selected flags incompatible with the AOCL-DLP "
+                    "${AoclDlp_OPENMP_WIN_RUNTIME} runtime policy for "
+                    "${_AoclDlp_component}. Configure a fresh consumer."
+                )
+            endif()
+        endif()
+    endforeach()
+
+    # Preserve caller variables after dependency discovery.  Imported
+    # OpenMP targets remain available to the exported DLP targets.
+    if(_AoclDlp_runtime_was_defined)
+        set(OpenMP_RUNTIME_MSVC "${_AoclDlp_saved_runtime_ms}")
+    else()
+        unset(OpenMP_RUNTIME_MSVC)
     endif()
 endif()
 
-# Get the directory where this config file is located
 get_filename_component(AoclDlp_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 
-# Include the targets file which defines the actual targets
 if(NOT TARGET AoclDlp::aocl-dlp)
     include("${AoclDlp_CMAKE_DIR}/AoclDlpTargets.cmake")
 endif()
 
-# Add OpenMP as interface dependency for static library if enabled during build
-if(DLP_ENABLE_OPENMP AND OpenMP_FOUND AND TARGET AoclDlp::aocl-dlp_static)
-    set_property(TARGET AoclDlp::aocl-dlp_static APPEND PROPERTY INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_CXX)
+if(TARGET AoclDlp::openmp)
+    set(_AoclDlp_openmp_link_libraries)
+    foreach(_AoclDlp_component IN LISTS _AoclDlp_openmp_components)
+        if(_AoclDlp_component STREQUAL "C")
+            list(APPEND _AoclDlp_openmp_link_libraries OpenMP::OpenMP_C)
+        elseif(_AoclDlp_component STREQUAL "CXX")
+            list(APPEND _AoclDlp_openmp_link_libraries OpenMP::OpenMP_CXX)
+        endif()
+    endforeach()
+    set_property(TARGET AoclDlp::openmp PROPERTY
+        INTERFACE_LINK_LIBRARIES "${_AoclDlp_openmp_link_libraries}"
+    )
 endif()
 
-# Add OpenMP as interface dependency for shared library if enabled during build
-if(DLP_ENABLE_OPENMP AND OpenMP_FOUND AND TARGET AoclDlp::aocl-dlp)
-    set_property(TARGET AoclDlp::aocl-dlp APPEND PROPERTY INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_CXX)
+set(AoclDlp_INCLUDE_DIRS "")
+if(TARGET AoclDlp::aocl-dlp)
+    get_target_property(AoclDlp_INCLUDE_DIRS
+                        AoclDlp::aocl-dlp
+                        INTERFACE_INCLUDE_DIRECTORIES)
 endif()
-
-# Set up legacy variables for compatibility
-get_target_property(AoclDlp_INCLUDE_DIRS AoclDlp::aocl-dlp INTERFACE_INCLUDE_DIRECTORIES)
 set(AoclDlp_LIBRARIES AoclDlp::aocl-dlp)
-
-# Provide both shared and static library targets as variables for legacy support
 set(AoclDlp_SHARED_LIBRARY AoclDlp::aocl-dlp)
 set(AoclDlp_STATIC_LIBRARY AoclDlp::aocl-dlp_static)
 
-# IMPORTANT: Static Library Linking
-#
-# The static library (AoclDlp::aocl-dlp_static) automatically applies the WHOLE_ARCHIVE
-# linker flag via INTERFACE_LINK_OPTIONS. This ensures all static constructors are included,
-# which is critical for JIT registration and kernel registration in AOCL-DLP.
-#
-# You can simply link against the static library like this:
-#   target_link_libraries(my_app PRIVATE AoclDlp::aocl-dlp_static)
-#
-# The whole-archive flag is automatically applied, so you don't need to specify it manually.
-# This works on:
-#   - Linux/Unix (--whole-archive)
-#   - macOS (--whole-archive)
-#   - Windows with MinGW (--whole-archive)
-#   - Windows with MSVC (/WHOLEARCHIVE)
-#
-# For most applications, using the shared library (AoclDlp::aocl-dlp) is still recommended
-# as it provides easier deployment and smaller executable sizes.
-
-# Check that all required components are available
 set(_aoclDlp_required_components @AOCL_DLP_REQUIRED_COMPONENTS@)
 set(_aoclDlp_available_components @AOCL_DLP_AVAILABLE_COMPONENTS@)
 
-# Verify all required targets exist
-foreach(_comp ${_aocl_dlp_required_components})
+foreach(_comp ${_aoclDlp_required_components})
     if(NOT TARGET AoclDlp::${_comp})
         set(AoclDlp_FOUND False)
         set(AoclDlp_NOT_FOUND_MESSAGE "Required component ${_comp} not found")
@@ -138,13 +285,14 @@ foreach(_comp ${_aocl_dlp_required_components})
     endif()
 endforeach()
 
-# Handle component-specific requests
 if(AoclDlp_FIND_COMPONENTS)
     foreach(_comp ${AoclDlp_FIND_COMPONENTS})
-        if(NOT _comp IN_LIST _aocl_dlp_available_components)
+        if(NOT _comp IN_LIST _aoclDlp_available_components)
             if(AoclDlp_FIND_REQUIRED_${_comp})
                 set(AoclDlp_FOUND False)
-                set(AoclDlp_NOT_FOUND_MESSAGE "Required component ${_comp} not available")
+                set(AoclDlp_NOT_FOUND_MESSAGE
+                    "Required component ${_comp} not available"
+                )
                 return()
             else()
                 message(STATUS "Optional component ${_comp} not available")
@@ -153,14 +301,13 @@ if(AoclDlp_FIND_COMPONENTS)
     endforeach()
 endif()
 
-# Mark package as found
 set(AoclDlp_FOUND True)
 
-# Print status message
 if(NOT AoclDlp_FIND_QUIETLY)
     message(STATUS "Found AOCL-DLP: ${AoclDlp_VERSION}")
-    if(DLP_ENABLE_OPENMP AND OpenMP_FOUND)
+    if(AoclDlp_OPENMP_ENABLED AND OpenMP_FOUND)
         message(STATUS "  OpenMP support: enabled")
+        message(STATUS "  OpenMP runtime: ${AoclDlp_OPENMP_WIN_RUNTIME}")
     else()
         message(STATUS "  OpenMP support: disabled")
     endif()

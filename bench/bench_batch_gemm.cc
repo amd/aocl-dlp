@@ -50,6 +50,7 @@
 #include "bench_metrics.hh"
 #include "bench_types.hh"
 #include "cold_cache.hh"
+#include "threading/dlp_omp_runtime.h"
 
 #include "adaptors/dlp/ual_dlp.hh"
 #include "framework/batch_gemm_args.hh"
@@ -58,11 +59,6 @@
 #include "framework/ual_factory.hh"
 #include "framework/utils/arg_parser.hh"
 #include "framework/utils/yaml_parser.hh"
-
-// OpenMP for detailed threading info
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
 
 #include <benchmark/benchmark.h>
 
@@ -493,9 +489,10 @@ main(int argc, char** argv)
     std::cout << "Loaded " << configs.size() << " configurations from "
               << yaml_files.size() << " file(s)" << std::endl;
 
-#ifdef DLP_ENABLE_OPENMP
+#if DLP_OPENMP_ENABLED
     std::cout << "OpenMP: Enabled" << std::endl;
-    std::cout << "  OMP_NUM_THREADS = " << omp_get_max_threads() << std::endl;
+    std::cout << "  OMP_NUM_THREADS = " << dlp_omp_get_max_threads()
+              << std::endl;
     char* omp_proc_bind = std::getenv("OMP_PROC_BIND");
     if (omp_proc_bind) {
         std::cout << "  OMP_PROC_BIND   = " << omp_proc_bind << std::endl;

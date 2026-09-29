@@ -28,6 +28,8 @@
 set(TEST_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_BINARY_DIR}/classic
+    ${DLP_SOURCE_DIR}/classic/include
+    ${CMAKE_BINARY_DIR}/include/private
 )
 
 # Fetch yaml-cpp for test configuration

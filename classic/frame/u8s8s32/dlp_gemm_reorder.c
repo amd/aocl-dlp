@@ -33,10 +33,7 @@
 #include "kernels/u8s8s32/dlp_gemm_packa.h"
 #include "kernels/u8s8s32/dlp_gemm_packb.h"
 #include "s8s8s32/dlp_gemm_reorder_s8.h"
-
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
+#include "threading/dlp_omp_runtime.h"
 
 void
 dlp_reorderb_u8s8s32o32(dlp_gemm_obj_t*  b,
@@ -71,7 +68,7 @@ dlp_reorderb_u8s8s32o32(dlp_gemm_obj_t*  b,
         // Initialise a local thrinfo obj for work split across threads.
         dlp_task_id_t thread_jc;
         thread_jc.n_way   = n_threads;
-        thread_jc.work_id = omp_get_thread_num();
+        thread_jc.work_id = dlp_omp_get_thread_num();
 #else
     {
         // Initialise a local thrinfo obj for work split across threads.

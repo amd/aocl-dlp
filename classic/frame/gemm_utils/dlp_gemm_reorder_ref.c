@@ -51,10 +51,7 @@
 #include "gemm_utils/dlp_gemm_reorder_layout.h"
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "threading/dlp_gemm_thread_utils.h"
-
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
+#include "threading/dlp_omp_runtime.h"
 
 // Copies one element. elem_sz is 1, 2 or 4 bytes for the supported dtypes.
 DLP_INLINE void
@@ -196,8 +193,8 @@ dlp_reorder_ref_walk(void* unpacked,
     _Pragma("omp parallel num_threads(n_threads)")
     {
         dlp_task_id_t thread_jc;
-        thread_jc.n_way   = omp_get_num_threads();
-        thread_jc.work_id = omp_get_thread_num();
+        thread_jc.n_way   = dlp_omp_get_num_threads();
+        thread_jc.work_id = dlp_omp_get_thread_num();
 #else
     {
         dlp_task_id_t thread_jc;

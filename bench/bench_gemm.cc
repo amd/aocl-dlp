@@ -49,17 +49,13 @@
 #include "bench_metrics.hh"
 #include "bench_types.hh"
 #include "cold_cache.hh"
+#include "threading/dlp_omp_runtime.h"
 
 #include "adaptors/dlp/ual_dlp.hh"
 #include "framework/matrix.hh"
 #include "framework/ual_factory.hh"
 #include "framework/ual_plan.hh"
 #include "framework/utils/arg_parser.hh"
-
-// OpenMP for detailed threading info.
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
 
 #include <benchmark/benchmark.h>
 
@@ -606,9 +602,10 @@ main(int argc, char** argv)
     std::cerr << "Loaded " << configs.size() << " configurations from "
               << yaml_files.size() << " file(s)" << std::endl;
 
-#ifdef DLP_ENABLE_OPENMP
+#if DLP_OPENMP_ENABLED
     std::cerr << "OpenMP: Enabled" << std::endl;
-    std::cerr << "  OMP_NUM_THREADS = " << omp_get_max_threads() << std::endl;
+    std::cerr << "  OMP_NUM_THREADS = " << dlp_omp_get_max_threads()
+              << std::endl;
     char* omp_proc_bind = std::getenv("OMP_PROC_BIND");
     if (omp_proc_bind) {
         std::cerr << "  OMP_PROC_BIND   = " << omp_proc_bind << std::endl;
@@ -632,7 +629,7 @@ main(int argc, char** argv)
     double bench_min_time = parser.getBenchMinTime();
 
     // One-time cold-cache init (no-op unless --cold was passed).
-    // Must come AFTER OMP setup so omp_get_max_threads() returns the right
+    // Must come AFTER OMP setup so dlp_omp_get_max_threads() returns the right
     // value for the per-thread sink array.
     dlp::bench::initColdCache(parser.getColdCache(), parser.getColdPasses());
 

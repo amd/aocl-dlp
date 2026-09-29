@@ -138,7 +138,7 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 | DLP_THREADING_MODEL           | "none"       | Threading model ("none", "openmp")                      |
 | DLP_ENABLE_OPENMP             | ON           | Override OpenMP support (auto-enabled by threading model)         |
 | DLP_OPENMP_ROOT               | ""           | Custom path to OpenMP installation                                 |
-| DLP_USE_LLVM_OPENMP           | OFF          | Force using LLVM OpenMP implementation                             |
+| DLP_OPENMP_WIN_RUNTIME        | AUTO         | Windows runtime policy: AUTO, VCOMP, or LLVM                      |
 | DLP_ENABLE_ASAN               | OFF          | Enable AddressSanitizer                                            |
 | DLP_ENABLE_TSAN               | OFF          | Enable ThreadSanitizer                                             |
 | DLP_ENABLE_UBSAN              | OFF          | Enable UndefinedBehaviorSanitizer                                  |
@@ -161,8 +161,50 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 
 **Note:**
 - Options can be set via `-D<option>=<value>` when invoking `cmake`.
+- On Windows, cl.exe selects the redistributable VCOMP runtime for `AUTO`
+  and `VCOMP`.  Explicit `LLVM` selects `/openmp:llvm` and requires CMake
+  3.30 or newer.  clang-cl accepts `AUTO`/`LLVM` and uses Clang's
+  `-fopenmp`, `-fopenmp=libomp`, or `-fopenmp:libomp` forms for LLVM OpenMP;
+  it rejects `VCOMP`.
+- Changing `DLP_OPENMP_WIN_RUNTIME` requires a fresh build directory.
+- Installed packages select only the OpenMP language components enabled by the
+  consumer project (`C`, `CXX`, or both).  C-only shared consumers are
+  supported; static consumers require CXX because the static DLP archive
+  contains C++ objects (`AoclDlp_STATIC_REQUIRES_CXX` and
+  `AoclDlp_STATIC_AVAILABLE` expose this package constraint).
+- On Windows hosts with more than 64 logical processors, prefer the LLVM
+  runtime's `KMP_AFFINITY=granularity=core,compact` policy when topology hints
+  are needed.  The bundled Windows libomp runtime may abort on
+  `OMP_PLACES=cores|threads` combined with `OMP_PROC_BIND`; this is a runtime
+  limitation, not a DLP topology mapping failure.
 - Some options (like `-GNinja`) are passed as command-line arguments, not as variables.
 - For a full list of options, see the modular cmake files: `cmake/dlp_core_options.cmake`, `cmake/dlp_testing.cmake`, `cmake/dlp_benchmark.cmake`, `cmake/dlp_build_options.cmake`, and `cmake/dlp_documentation.cmake`.
+
+### OpenMP runtime-call boundary
+
+Library production code routes OpenMP runtime function calls through the
+private, build-only `dlp_omp_runtime.h` wrapper. OpenMP pragmas remain direct
+compiler directives. The following raw-runtime uses are intentional
+external-oracle or consumer boundaries:
+
+- `classic/frame/threading/dlp_omp_runtime.c` implements the cold place-API
+  topology collector.
+- `classic/include/threading/dlp_omp_runtime.h` contains the inline wrapper
+  bodies and is the runtime-call implementation boundary.
+- `examples/classic/dlp_example_utils.h` is an installed-consumer helper; its
+  direct `omp_set_*`/`omp_get_thread_num` calls are outside the library
+  boundary.
+- `tests/classic/test_runtime_threading.cc` compares raw OpenMP control state
+  against DLP policy behavior.
+
+Benchmarks use the private wrapper for runtime queries and do not define an
+additional OpenMP runtime boundary.
+
+For the mechanical review gate, scan `classic/`, `bench/`, `examples/`, and
+`tests/` for `#include <omp.h>` and `omp_*(`. Any raw match in library-owned
+code must be migrated to `dlp_omp_runtime.h`; only the wrapper header/source,
+the example helper, the external-oracle test, and OpenMP pragmas are
+allowlisted.
 
 ## Quick Start Build
 

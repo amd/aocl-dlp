@@ -262,14 +262,14 @@ __builtin_clz(unsigned int x)
 #endif
 
 /* ======================================================================
- * 13. OpenMP nested parallelism
+ * 13. Legacy OpenMP nesting compatibility
  *
- * omp_set_max_active_levels() requires OpenMP 5.0; MSVC only has 2.0.
+ * Kept for installed consumers that used the historical
+ * dlp_omp_set_nesting() macro.  DLP production code uses the private
+ * dlp_omp_runtime wrapper; this compatibility path preserves the installed
+ * source interface while mapping VCOMP to its OpenMP 2.0 boolean control.
  * ====================================================================== */
-#ifdef _OPENMP
-/* <omp.h> declares C++ templates; if this header is pulled in from within an
- * extern "C" block (common in C++ TUs that include the C API), those templates
- * would inherit C linkage and fail to compile. Force C++ linkage explicitly. */
+#if defined(_OPENMP)
 #ifdef __cplusplus
 extern "C++"
 {
@@ -278,12 +278,13 @@ extern "C++"
 #ifdef __cplusplus
 }
 #endif
-#endif
-
 #if defined(_MSC_VER)
-#define dlp_omp_set_nesting(levels) omp_set_nested(1)
+#define dlp_omp_set_nesting(levels) omp_set_nested(((levels) > 1) ? 1 : 0)
 #else
 #define dlp_omp_set_nesting(levels) omp_set_max_active_levels(levels)
+#endif
+#else
+#define dlp_omp_set_nesting(levels) ((void)(levels))
 #endif
 
 /* ======================================================================
@@ -299,7 +300,7 @@ extern "C++"
 #endif
 
 /* ======================================================================
- * 15. Platform-specific clock selector
+ * 14. Platform-specific clock selector
  *
  * dlp_gemm_sys.c uses this to choose between QPC and clock_gettime
  * without an #ifdef _WIN32 in the source file.

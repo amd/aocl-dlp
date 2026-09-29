@@ -32,6 +32,7 @@
 
 #include "classic/dlp_compat.h"
 #include "classic/dlp_macros.h"
+#include "threading/dlp_omp_runtime.h"
 
 /*
  * The DLP_LIB_ATOMIC_* macros below accept a memory-order parameter for
@@ -52,10 +53,6 @@
 #include "classic/aocl_lib_interface_apis.h"
 #include "runtime/dlp_runtime.h"
 #include "sys_utils/dlp_gemm_sys.h"
-
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
 
 // The global rntm_t structure, which holds the global thread settings
 // along with a few other key parameters.
@@ -157,7 +154,7 @@ DLP_CLASSIC_THREAD_LOCAL bool       dlp_init_tl_rntm = TRUE;
  * Precedence order (highest to lowest):
  * 1. DLP_IC_NT/DLP_JC_NT environment variables (ways-based threading)
  * 2. DLP_NUM_THREADS environment variable (thread count-based)
- * 3. OpenMP settings via omp_get_max_threads() (if DLP_ENABLE_OPENMP)
+ * 3. OpenMP settings via dlp_omp_get_max_threads() (if DLP_ENABLE_OPENMP)
  * 4. System core count (fallback)
  *
  * @note Special value -1 means "unset" for all threading parameters.
@@ -195,10 +192,8 @@ dlp_init_threading(void)
         jc = -1;
     } else if (openmp_enabled == TRUE) {
 #ifdef DLP_ENABLE_OPENMP
-        md_t active_level = omp_get_active_level();
-        md_t max_levels   = omp_get_max_active_levels();
-        if (active_level < max_levels) {
-            nt = omp_get_max_threads();
+        if (dlp_omp_can_create_parallel_team()) {
+            nt = dlp_omp_get_max_threads();
         } else {
             nt = 1;
         }
@@ -258,7 +253,7 @@ dlp_init_threading(void)
  * 1. Thread-local settings (dlp_tl_rntm) - set via dlp_thread_set_*_local()
  * 2. Library-global settings (lib_*) - set via dlp_thread_set_*_library()
  * 3. Environment variables (DLP_IC_NT, DLP_JC_NT, DLP_NUM_THREADS)
- * 4. OpenMP settings (omp_get_max_threads) - if DLP_ENABLE_OPENMP
+ * 4. OpenMP settings (dlp_omp_get_max_threads) - if DLP_ENABLE_OPENMP
  * 5. System core count (fallback)
  *
  * Threading Mode Selection:
@@ -382,7 +377,7 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
     // To be noted this will transfer the DLP threading control to an
     // external entity (OpenMP).
     if ((act_nt == -1) && (act_ic == -1) && (act_jc == -1)) {
-        md_t omp_nt = omp_get_max_threads();
+        md_t omp_nt = dlp_omp_get_max_threads();
         if (omp_nt > 0) {
             act_nt                     = omp_nt;
             act_ic                     = -1;
@@ -421,9 +416,7 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
     // settings, as OpenMP will not be able to explicitly set number of
     // threads in this scenario and can lead to oversubscription.
     if ((act_nt > 0) || (act_ic > 0) || (act_jc > 0)) {
-        md_t active_level = omp_get_active_level();
-        md_t max_levels   = omp_get_max_active_levels();
-        if (active_level >= max_levels) {
+        if (!dlp_omp_can_create_parallel_team()) {
             act_nt = -1;
             act_ic = 1;
             act_jc = 1;

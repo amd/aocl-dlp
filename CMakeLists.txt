@@ -163,7 +163,9 @@ endif()
 
 # Link with OpenMP if enabled
 if(DLP_ENABLE_OPENMP)
-    target_link_libraries(${PROJECT_NAME} PRIVATE dlp::openmp)
+    # Shared-library consumers may compile their own OpenMP regions.  Publish
+    # the selected runtime target so their compile/link flags match DLP.
+    target_link_libraries(${PROJECT_NAME} PUBLIC dlp::openmp)
 endif()
 
 # Link with dependencies for static library (no object libraries needed as they're included)
@@ -174,7 +176,9 @@ target_link_libraries(${PROJECT_NAME}_static
 
 # Link with OpenMP if enabled
 if(DLP_ENABLE_OPENMP)
-    target_link_libraries(${PROJECT_NAME}_static PRIVATE dlp::openmp)
+    # Static consumers must receive the exact C/C++ OpenMP targets selected
+    # for the DLP build.  Shared consumers get the runtime from the DLL.
+    target_link_libraries(${PROJECT_NAME}_static PUBLIC dlp::openmp)
 endif()
 
 # Setup atomic support for 16-byte atomic structs (platform-specific)
@@ -198,6 +202,10 @@ target_include_directories(${PROJECT_NAME}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
+target_include_directories(${PROJECT_NAME}
+    PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include/private>
+)
 
 # Set include directories for the target static library
 target_include_directories(${PROJECT_NAME}_static
@@ -205,6 +213,10 @@ target_include_directories(${PROJECT_NAME}_static
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+)
+target_include_directories(${PROJECT_NAME}_static
+    PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include/private>
 )
 
 # Apply centralized compiler flags directly to avoid interface target export issues

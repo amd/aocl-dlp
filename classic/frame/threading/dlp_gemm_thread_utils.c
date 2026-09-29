@@ -33,6 +33,7 @@
 #include "classic/dlp_compat.h"
 #include "sys_utils/dlp_gemm_sys.h"
 #include "threading/dlp_gemm_thread_utils.h"
+#include "threading/dlp_omp_runtime.h"
 
 static dlp_pthread_once_t once_check_dlp_gemm_thread_topo_init =
     DLP_PTHREAD_ONCE_INIT;
@@ -41,177 +42,30 @@ static dlp_gemm_thread_attrs_t dlp_gemm_thread_attrs;
 
 #ifdef DLP_ENABLE_OPENMP
 
-#include <omp.h>
-
 static void
 dlp_gemm_detect_thread_topo()
 {
-    int nt_max    = omp_get_max_threads();
-    int num_procs = omp_get_num_procs();
-
-    if (nt_max > num_procs) {
-        // Over subscription of threads, no more work distr.
-        return;
+    int nt_max    = dlp_omp_get_max_threads();
+    int num_procs = dlp_omp_get_num_procs();
+    if (nt_max > 0 && num_procs > 0 && nt_max <= num_procs) {
+        /*
+         * Preserve the historical meanings of these fields: OpenMP
+         * availability and configured team size do not imply that affinity
+         * topology is available.
+         */
+        dlp_gemm_thread_attrs.tid_cnt        = (iter_t)nt_max;
+        dlp_gemm_thread_attrs.openmp_enabled = TRUE;
     }
 
-    dlp_gemm_thread_attrs.tid_cnt        = nt_max;
-    dlp_gemm_thread_attrs.openmp_enabled = TRUE;
-
-    int** thread_core_bind_list     = NULL;
-    int*  adj_tid_cnt_for_core_grps = NULL;
-    int*  tid_cnt_for_core_grps     = NULL;
-
-    // Allocating memory for pointers, to track thread-core(s) binding
-    // by OpenMP. The pointers are also initialized to NULL, in case we
-    // actually do not spawn nt_max number of threads in the subsequent
-    // parallel region.
-    thread_core_bind_list = calloc(nt_max, sizeof(int*));
-    if (thread_core_bind_list == NULL) {
-        goto err_handle;
+    dlp_omp_topology_t topology = { 0 };
+    if (dlp_omp_collect_thread_topology(&topology)) {
+        dlp_gemm_thread_attrs.tid_distr_nearly_seq =
+            topology.tid_distr_nearly_seq ? TRUE : FALSE;
+        dlp_gemm_thread_attrs.tid_core_grp_load_high =
+            topology.tid_core_grp_load_high ? TRUE : FALSE;
+        dlp_gemm_thread_attrs.tid_core_grp_id_list =
+            topology.tid_core_grp_id_list;
     }
-
-// Launch max threads to determine the core bininding for all threads
-// within the omp team.
-// omp_get_place_num / omp_get_place_num_procs / omp_get_place_proc_ids are
-// OpenMP 4.0 APIs.  MSVC's /openmp:llvm runtime (OpenMP 3.1) does not
-// provide them, so we skip affinity detection entirely on MSVC and leave
-// tid_distr_nearly_seq / tid_core_grp_load_high at their safe FALSE defaults.
-#if !DLP_COMPILER_MSVC
-#pragma omp parallel num_threads(nt_max)
-    {
-        int thread_num      = omp_get_thread_num();
-        int thread_place    = omp_get_place_num();
-        int place_num_procs = omp_get_place_num_procs(thread_place);
-
-        if (place_num_procs == 0) {
-
-            thread_core_bind_list[thread_num] = NULL;
-        } else {
-            thread_core_bind_list[thread_num] =
-                malloc((place_num_procs + 1) * sizeof(int));
-
-            if (thread_core_bind_list[thread_num] != NULL) {
-                thread_core_bind_list[thread_num][0] = place_num_procs;
-                omp_get_place_proc_ids(thread_place,
-                                       &thread_core_bind_list[thread_num][1]);
-            }
-        }
-    }
-
-    // When SMT is on, this should be 16. Need a way to dynamically retrieve it.
-    const int core_grp_size   = 8;
-    bool      can_detect_topo = TRUE;
-
-    dlp_gemm_thread_attrs.tid_core_grp_id_list = malloc(nt_max * sizeof(int));
-    if (dlp_gemm_thread_attrs.tid_core_grp_id_list == NULL) {
-        goto err_handle;
-    }
-
-    // TIDs are assigned from 0 to nt_max - 1.
-    // OpenMP for close distribution need not pin threads to sequential cores
-    // in the presence of CCD architecture. Like tid 0-7 will be on core 0-7
-    // but tid 8-15 could be on core 96-103. So just checking for increasing
-    // core id for corresponding tid wont get accurate core group load.
-    // GOMP_CPU_AFFINITY however assigns cores sequentially.
-    for (iter_t ii = 0; ii < nt_max; ++ii) {
-        dlp_gemm_thread_attrs.tid_core_grp_id_list[ii] = -1;
-        // Identify the core(s) in which thread would be bound
-        // In case the thread was never spawned, this code-section is skipped.
-        if (thread_core_bind_list[ii] != NULL) {
-            // Wrap around the proc/core ids based on number of cores used.
-            int st_core_grp_id =
-                (thread_core_bind_list[ii][1] % num_procs) / core_grp_size;
-            dlp_gemm_thread_attrs.tid_core_grp_id_list[ii] = st_core_grp_id;
-            for (iter_t jj = 1; jj < thread_core_bind_list[ii][0]; ++jj) {
-                int cur_core_grp_id =
-                    (thread_core_bind_list[ii][jj + 1] % num_procs)
-                    / core_grp_size;
-                if (cur_core_grp_id != st_core_grp_id) {
-                    // Core binding spanning across core groups,
-                    // cannot detect topo.
-                    can_detect_topo = FALSE;
-                    break;
-                }
-            }
-        } else {
-            // Thread was not spawned, cannot detect topo.
-            // Break out of the current loop.
-            can_detect_topo = FALSE;
-            break;
-        }
-        // Check if the topo detection failed at any point.
-        // If so, break out of the loop.
-        if (can_detect_topo == FALSE) {
-            break;
-        }
-    }
-
-    int num_core_grps = (num_procs + core_grp_size - 1) / core_grp_size;
-
-    // Get count of core groups that are loaded and not loaded with adj ranks.
-    // This will give an approximation for thread pin distribution.
-    if (can_detect_topo == TRUE) {
-
-        adj_tid_cnt_for_core_grps = calloc(num_core_grps, sizeof(int));
-        tid_cnt_for_core_grps     = calloc(num_core_grps, sizeof(int));
-        if ((adj_tid_cnt_for_core_grps == NULL)
-            || (tid_cnt_for_core_grps == NULL)) {
-            goto err_handle;
-        }
-
-        const int core_grp_loaded_thres      = 3;
-        int       core_grp_adj_tid_thres_cnt = 0;
-        int       core_grp_adj_tid_cnt       = 0;
-        int       core_grp_non_adj_tid_cnt   = 0;
-
-        int cur_core_grp_id = dlp_gemm_thread_attrs.tid_core_grp_id_list[0];
-        tid_cnt_for_core_grps[cur_core_grp_id] += 1;
-
-        for (iter_t ii = 1; ii < nt_max; ++ii) {
-            if (dlp_gemm_thread_attrs.tid_core_grp_id_list[ii]
-                == cur_core_grp_id) {
-                adj_tid_cnt_for_core_grps[cur_core_grp_id] += 1;
-            } else {
-                cur_core_grp_id =
-                    dlp_gemm_thread_attrs.tid_core_grp_id_list[ii];
-            }
-            tid_cnt_for_core_grps[dlp_gemm_thread_attrs
-                                      .tid_core_grp_id_list[ii]] += 1;
-        }
-
-        for (iter_t ii = 0; ii < num_core_grps; ++ii) {
-            if (adj_tid_cnt_for_core_grps[ii] >= core_grp_loaded_thres) {
-                core_grp_adj_tid_thres_cnt += 1;
-                core_grp_adj_tid_cnt += 1;
-            } else if (adj_tid_cnt_for_core_grps[ii] > 0) {
-                core_grp_adj_tid_cnt += 1;
-            } else if (tid_cnt_for_core_grps[ii] > 0) {
-                core_grp_non_adj_tid_cnt += 1;
-            }
-        }
-
-        if (core_grp_adj_tid_cnt > (2 * core_grp_non_adj_tid_cnt)) {
-            dlp_gemm_thread_attrs.tid_distr_nearly_seq = TRUE;
-        }
-
-        if ((core_grp_adj_tid_thres_cnt > 0)
-            && (core_grp_adj_tid_thres_cnt
-                >= (core_grp_adj_tid_cnt - core_grp_adj_tid_thres_cnt))) {
-            dlp_gemm_thread_attrs.tid_core_grp_load_high = TRUE;
-        }
-    }
-#endif // !DLP_COMPILER_MSVC
-
-err_handle:
-    free(tid_cnt_for_core_grps);
-    free(adj_tid_cnt_for_core_grps);
-
-    if (thread_core_bind_list != NULL) {
-        for (iter_t ii = 0; ii < nt_max; ++ii) {
-            free(thread_core_bind_list[ii]);
-        }
-    }
-    free(thread_core_bind_list);
 }
 
 #else
@@ -396,8 +250,8 @@ dlp_thread_partition_2x2(md_t n_thread,
         }
     }
 
-    // Sometimes the last factor applied is prime. For example, on a square
-    // matrix, we tentatively arrive (from the logic above) at:
+    // Sometimes the last factor applied is prime. For example, we tentatively
+    // arrive (from the logic above) at:
     // - a 2x6 factorization when given 12 ways of parallelism
     // - a 2x10 factorization when given 20 ways of parallelism
     // - a 2x14 factorization when given 28 ways of parallelism

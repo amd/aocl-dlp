@@ -35,10 +35,7 @@
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "kernels/f32f32f32/dlp_gemm_pack_f32.h"
 #include "threading/dlp_gemm_thread_utils.h"
-
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
+#include "threading/dlp_omp_runtime.h"
 
 msz_t
 aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
@@ -243,7 +240,7 @@ aocl_reorder_f32f32f32of32(const char      order,
         // Initialise a local thrinfo obj for work split across threads.
         dlp_task_id_t thread_jc;
         thread_jc.n_way   = n_threads;
-        thread_jc.work_id = omp_get_thread_num();
+        thread_jc.work_id = dlp_omp_get_thread_num();
 #else
     {
         // Initialise a local thrinfo obj for work split across threads.

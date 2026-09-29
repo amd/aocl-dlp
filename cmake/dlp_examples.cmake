@@ -100,15 +100,17 @@ function(dlp_add_c_example)
             ${DLP_EXAMPLE_INCLUDE_DIRS}
     )
 
-    # Link with OpenMP if available
-    if(OpenMP_C_FOUND)
-        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE OpenMP::OpenMP_C)
-    endif()
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE OpenMP::OpenMP_CXX)
-    endif()
-    if(OpenMP_C_FOUND OR OpenMP_CXX_FOUND)
-        target_compile_definitions(${DLP_EXAMPLE_NAME} PRIVATE DLP_EXAMPLE_ENABLE_OPENMP)
+    # Reuse DLP's selected runtime.  Examples must not independently discover
+    # a second OpenMP implementation.
+    if(DLP_ENABLE_OPENMP)
+        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE dlp::openmp)
+        target_compile_definitions(
+            ${DLP_EXAMPLE_NAME}
+            PRIVATE
+                DLP_EXAMPLE_ENABLE_OPENMP
+                DLP_EXAMPLE_OPENMP_HAS_ACTIVE_LEVELS=${DLP_OPENMP_HAS_ACTIVE_LEVELS}
+                DLP_EXAMPLE_OPENMP_HAS_NESTING=${DLP_OPENMP_HAS_NESTING}
+        )
     endif()
 
     # Set compiler flags

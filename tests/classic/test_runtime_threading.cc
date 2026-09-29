@@ -46,13 +46,20 @@
  * 5. Environment variables / OpenMP / System cores (fallback)
  */
 
+#include <atomic>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <gtest/gtest.h>
 
+// Regression coverage: GCC's omp.h declares C++ templates.  Keeping the DLP
+// C API inside extern "C" verifies dlp_compat.h preserves C++ linkage for
+// that header when OpenMP is enabled.
 extern "C"
 {
 #include "classic/aocl_lib_interface_apis.h"
 }
+#include "threading/dlp_omp_runtime.h"
 
 // ============================================================================
 // TEST HELPERS
@@ -385,7 +392,9 @@ TEST_F(ThreadingPrecedenceTest, NoOpenMPDefaultsToSingleThread)
 
 #ifdef DLP_ENABLE_OPENMP
 
-#include <atomic>
+// Allowlisted external-runtime oracle: these tests intentionally compare raw
+// OpenMP control state with DLP's policy wrapper. Production DLP calls use the
+// private wrapper instead.
 #include <omp.h>
 #include <vector>
 
@@ -398,13 +407,13 @@ class ThreadingOpenMPTest : public ThreadingAPITest
         ThreadingAPITest::SetUp();
         // Enable nested parallelism - atleast 2 levels if DLP APIs are called
         // inside a omp loop. Else 1 level is sufficient.
-        omp_set_max_active_levels(2);
+        dlp_omp_set_nested_parallelism(true);
     }
 
     void TearDown() override
     {
         ThreadingAPITest::TearDown();
-        omp_set_max_active_levels(1);
+        dlp_omp_set_nested_parallelism(false);
     }
 };
 
@@ -441,10 +450,19 @@ TEST_F(ThreadingOpenMPTest, OMPThreadLocalNumThreadsIndependence)
         dlp_thread_set_num_threads_local(-1);
     }
 
+#if DLP_OPENMP_RUNTIME_VCOMP || !DLP_OPENMP_HAS_ACTIVE_LEVELS
+    // VCOMP cannot honor DLP's requested nested team sizes. The wrapper
+    // conservatively serializes DLP's inner team while preserving the
+    // thread-local state itself.
+    EXPECT_EQ(observed_values[0], -1);
+    EXPECT_EQ(observed_values[1], -1);
+    EXPECT_EQ(observed_values[2], -1);
+#else
     // Verify thread-local independence
     EXPECT_EQ(observed_values[0], 4);  // Thread 0 set to 4
     EXPECT_EQ(observed_values[1], 12); // Thread 1 set to 12
     EXPECT_EQ(observed_values[2], 16); // Thread 2 used library default
+#endif
 }
 
 /**
@@ -477,6 +495,15 @@ TEST_F(ThreadingOpenMPTest, OMPThreadLocalWaysIndependence)
         dlp_thread_set_ways_local(-1, -1);
     }
 
+#if DLP_OPENMP_RUNTIME_VCOMP || !DLP_OPENMP_HAS_ACTIVE_LEVELS
+    // VCOMP serializes the DLP-controlled inner team to one-way execution.
+    EXPECT_EQ(ic_values[0], 1);
+    EXPECT_EQ(jc_values[0], 1);
+    EXPECT_EQ(ic_values[1], 1);
+    EXPECT_EQ(jc_values[1], 1);
+    EXPECT_EQ(ic_values[2], 1);
+    EXPECT_EQ(jc_values[2], 1);
+#else
     // Verify independence
     EXPECT_EQ(ic_values[0], 4);
     EXPECT_EQ(jc_values[0], 2);
@@ -492,6 +519,7 @@ TEST_F(ThreadingOpenMPTest, OMPThreadLocalWaysIndependence)
         EXPECT_EQ(ic_values[2], -1);
         EXPECT_EQ(jc_values[2], -1);
     }
+#endif
 }
 
 /**
@@ -501,6 +529,11 @@ TEST_F(ThreadingOpenMPTest, OMPThreadLocalWaysIndependence)
  */
 TEST_F(ThreadingOpenMPTest, OMPThreadLocalPersistsAcrossRegions)
 {
+#if DLP_OPENMP_RUNTIME_VCOMP || !DLP_OPENMP_HAS_ACTIVE_LEVELS
+    GTEST_SKIP() << "Thread-local nested OpenMP semantics are unavailable "
+                    "under the conservative VCOMP policy.";
+#endif
+
     dlp_thread_set_num_threads_library(16);
 
 // First parallel region - set thread-local
@@ -526,8 +559,12 @@ TEST_F(ThreadingOpenMPTest, OMPThreadLocalPersistsAcrossRegions)
         }
     }
 
+#if DLP_OPENMP_RUNTIME_VCOMP || !DLP_OPENMP_HAS_ACTIVE_LEVELS
+    EXPECT_EQ(saw_99_count.load(), 0);
+#else
     // Verify no thread saw the leaked value
     EXPECT_GT(saw_99_count.load(), 0);
+#endif
 }
 
 /**
@@ -536,6 +573,11 @@ TEST_F(ThreadingOpenMPTest, OMPThreadLocalPersistsAcrossRegions)
  */
 TEST_F(ThreadingOpenMPTest, OMPThreadControlForLibrary)
 {
+#if DLP_OPENMP_RUNTIME_VCOMP || !DLP_OPENMP_HAS_ACTIVE_LEVELS
+    GTEST_SKIP() << "Thread-local OpenMP control semantics are unavailable "
+                    "under the conservative VCOMP policy.";
+#endif
+
     bool has_env_ic = isEnvVarDefined("DLP_IC_NT");
     bool has_env_jc = isEnvVarDefined("DLP_JC_NT");
     bool has_env_nt = isEnvVarDefined("DLP_NUM_THREADS");
@@ -570,9 +612,154 @@ TEST_F(ThreadingOpenMPTest, OMPThreadControlForLibrary)
     EXPECT_EQ(observed_values_omp[0], 4);
     EXPECT_EQ(observed_values_omp[1], 12);
     EXPECT_EQ(observed_values_omp[2], 16);
+#if DLP_OPENMP_RUNTIME_VCOMP || !DLP_OPENMP_HAS_ACTIVE_LEVELS
+    EXPECT_EQ(observed_values_dlp[0], -1);
+    EXPECT_EQ(observed_values_dlp[1], -1);
+    EXPECT_EQ(observed_values_dlp[2], -1);
+#else
     EXPECT_EQ(observed_values_dlp[0], observed_values_omp[0]);
     EXPECT_EQ(observed_values_dlp[1], observed_values_omp[1]);
     EXPECT_EQ(observed_values_dlp[2], observed_values_omp[2]);
+#endif
+}
+
+TEST(DlpOpenMPWrapperTest, PredicateReevaluatesAcrossOuterRegions)
+{
+    if (dlp_omp_get_num_procs() < 2) {
+        GTEST_SKIP() << "At least two OpenMP processors are required for an "
+                        "active parallel region.";
+    }
+    if (isEnvVarDefined("DLP_IC_NT") || isEnvVarDefined("DLP_JC_NT")
+        || isEnvVarDefined("DLP_NUM_THREADS")
+        || isEnvVarDefined("OMP_MAX_ACTIVE_LEVELS")
+        || isEnvVarDefined("OMP_THREAD_LIMIT") || isEnvVarDefined("OMP_DYNAMIC")
+        || isEnvVarDefined("OMP_NUM_THREADS")) {
+        GTEST_SKIP() << "DLP/OpenMP threading environment variables must be "
+                        "unset.";
+    }
+
+    dlp_omp_set_nested_parallelism(true);
+
+    const bool       outside_before = dlp_omp_can_create_parallel_team();
+    std::atomic<int> inside{ -1 };
+    std::atomic<int> team_size{ -1 };
+#pragma omp parallel num_threads(2)
+    {
+#pragma omp single
+        team_size.store(dlp_omp_get_num_threads());
+#pragma omp single
+        inside.store(dlp_omp_can_create_parallel_team());
+#pragma omp barrier
+    }
+    const bool outside_after = dlp_omp_can_create_parallel_team();
+
+    EXPECT_TRUE(outside_before);
+    EXPECT_TRUE(outside_after);
+    EXPECT_EQ(team_size.load(), 2);
+    EXPECT_NE(inside.load(), -1);
+#if DLP_OPENMP_RUNTIME_VCOMP || !DLP_OPENMP_HAS_ACTIVE_LEVELS
+    EXPECT_EQ(inside.load(), 0);
+#else
+    EXPECT_EQ(inside.load(), 1);
+#endif
+
+    dlp_omp_set_nested_parallelism(false);
+}
+
+namespace {
+
+[[noreturn]] void
+run_first_dlp_call_inside_then_outside()
+{
+    dlp_omp_set_nested_parallelism(false);
+    std::atomic<long> inside{ -2 };
+    std::atomic<int>  team_size{ -1 };
+#pragma omp parallel num_threads(2)
+    {
+#pragma omp single
+        team_size.store(dlp_omp_get_num_threads());
+#pragma omp single
+        inside.store((long)dlp_thread_get_num_threads_active());
+#pragma omp barrier
+    }
+
+    const long outside = dlp_thread_get_num_threads_active();
+    bool       passed  = team_size.load() == 2 && inside.load() != -2;
+    passed             = passed && inside.load() == -1;
+    passed             = passed && outside > 1;
+    std::fprintf(stderr,
+                 "DLP_FIRST_CALL inside_then_outside team=%d inside=%ld "
+                 "outside=%ld\n",
+                 team_size.load(), inside.load(), outside);
+    dlp_omp_set_nested_parallelism(false);
+    if (passed) {
+        std::fprintf(stderr, "DLP_FIRST_CALL_OK\n");
+    }
+    std::exit(passed ? EXIT_SUCCESS : EXIT_FAILURE);
+}
+
+[[noreturn]] void
+run_first_dlp_call_outside_then_inside()
+{
+    dlp_omp_set_nested_parallelism(false);
+    const long        outside = dlp_thread_get_num_threads_active();
+    bool              passed  = outside > 1;
+    std::atomic<long> inside{ -2 };
+    std::atomic<int>  team_size{ -1 };
+#pragma omp parallel num_threads(2)
+    {
+#pragma omp single
+        team_size.store(dlp_omp_get_num_threads());
+#pragma omp single
+        inside.store((long)dlp_thread_get_num_threads_active());
+#pragma omp barrier
+    }
+
+    passed = passed && team_size.load() == 2 && inside.load() != -2;
+    passed = passed && inside.load() == -1;
+    std::fprintf(stderr,
+                 "DLP_FIRST_CALL outside_then_inside team=%d inside=%ld "
+                 "outside=%ld\n",
+                 team_size.load(), inside.load(), outside);
+    dlp_omp_set_nested_parallelism(false);
+    if (passed) {
+        std::fprintf(stderr, "DLP_FIRST_CALL_OK\n");
+    }
+    std::exit(passed ? EXIT_SUCCESS : EXIT_FAILURE);
+}
+
+} // namespace
+
+TEST(DlpOpenMPWrapperTest, FirstDlpCallOrderingsAreIndependent)
+{
+    if (dlp_omp_get_num_procs() < 2) {
+        GTEST_SKIP() << "At least two OpenMP processors are required for an "
+                        "active parallel region.";
+    }
+    const char* proc_bind            = std::getenv("OMP_PROC_BIND");
+    const bool  proc_bind_configured = proc_bind != nullptr
+                                      && std::strcmp(proc_bind, "false") != 0
+                                      && std::strcmp(proc_bind, "FALSE") != 0
+                                      && std::strcmp(proc_bind, "0") != 0;
+    if (isEnvVarDefined("DLP_IC_NT") || isEnvVarDefined("DLP_JC_NT")
+        || isEnvVarDefined("DLP_NUM_THREADS")
+        || isEnvVarDefined("OMP_MAX_ACTIVE_LEVELS")
+        || isEnvVarDefined("OMP_THREAD_LIMIT") || isEnvVarDefined("OMP_DYNAMIC")
+        || isEnvVarDefined("OMP_NUM_THREADS") || proc_bind_configured
+        || isEnvVarDefined("OMP_PLACES") || isEnvVarDefined("GOMP_CPU_AFFINITY")
+        || isEnvVarDefined("KMP_AFFINITY")) {
+        // A threadsafe death-test child inherits the parent's CPU affinity.
+        // If OpenMP affinity is configured, the child can see one processor
+        // and skip without executing the first-call assertion.
+        GTEST_SKIP() << "DLP/OpenMP threading environment variables must be "
+                        "unset.";
+    }
+
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    ASSERT_EXIT(run_first_dlp_call_inside_then_outside(),
+                ::testing::ExitedWithCode(EXIT_SUCCESS), "DLP_FIRST_CALL_OK");
+    ASSERT_EXIT(run_first_dlp_call_outside_then_inside(),
+                ::testing::ExitedWithCode(EXIT_SUCCESS), "DLP_FIRST_CALL_OK");
 }
 
 #endif // DLP_ENABLE_OPENMP

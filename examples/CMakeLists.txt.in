@@ -37,8 +37,5 @@ option(USE_STATIC_LIBRARY "Link with static AOCL-DLP library" OFF)
 # Find the installed AOCL-DLP package (required by all subdirectories)
 find_package(AoclDlp REQUIRED)
 
-# Find OpenMP (required by examples)
-find_package(OpenMP REQUIRED COMPONENTS C CXX)
-
 # Add subdirectories
 add_subdirectory(classic)

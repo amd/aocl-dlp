@@ -32,10 +32,7 @@
 #include "gemm_utils/dlp_gemm_reorder_layout.h"
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "kernels/fp16fp16fp16/dlp_gemm_pack_fp16.h"
-
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
+#include "threading/dlp_omp_runtime.h"
 
 void
 dlp_reorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
@@ -67,7 +64,7 @@ dlp_reorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
     {
         dlp_task_id_t thread_jc;
         thread_jc.n_way   = n_threads;
-        thread_jc.work_id = omp_get_thread_num();
+        thread_jc.work_id = dlp_omp_get_thread_num();
 #else
     {
         dlp_task_id_t thread_jc;
@@ -169,7 +166,7 @@ dlp_unreorderb_f16f16f16of16(dlp_gemm_obj_t*  b,
     {
         dlp_task_id_t thread_jc;
         thread_jc.n_way   = n_threads;
-        thread_jc.work_id = omp_get_thread_num();
+        thread_jc.work_id = dlp_omp_get_thread_num();
 #else
     {
         dlp_task_id_t thread_jc;

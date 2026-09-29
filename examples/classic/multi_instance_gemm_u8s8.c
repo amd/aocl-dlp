@@ -47,10 +47,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef DLP_EXAMPLE_ENABLE_OPENMP
-#include <omp.h>
-#endif
-
 #include "aocl_dlp.h"
 #include "classic/dlp_compat.h"
 #include "dlp_example_utils.h"
@@ -315,7 +311,7 @@ main(int argc, char** argv)
     }
 
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
-    dlp_omp_set_nesting(2);
+    dlp_example_set_nested_parallelism(true);
 #endif
 
     double start_time = dlp_get_time_sec();

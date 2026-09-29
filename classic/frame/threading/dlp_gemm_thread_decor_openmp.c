@@ -181,7 +181,7 @@ dlp_gemm_f32f32f32of32_reconcile_packab(md_t                 m,
 
 #ifdef DLP_ENABLE_OPENMP
 
-#include <omp.h>
+#include "threading/dlp_omp_runtime.h"
 
 #define DLP_NUM_STATIC_COMMS 96
 
@@ -1272,7 +1272,7 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
             /* Thread info setup */                                            \
             dlp_gemm_thrinfo_t thread;                                         \
             thread.n_threads = n_threads;                                      \
-            thread.tid       = omp_get_thread_num();                           \
+            thread.tid       = dlp_omp_get_thread_num();                       \
                                                                                \
             /* Adjust TID for REORDERED buffers */                             \
             if (mtag_b == REORDERED) {                                         \
@@ -1424,17 +1424,17 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
                                                                                \
             dlp_gemm_thrinfo_t thread;                                         \
             thread.n_threads = n_threads_per_gemm;                             \
-            thread.tid       = omp_get_thread_num() % n_threads_per_gemm;      \
+            thread.tid       = dlp_omp_get_thread_num() % n_threads_per_gemm;  \
             thread.ic_ways   = ic_ways;                                        \
             thread.jc_ways   = jc_ways;                                        \
             thread.comm =                                                      \
                 cur_dlp_gemm_comms                                             \
-                + (omp_get_thread_num() / n_threads_per_gemm) * jc_ways;       \
+                + (dlp_omp_get_thread_num() / n_threads_per_gemm) * jc_ways;   \
                                                                                \
             md_t          gemm_start, gemm_end;                                \
             dlp_task_id_t thrinfo;                                             \
             thrinfo.n_way   = n_gemms_in_parallel;                             \
-            thrinfo.work_id = omp_get_thread_num() / n_threads_per_gemm;       \
+            thrinfo.work_id = dlp_omp_get_thread_num() / n_threads_per_gemm;   \
             dlp_thread_task_range(&thrinfo, group_size, 1, FALSE, &gemm_start, \
                                   &gemm_end);                                  \
                                                                                \
@@ -1542,17 +1542,17 @@ GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
                                                                                \
             dlp_gemm_thrinfo_t thread;                                         \
             thread.n_threads = n_threads_per_gemm;                             \
-            thread.tid       = omp_get_thread_num() % n_threads_per_gemm;      \
+            thread.tid       = dlp_omp_get_thread_num() % n_threads_per_gemm;  \
             thread.ic_ways   = ic_ways;                                        \
             thread.jc_ways   = jc_ways;                                        \
             thread.comm =                                                      \
                 cur_dlp_gemm_comms                                             \
-                + (omp_get_thread_num() / n_threads_per_gemm) * jc_ways;       \
+                + (dlp_omp_get_thread_num() / n_threads_per_gemm) * jc_ways;   \
                                                                                \
             md_t          gemm_start, gemm_end;                                \
             dlp_task_id_t thrinfo;                                             \
             thrinfo.n_way   = n_gemms_in_parallel;                             \
-            thrinfo.work_id = omp_get_thread_num() / n_threads_per_gemm;       \
+            thrinfo.work_id = dlp_omp_get_thread_num() / n_threads_per_gemm;   \
             dlp_thread_task_range(&thrinfo, group_size, 1, FALSE, &gemm_start, \
                                   &gemm_end);                                  \
                                                                                \
@@ -1694,7 +1694,7 @@ dlp_gemm_eltwise_ops_f32of32_get_threading(md_t*       n_threads,
              * respective mat mul driver functions.*/                          \
             dlp_gemm_thrinfo_t thread;                                         \
             thread.n_threads = n_threads;                                      \
-            thread.tid       = omp_get_thread_num();                           \
+            thread.tid       = dlp_omp_get_thread_num();                       \
             thread.ic_ways   = ic_ways;                                        \
             thread.jc_ways   = jc_ways;                                        \
             thread.comm      = cur_dlp_gemm_comms;                             \

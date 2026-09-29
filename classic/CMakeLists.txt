@@ -56,6 +56,7 @@ target_include_directories(aocl_dlp_classic
     PUBLIC
         ${CLASSIC_INCLUDES}
         $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include> # For aocl_dlp_config.h
+        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include/private>
 )
 
 # Link with OpenMP if enabled

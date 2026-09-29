@@ -51,8 +51,6 @@ set(EXAMPLE_SOURCES
     version.c
 )
 
-find_package(OpenMP REQUIRED COMPONENTS C CXX)
-
 # Create an executable for each example source file
 foreach(source ${EXAMPLE_SOURCES})
     # Extract the filename without extension

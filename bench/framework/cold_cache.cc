@@ -31,6 +31,7 @@
 #include "aocl_dlp_config.h"
 #include "classic/dlp_compat.h"
 #include "framework/topology.hh"
+#include "threading/dlp_omp_runtime.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -38,10 +39,6 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
-
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 
 namespace dlp { namespace bench {
 
@@ -157,8 +154,8 @@ namespace dlp { namespace bench {
         }
 
         int nt = 1;
-#ifdef _OPENMP
-        nt = omp_get_max_threads();
+#if DLP_OPENMP_ENABLED
+        nt = dlp_omp_get_max_threads();
 #endif
         g_sinks.assign(static_cast<std::size_t>(nt), Sink{});
 
@@ -167,11 +164,11 @@ namespace dlp { namespace bench {
         // `numactl --cpunodebind=N --membind=N` this is moot (all pages live on
         // node N), but it doesn't hurt and is correct under interleaved
         // policies.
-#ifdef _OPENMP
+#if DLP_OPENMP_ENABLED
 #pragma omp parallel
         {
-            int         tid      = omp_get_thread_num();
-            int         nt_inner = omp_get_num_threads();
+            int         tid      = dlp_omp_get_thread_num();
+            int         nt_inner = dlp_omp_get_num_threads();
             std::size_t chunk    = (g_scratch_bytes + nt_inner - 1) / nt_inner;
             std::size_t start    = static_cast<std::size_t>(tid) * chunk;
             std::size_t end      = std::min(start + chunk, g_scratch_bytes);
@@ -203,11 +200,11 @@ namespace dlp { namespace bench {
             return;
 
         for (int p = 0; p < g_passes; ++p) {
-#ifdef _OPENMP
+#if DLP_OPENMP_ENABLED
 #pragma omp parallel
             {
-                int         tid      = omp_get_thread_num();
-                int         nt_inner = omp_get_num_threads();
+                int         tid      = dlp_omp_get_thread_num();
+                int         nt_inner = dlp_omp_get_num_threads();
                 std::size_t chunk = (g_scratch_bytes + nt_inner - 1) / nt_inner;
                 std::size_t start = static_cast<std::size_t>(tid) * chunk;
                 std::size_t end   = std::min(start + chunk, g_scratch_bytes);

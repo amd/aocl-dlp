@@ -37,10 +37,6 @@
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "kernels/fp16fp16fp16/dlp_gemm_pack_fp16.h"
 
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
-
 msz_t
 aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
                                         const char      trans,

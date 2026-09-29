@@ -39,8 +39,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Find the installed AOCL-DLP package
     find_package(AoclDlp REQUIRED)
 
-    # Find OpenMP (required by examples)
-    find_package(OpenMP REQUIRED COMPONENTS C CXX)
 endif()
 
 # Set source directory
@@ -127,15 +125,16 @@ function(dlp_add_c_example)
             ${AOCL_DLP_TARGET}
     )
 
-    # Link with OpenMP
-    if(OpenMP_C_FOUND)
-        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE OpenMP::OpenMP_C)
-    endif()
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE OpenMP::OpenMP_CXX)
-    endif()
-    if(OpenMP_C_FOUND OR OpenMP_CXX_FOUND)
-        target_compile_definitions(${DLP_EXAMPLE_NAME} PRIVATE DLP_EXAMPLE_ENABLE_OPENMP)
+    # Reuse the runtime selected by the installed AOCL-DLP package.
+    if(AoclDlp_OPENMP_ENABLED AND TARGET AoclDlp::openmp)
+        target_link_libraries(${DLP_EXAMPLE_NAME} PRIVATE AoclDlp::openmp)
+        target_compile_definitions(
+            ${DLP_EXAMPLE_NAME}
+            PRIVATE
+                DLP_EXAMPLE_ENABLE_OPENMP
+                DLP_EXAMPLE_OPENMP_HAS_ACTIVE_LEVELS=${AoclDlp_OPENMP_HAS_ACTIVE_LEVELS}
+                DLP_EXAMPLE_OPENMP_HAS_NESTING=${AoclDlp_OPENMP_HAS_NESTING}
+        )
     endif()
 
     # Link with math library on Unix/Linux

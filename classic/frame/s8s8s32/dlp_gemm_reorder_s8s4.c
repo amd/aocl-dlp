@@ -35,10 +35,7 @@
 #include "s8s8s32/dlp_gemm_reorder_s8.h"
 #include "sys_utils/dlp_gemm_sys.h"
 #include "threading/dlp_gemm_thread_utils.h"
-
-#ifdef DLP_ENABLE_OPENMP
-#include <omp.h>
-#endif
+#include "threading/dlp_omp_runtime.h"
 
 /*
  * Reorder worker for the s8s4 symmetric-quantized GEMM.
@@ -148,7 +145,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
     {
         dlp_task_id_t thread_jc;
         thread_jc.n_way   = n_threads;
-        thread_jc.work_id = omp_get_thread_num();
+        thread_jc.work_id = dlp_omp_get_thread_num();
 #else
     {
         dlp_task_id_t thread_jc;
