@@ -162,13 +162,11 @@ gemmBF16DEBackend::gemmBF16DEBackend()
                           .getKernelInstructionPreferenceFromEnv(
                               "AOCL_DLP_ENABLE_INSTRUCTIONS");
 
-    isAvx512Bf16 = arch_utils::archConfigManager::getInstance()
-                       .isAvx512Bf16SupportedByConfiguredArch();
-    isAvx512 = arch_utils::archConfigManager::getInstance()
-                   .isAvx512SupportedByConfiguredArch();
+    const auto& archMgr = arch_utils::archConfigManager::getInstance();
 
-    isAvx2 = arch_utils::archConfigManager::getInstance()
-                 .isAvx2Fma3SupportedByConfiguredArch();
+    isAvx512Bf16 = archMgr.isAvx512Bf16SupportedByConfiguredArch();
+    isAvx512     = archMgr.isAvx512SupportedByConfiguredArch();
+    isAvx2       = archMgr.isAvx2Fma3SupportedByConfiguredArch();
 
     if (!isAvx512Bf16) {
         // Instantiate the F32 DE Backend for rerouting to F32 JIT
@@ -186,11 +184,11 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     }
 
     // The tiles are tuned for the Zen5 cache hierarchy and the AVX512-BF16
-    // microkernels, so the model is fenced to that combination. Resolved here
-    // to keep the per-call check a boolean load.
+    // microkernels. The same model is enabled on Zen6. Resolved here to keep
+    // the per-call check a boolean load.
     isAnalyticalShapeModelArch = isAvx512Bf16
-                                 && arch_utils::archConfigManager::getInstance()
-                                        .isZen5SimilarConfiguredArch();
+                                 && (archMgr.isZen5SimilarConfiguredArch()
+                                     || archMgr.isZen6SimilarConfiguredArch());
 
     // Topology for the streaming-B rule, read once because CPUID cannot sit on
     // a per-call path. The last level is asked for by number and as unified,

@@ -646,8 +646,8 @@ class gemmBF16DEBackend final : public iDEBackend
     std::unique_ptr<gemmF32DEBackend>
         f32Backend; // For rerouting when AVX512BF16 is not supported
 
-    // The tiles are tuned against the Zen5 cache hierarchy, so the model is
-    // fenced to that architecture. The fence itself is in de_gemm_backend.cc.
+    // The tiles are tuned against the Zen5 cache hierarchy. The model is
+    // fenced to Zen5 and Zen6. The fence itself is in de_gemm_backend.cc.
     bool isAnalyticalShapeModelArch;
 
     // Topology the streaming-B rule needs: how many cores share one last-level
