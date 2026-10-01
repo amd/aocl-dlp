@@ -443,10 +443,17 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     (void)rntm;
 
     md_t NC = lcntx->blksz.NC;
-    md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
+
+    md_t table_kc = dlp_gemm_get_global_cntx_obj(S8S8S32OS32)->blksz.KC;
+    md_t gs_raw   = grp_post_op_list->group_size;
+    md_t gs_norm  = ((gs_raw == 0) || (gs_raw > k)) ? k : gs_raw;
+    // A full-K group keeps the table KC. n==1 and multi-group still align.
+    md_t KC = ((n == 1) || (gs_norm != k))
+                  ? dlp_gemm_align_kc_to_group(table_kc, gs_norm)
+                  : table_kc;
 
     // Only reordered or runtime-packed B is supported for the s8s4 path.
     if (mtag_b != REORDERED && mtag_b != PACK) {
@@ -484,7 +491,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     // negative pack offset -> out-of-bounds write. The reorder function applies
     // the SAME adjustment so the reordered-B layout matches GEMM execution
     // (mirrors the s8s8 sym-quant path).
-    KC = dlp_gemm_align_kc_to_group(KC, grp_post_op_list->group_size);
+    // KC was chosen above from the table, matching the reorder.
 
     // Strides are updated based on matrix packing/reordering.
     const int8_t* a_use          = NULL;
@@ -652,8 +659,10 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
         // s8-equivalent base offset of this reordered B panel (in bytes).
         md_t b_s8_panel_base = (jc_cur_loop * k_updated);
 
-        // Column-sum buffer for the PACK path (populated by the s8 packer at
-        // pc == 0 and reused across the pc loop).
+        // Column-sum buffer for the PACK path. Multi-group writes each group
+        // once, so the slots are cleared on the first panel. A single group
+        // reuses slot 0 on every KC panel; the packer adds into that slot and
+        // the kernel subtracts it once per panel, so it is cleared each panel.
         int32_t* pack_b_column_sum = NULL;
 
         for (iter_t pc = 0; pc < k; pc += KC) {
@@ -723,7 +732,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                     && (jc_packb_start < (jc + nc0))) {
                     md_t nc0_pack = jc_packb_end - jc_packb_start;
 
-                    if (pc == 0) {
+                    if ((pc == 0) || (group_size == k)) {
                         for (iter_t group = 0; group < total_groups; group++) {
                             for (iter_t idx = jc_packb_start;
                                  idx < jc_packb_end; idx++) {
@@ -766,8 +775,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                                     if (cs_b == 1) {
                                         dlp_packb_nr64_s8s4s32os32_row_major(
                                             b_dst_jr
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + (group * nc0_updated),
                                             (const uint8_t*)b, rs_b, k_start,
                                             col_sub, nr_mult_16, kg0, &rs_b_use,
@@ -775,8 +783,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                                     } else {
                                         dlp_packb_nr64_s8s4s32os32_col_major(
                                             b_dst_jr
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + (group * nc0_updated),
                                             (const uint8_t*)b, cs_b, k_start,
                                             col_sub, nr_mult_16, kg0, &rs_b_use,
@@ -801,8 +808,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                                     if (cs_b == 1) {
                                         dlp_packb_nr64_s8s4s32os32_row_major(
                                             b_dst_jr
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + (group * nc0_updated),
                                             (const uint8_t*)b, rs_b, k_start,
                                             col_sub + nr_mult_16, nr0_rem, kg0,
@@ -810,8 +816,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                                     } else {
                                         dlp_packb_nr64_s8s4s32os32_col_major(
                                             b_dst_jr
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + (group * nc0_updated),
                                             (const uint8_t*)b, cs_b, k_start,
                                             col_sub + nr_mult_16, nr0_rem, kg0,
@@ -832,17 +837,13 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
 
                             if (cs_b == 1) {
                                 dlp_packb_nr64_s8s4s32os32_row_major(
-                                    b_dst_jr
-                                        + ((group * group_size) - pc)
-                                              * nr0_updated,
+                                    b_dst_jr + (k_start - pc) * nr0_updated,
                                     b_sum_ptr + (group * nc0_updated),
                                     (const uint8_t*)b, rs_b, k_start, col_sub,
                                     NR, kg0, &rs_b_use, &cs_b_use);
                             } else {
                                 dlp_packb_nr64_s8s4s32os32_col_major(
-                                    b_dst_jr
-                                        + ((group * group_size) - pc)
-                                              * nr0_updated,
+                                    b_dst_jr + (k_start - pc) * nr0_updated,
                                     b_sum_ptr + (group * nc0_updated),
                                     (const uint8_t*)b, cs_b, k_start, col_sub,
                                     NR, kg0, &rs_b_use, &cs_b_use);
@@ -870,8 +871,11 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                 dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
 
                 // Column sums live (uncompressed) after the compact weights.
+                // Single group: one vector per KC panel.
+                md_t sum_panel = (group_size == k) ? (pc / KC) : 0;
                 post_ops_attr.b_col_sum_vec =
-                    ((int32_t*)(b_compact + compact_weight_bytes)) + jc;
+                    ((int32_t*)(b_compact + compact_weight_bytes))
+                    + (sum_panel * n_updated) + jc;
                 grp_post_ops_attr.grp_post_op_sum_ld = n_updated;
             }
 

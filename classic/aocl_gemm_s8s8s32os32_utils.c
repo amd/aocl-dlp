@@ -218,8 +218,12 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
         return 0; // Error.
     }
 
-    // KC must be aligned to group_size.
-    md_t KC = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
+    // n==1 still grows KC so the GEMV gate (KC divisible by group_size) holds.
+    // The wide layout below keeps the table KC for a single group.
+    md_t KC_gemv = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
+    md_t KC      = (group_size == k)
+                       ? lcntx_g.blksz.KC
+                       : dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
 
     // Extra space since packing does width in multiples of 16. The vnni
     // instruction can be used as long as atleast one zmm register can be fully
@@ -230,7 +234,7 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
 
 #ifdef DLP_KERNELS_ZEN4
     // Follow alternate reordering for n==1 iff k is divisible by group_size.
-    if ((n == 1) && (k % group_size == 0) && (KC % group_size == 0)) {
+    if ((n == 1) && (k % group_size == 0) && (KC_gemv % group_size == 0)) {
         // Tight s8 column, padded so the per-group int32 column sums that
         // follow stay naturally aligned.
         return (msz_t)dlp_gemm_col_sum_byte_offset(k)
@@ -241,8 +245,11 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
     // Extra space since packing does length in multiples of 4.
     md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 
+    // Single group stores one column-sum vector per KC panel.
+    md_t sum_vecs = dlp_gemm_sym_quant_sum_vectors(KC, group_size, k);
+
     // extra memory to store sum of every column per group of B matrix buffer
-    size_t extra_mem_req = num_groups * n_reorder * sizeof(int32_t);
+    size_t extra_mem_req = sum_vecs * n_reorder * sizeof(int32_t);
 
     // extra memory of n_reorder * sizeof(int32_t) to store sum of every column
     // of B matrix buffer

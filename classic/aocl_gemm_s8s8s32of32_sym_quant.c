@@ -437,7 +437,13 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
     if ((group_size == 0) || (group_size > k)) {
         group_size = k;
     }
-    lcntx_l.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC, group_size);
+    // n==1 (after the column-major swap) still grows KC for the tight GEMV
+    // layout. The wide path keeps the table KC.
+    md_t base_kc     = lcntx_l.blksz.KC;
+    md_t kc_n        = (is_column_major == TRUE) ? m : n;
+    lcntx_l.blksz.KC = ((kc_n == 1) || (group_size != k))
+                           ? dlp_gemm_align_kc_to_group(base_kc, group_size)
+                           : base_kc;
 
     if (is_column_major == TRUE) {
         dlp_init_and_get_gemm_quant_kernel_hndl(

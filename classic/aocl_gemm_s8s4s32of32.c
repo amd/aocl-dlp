@@ -264,12 +264,16 @@ aocl_gemm_s8s4s32of32(const char      order,
         goto err_hndl;
     }
 
-    // Align KC to group_size
+    // n==1 GEMV keeps the old align, so KC stays divisible by the group.
+    // The wide path keeps the table KC for a single group.
     md_t group_size = grp_post_op_list[0].group_size;
     if ((group_size == 0) || (group_size > k)) {
         group_size = k;
     }
-    lcntx_g.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
+    md_t base_kc     = lcntx_g.blksz.KC;
+    lcntx_g.blksz.KC = ((n == 1) || (group_size != k))
+                           ? dlp_gemm_align_kc_to_group(base_kc, group_size)
+                           : base_kc;
 
     dlp_init_and_get_gemm_quant_kernel_hndl(
         DLP_KERNEL_S8S4S32OF32_SYM_QUANT, order, mtag_a, mtag_b, m, n, k, rs_a,

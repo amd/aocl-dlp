@@ -93,7 +93,10 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
     // panel, underflowing the strip_s8 scratch below and corrupting the heap.
     // The GEMM 5-loop applies the SAME adjustment so reorder and compute agree
     // (see dlp_gemm_s8s4s32.c and the s8s8 sym-quant path).
-    KC = dlp_gemm_align_kc_to_group(KC, group_size);
+    // A full-K group keeps this KC. Multi-group still aligns.
+    if (group_size != b->length) {
+        KC = dlp_gemm_align_kc_to_group(KC, group_size);
+    }
 
     // Element strides measured in nibble units. transb='N' => cs_b==1 (row
     // contiguous), transb='T' => rs_b==1 (col contiguous).
@@ -103,7 +106,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
     md_t n = b->width;
     md_t k = b->length;
 
-    md_t num_groups = (k + group_size - 1) / group_size;
+    md_t sum_vecs = dlp_gemm_sym_quant_sum_vectors(KC, group_size, k);
 
     md_t k_updated = dlp_make_multiple_of_n(k, 4);
     md_t n_updated = dlp_make_multiple_of_n(n, 16);
@@ -116,7 +119,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
     int32_t* pack_b_column_sum =
         (int32_t*)(weights_compact + compact_weight_bytes);
 
-    for (iter_t idx = 0; idx < num_groups * n_updated; idx++) {
+    for (iter_t idx = 0; idx < sum_vecs * n_updated; idx++) {
         pack_b_column_sum[idx] = 0;
     }
 
@@ -193,9 +196,12 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
                         md_t strip_cols  = dlp_make_multiple_of_n(nr0, 16);
                         md_t strip_bytes = strip_cols * kc0_updated;
 
-                        int32_t* b_sum_ptr = pack_b_column_sum + jc + jr;
-                        md_t     col0      = jc + jr;
-                        md_t     rs_o, cs_o;
+                        md_t     sum_panel = (group_size == k) ? (pc / KC) : 0;
+                        int32_t* b_sum_ptr = pack_b_column_sum
+                                             + (sum_panel * n_updated) + jc
+                                             + jr;
+                        md_t col0 = jc + jr;
+                        md_t rs_o, cs_o;
 
                         memset(strip_s8, 0, (size_t)strip_bytes);
 
@@ -217,8 +223,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
                                     if (cs_b == 1) {
                                         dlp_packb_nr64_s8s4s32os32_row_major(
                                             strip_s8
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + (group * n_updated),
                                             (const uint8_t*)
                                                 b->storage.aligned_buffer,
@@ -227,8 +232,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
                                     } else {
                                         dlp_packb_nr64_s8s4s32os32_col_major(
                                             strip_s8
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + (group * n_updated),
                                             (const uint8_t*)
                                                 b->storage.aligned_buffer,
@@ -254,8 +258,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
                                     if (cs_b == 1) {
                                         dlp_packb_nr64_s8s4s32os32_row_major(
                                             strip_rem
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + nr_mult_16
                                                 + (group * n_updated),
                                             (const uint8_t*)
@@ -265,8 +268,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
                                     } else {
                                         dlp_packb_nr64_s8s4s32os32_col_major(
                                             strip_rem
-                                                + ((group * group_size) - pc)
-                                                      * nr0_updated,
+                                                + (k_start - pc) * nr0_updated,
                                             b_sum_ptr + nr_mult_16
                                                 + (group * n_updated),
                                             (const uint8_t*)
@@ -288,9 +290,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
 
                                 if (cs_b == 1) {
                                     dlp_packb_nr64_s8s4s32os32_row_major(
-                                        strip_s8
-                                            + ((group * group_size) - pc)
-                                                  * nr0_updated,
+                                        strip_s8 + (k_start - pc) * nr0_updated,
                                         b_sum_ptr + (group * n_updated),
                                         (const uint8_t*)
                                             b->storage.aligned_buffer,
@@ -298,9 +298,7 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
                                         &cs_o);
                                 } else {
                                     dlp_packb_nr64_s8s4s32os32_col_major(
-                                        strip_s8
-                                            + ((group * group_size) - pc)
-                                                  * nr0_updated,
+                                        strip_s8 + (k_start - pc) * nr0_updated,
                                         b_sum_ptr + (group * n_updated),
                                         (const uint8_t*)
                                             b->storage.aligned_buffer,
@@ -344,10 +342,11 @@ dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
     md_t k_updated = dlp_make_multiple_of_n(k, 4);
     md_t n_updated = dlp_make_multiple_of_n(n, 16);
 
-    md_t num_groups = (k + group_size - 1) / group_size;
+    md_t sum_vecs =
+        dlp_gemm_sym_quant_sum_vectors(lcntx->blksz.KC, group_size, k);
 
     msz_t s8_weight_bytes = (msz_t)sizeof(int8_t) * k_updated * n_updated;
-    msz_t colsum_bytes    = (msz_t)num_groups * n_updated * sizeof(int32_t);
+    msz_t colsum_bytes    = (msz_t)sum_vecs * n_updated * sizeof(int32_t);
 
     dlp_clsc_err_t ret_err;
 

@@ -161,7 +161,11 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
     // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
     // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
     // and GEMM panel boundaries diverge.
-    KC = dlp_gemm_align_kc_to_group(KC, group_size);
+    // Single group keeps the table KC. The column-sum slots below are one
+    // vector per panel in that case; multi-group still aligns.
+    if (group_size != b->length) {
+        KC = dlp_gemm_align_kc_to_group(KC, group_size);
+    }
 
     md_t rs_b         = b->rs;
     md_t cs_b         = b->cs;
@@ -171,7 +175,7 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
     md_t n = b->width;
     md_t k = b->length;
 
-    md_t num_groups = (k + group_size - 1) / group_size;
+    md_t sum_vecs = dlp_gemm_sym_quant_sum_vectors(KC, group_size, k);
 
     // k needs to be a multiple of 4 so that it can be used with vpdpbusd
     // instruction. Padding is added in cases this condition is not
@@ -187,7 +191,7 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
         (int32_t*)((int8_t*)b_reorder->storage.aligned_buffer
                    + (sizeof(int8_t) * n_updated * k_updated));
 
-    for (iter_t idx = 0; idx < num_groups * n_updated; idx++) {
+    for (iter_t idx = 0; idx < sum_vecs * n_updated; idx++) {
         *(pack_b_column_sum + idx) = 0;
     }
 
@@ -248,9 +252,13 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
                 for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
-                    int8_t*  b_dst_jr  = b_dst_pc + jr * kc0_updated;
-                    int32_t* b_sum_ptr = pack_b_column_sum + jc + jr;
-                    int8_t*  b_src_ptr = (((int8_t*)b->storage.aligned_buffer)
+                    int8_t* b_dst_jr = b_dst_pc + jr * kc0_updated;
+                    // Single group: this panel's sums. Multi-group: group 0
+                    // of the per-group vectors; the group loop adds group*n.
+                    md_t     sum_panel = (group_size == k) ? (pc / KC) : 0;
+                    int32_t* b_sum_ptr =
+                        pack_b_column_sum + (sum_panel * n_updated) + jc + jr;
+                    int8_t* b_src_ptr = (((int8_t*)b->storage.aligned_buffer)
                                          + (jc + jr) * cs_b);
 
                     if (nr0 < NR) {
@@ -269,9 +277,7 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
                                 md_t kg0 = k_end - k_start + 1;
 
                                 ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                                    b_dst_jr
-                                        + ((group * group_size) - pc)
-                                              * nr0_updated,
+                                    b_dst_jr + (k_start - pc) * nr0_updated,
                                     b_sum_ptr + (group * n_updated),
                                     b_src_ptr + (rs_b * k_start), rs_b, cs_b,
                                     nr_mult_16, kg0, &rs_b_reorder,
@@ -294,9 +300,7 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
                                 md_t kg0 = k_end - k_start + 1;
 
                                 ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                                    b_dst_jr
-                                        + ((group * group_size) - pc)
-                                              * nr0_updated,
+                                    b_dst_jr + (k_start - pc) * nr0_updated,
                                     b_sum_ptr + (group * n_updated),
                                     b_src_ptr + (rs_b * k_start), rs_b, cs_b,
                                     nr0_rem, kg0, &rs_b_reorder, &cs_b_reorder);
@@ -316,8 +320,7 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
                         md_t kg0     = k_end - k_start + 1;
 
                         ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                            b_dst_jr
-                                + ((group * group_size) - pc) * nr0_updated,
+                            b_dst_jr + (k_start - pc) * nr0_updated,
                             b_sum_ptr + (group * n_updated),
                             b_src_ptr + (rs_b * k_start), rs_b, cs_b, NR, kg0,
                             &rs_b_reorder, &cs_b_reorder);

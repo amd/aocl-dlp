@@ -166,8 +166,11 @@ aocl_get_reorder_buf_size_s8s4s32os32(const char      order,
     md_t n_reorder = dlp_make_multiple_of_n(n, 16);
     md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 
-    // Column sums (uncompressed int32) stored after the compact s4 weights.
-    size_t extra_mem_req = (size_t)num_groups * n_reorder * sizeof(int32_t);
+    // Single group stores one column-sum vector per KC panel.
+    dlp_gemm_cntx_t lcntx_sz = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    md_t            sum_vecs =
+        dlp_gemm_sym_quant_sum_vectors(lcntx_sz.blksz.KC, group_size, k);
+    size_t extra_mem_req = (size_t)sum_vecs * n_reorder * sizeof(int32_t);
 
     // s4 weights occupy half the bytes of the equivalent s8 packed weights.
     msz_t size_req =

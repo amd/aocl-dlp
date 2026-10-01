@@ -161,6 +161,23 @@ dlp_gemm_align_kc_to_group(md_t kc, md_t group_size)
     return kc;
 }
 
+// How many int32 column-sum vectors the reorder buffer holds.
+// Single group: one vector per KC panel (the kernel subtracts on every
+// panel, so the sum has to be that panel's). Multi-group: one per group.
+// Callers pass a positive table KC.
+DLP_INLINE md_t
+dlp_gemm_sym_quant_sum_vectors(md_t kc, md_t group_size, md_t k)
+{
+    md_t gs = group_size;
+    if ((gs == 0) || (gs > k)) {
+        gs = k;
+    }
+    if ((k > 0) && (gs == k)) {
+        return (k + kc - 1) / kc;
+    }
+    return (k + gs - 1) / gs;
+}
+
 DLP_INLINE md_t
 dlp_gemm_get_Bpanel_width_for_kmd_traversal(md_t jc, md_t n, md_t NC, md_t NR)
 {

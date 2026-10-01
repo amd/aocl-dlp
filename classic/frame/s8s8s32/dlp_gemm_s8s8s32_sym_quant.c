@@ -439,10 +439,23 @@ DLP_GEMM_5LOOP_UNIFIED(
     DLP_GEMM_OPS_EXTRACT(ops);
 
     md_t NC = lcntx->blksz.NC;
-    md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
+
+    // Recompute KC from the table. A caller that already grew a single group
+    // to K must not stick: reorder used the table value and wrote one column
+    // sum per panel.
+    md_t table_kc = dlp_gemm_get_global_cntx_obj(S8S8S32OS32)->blksz.KC;
+    md_t gs_raw   = grp_post_op_list->group_size;
+    md_t gs_norm  = ((gs_raw == 0) || (gs_raw > k)) ? k : gs_raw;
+    // n==1 keeps the grown KC: that reorder is the tight single-column
+    // layout, and the GEMV gate needs KC divisible by the group. m==1 with
+    // a wide B uses the same per-panel sums as the m>1 path, so KC stays
+    // at the table value and the GEMV gate falls through to this 5-loop.
+    md_t KC = ((n == 1) || (gs_norm != k))
+                  ? dlp_gemm_align_kc_to_group(table_kc, gs_norm)
+                  : table_kc;
 
     if (mtag_b == UNPACKED) {
         // Error: can only work with packed B now.
@@ -466,27 +479,9 @@ DLP_GEMM_5LOOP_UNIFIED(
     }
 #endif
 
-    // A quantization group must be processed entirely within one KC block so
-    // that its int32 accumulation completes before the group scale is applied;
-    // a group that straddles a KC boundary is split across two pc iterations
-    // and scaled incorrectly. Keep KC aligned to the group size:
-    //  - if group_size > KC, grow KC up to group_size;
-    //  - if group_size < KC but does not divide KC, shrink KC down to the
-    //    largest multiple of group_size (so KC boundaries fall on group
-    //    boundaries).
-    // The same adjustment is done in the reorder function to keep the
-    // reordered-B layout consistent with GEMM execution.
-    //
-    // NOTE: reorder and GEMM are separate API calls with no channel to hand a
-    // chosen KC across, so each side recomputes the SAME adjusted KC here. This
-    // is safe only because it is a pure function of (base KC, group_size): base
-    // KC is the static S8S8S32OS32 block-size table value (identical for a
-    // given arch/config -- already a precondition for reusing reordered B) and
-    // group_size comes from the same metadata. If a runtime KC override is ever
-    // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
-    // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
-    // and GEMM panel boundaries diverge.
-    KC = dlp_gemm_align_kc_to_group(KC, grp_post_op_list->group_size);
+    // KC was chosen above, from the same table reorder uses. Single group
+    // keeps that KC and consumes one column-sum vector per panel. Multi-group
+    // stays on the aligned KC so a group does not straddle a panel.
 
     // Strides are updated based on matrix packing/reordering.
     const int8_t* a_use          = NULL;
@@ -728,7 +723,12 @@ DLP_GEMM_5LOOP_UNIFIED(
                 if ((jc_packb_end > jc_packb_start)
                     && (jc_packb_start < (jc + nc0))) {
                     md_t nc0_pack = jc_packb_end - jc_packb_start;
-                    if (pc == 0) {
+                    // The packer adds into the sum slot. Multi-group writes
+                    // each group once (cleared on the first panel). A single
+                    // group reuses slot 0 on every KC panel, and the kernel
+                    // subtracts that slot once per panel, so clear it before
+                    // each panel.
+                    if ((pc == 0) || (group_size == k)) {
                         for (iter_t group = 0; group < total_groups; group++) {
                             for (iter_t idx = jc_packb_start;
                                  idx < jc_packb_end; idx++) {
@@ -774,9 +774,7 @@ DLP_GEMM_5LOOP_UNIFIED(
                                     md_t kg0 = k_end - k_start + 1;
 
                                     ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                                        b_dst_jr
-                                            + ((group * group_size) - pc)
-                                                  * nr0_updated,
+                                        b_dst_jr + (k_start - pc) * nr0_updated,
                                         b_sum_ptr + (group * nc0_updated),
                                         b_src_jr + (rs_b * k_start), rs_b, cs_b,
                                         nr_mult_16, kg0, &rs_b_use, &cs_b_use);
@@ -799,9 +797,7 @@ DLP_GEMM_5LOOP_UNIFIED(
                                     md_t kg0 = k_end - k_start + 1;
 
                                     ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                                        b_dst_jr
-                                            + ((group * group_size) - pc)
-                                                  * nr0_updated,
+                                        b_dst_jr + (k_start - pc) * nr0_updated,
                                         b_sum_ptr + (group * nc0_updated),
                                         b_src_jr + (rs_b * k_start), rs_b, cs_b,
                                         nr0_rem, kg0, &rs_b_use, &cs_b_use);
@@ -821,8 +817,7 @@ DLP_GEMM_5LOOP_UNIFIED(
                             md_t kg0   = k_end - k_start + 1;
 
                             ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                                b_dst_jr
-                                    + ((group * group_size) - pc) * nr0_updated,
+                                b_dst_jr + (k_start - pc) * nr0_updated,
                                 b_sum_ptr + (group * nc0_updated),
                                 b_src_jr + (rs_b * k_start), rs_b, cs_b, NR,
                                 kg0, &rs_b_use, &cs_b_use);
@@ -854,8 +849,12 @@ DLP_GEMM_5LOOP_UNIFIED(
 
                 dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
 
+                // Single group: panel p's sums live at p * n_updated.
+                // nLeft is pc/group_size, which is 0 when group_size == k.
+                md_t sum_panel = (group_size == k) ? (pc / KC) : 0;
                 post_ops_attr.b_col_sum_vec =
-                    ((int32_t*)(b + (k_updated * n_updated))) + jc;
+                    ((int32_t*)(b + (k_updated * n_updated)))
+                    + (sum_panel * n_updated) + jc;
                 grp_post_ops_attr.grp_post_op_sum_ld = n_updated;
             } else {
                 // Unpacked B not supported.
