@@ -760,4 +760,19 @@ quantS8FamilyDEBackendBase::quantS8FamilyDEBackendBase()
     }
 }
 
+gemmQuantS8S4DEBackend::gemmQuantS8S4DEBackend()
+    : quantS8FamilyDEBackendBase()
+{
+    // s8s4 widening needs AVX512-VBMI for vpmultishiftqb and GFNI for the
+    // in-kernel affine. Both are required to generate any s8s4 kernel; the
+    // site choice itself stays a shape decision. s8s8 does not take this
+    // gate: Cascade Lake and Cooper Lake have VNNI and neither extension.
+    static const std::vector<cpu_utils::isaFeature> nibbleWidenIsa{
+        cpu_utils::isaFeature::avx512vbmi, cpu_utils::isaFeature::gfni
+    };
+    if (!cpu_utils::cpuFeaturesInstance().hasFeatures(nibbleWidenIsa)) {
+        canGenerateKernelInfo = false;
+    }
+}
+
 } // namespace dlp::de

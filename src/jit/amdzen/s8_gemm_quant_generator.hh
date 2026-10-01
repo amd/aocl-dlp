@@ -55,6 +55,13 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError generateKernel(
         utils::quantGeneratorParams& params);
 
+    // vpmultishiftqb control: bit starts 0,4,8,...,28 inside each dword.
+    static constexpr uint64_t kNibbleMultishiftCtl = 0x1C1814100C080400ULL;
+    // Broadcast qword for vgf2p8affineqb imm8=0. Sign-extends the low nibble
+    // vpmultishiftqb leaves in bits 0..3 and ignores the junk in bits 4..7.
+    // Checked against dlp_s4_nibble_to_s8 for every packed byte in every lane.
+    static constexpr uint64_t kGfniSignExtendMatrix = 0x0102040808080808ULL;
+
   private:
     using Traits  = amdzen::traits::ArchitectureTraits<KType>;
     using RegType = typename Traits::RegType;
@@ -70,13 +77,9 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
     // take distinct registers out of the pool so the broadcast -> +128 ->
     // vpdpbusd chains stay visibly independent; a pool of 1 is still correct
     // (renaming breaks the WAR), which is what bounds how far it can shrink.
-    int aPool = 1;
-    // bitwiseChain widening needs one loop-invariant multishift control and one
-    // scratch ZMM. Both are reserved out of the A pool.
+    int aPool          = 1;
     int widenCtlReg    = 0;
     int widenCtlRegIdx = 0;
-    int widenAuxReg    = 0;
-    int widenAuxRegIdx = 0;
     // B is nibble-packed s4 and the kernel widens it to s8 in-register.
     bool bWidenInKernel = false;
     bool fBankInRegs    = false; // F32 bank in fReg vs [rsp] stack bank
@@ -111,9 +114,8 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
 
     static constexpr int kNibbleSrcBytes = 32;
     static constexpr int kWidenCtlOff    = 0;
-    static constexpr int kLowNibbleOff   = 8;
-    static constexpr int kSignBitOff     = 12;
-    static constexpr int kSignFillOff    = 64;
+    // Pool: multishift qword, then the affine matrix qword.
+    static constexpr int kGfniAffineOff = 8;
     Xbyak::Label         widenConstPool;
 
     Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
@@ -138,8 +140,7 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
     void           widenBLoad(int dstIdx, const Xbyak::Reg64& base, int disp);
     void           embedWidenConstantPool();
     Xbyak::Address widenPoolQword(int off);
-    Xbyak::Address widenPoolDwordBcst(int off);
-    Xbyak::Address widenPoolZword(int off);
+    Xbyak::Address widenPoolQwordBcst(int off);
     dlp::jit::jitGeneratorError loadBValues();
     dlp::jit::jitGeneratorError BroadcastAVNNIB(bool isVNNIrem);
     dlp::jit::jitGeneratorError kLoop(int unroll, bool isVNNIrem);

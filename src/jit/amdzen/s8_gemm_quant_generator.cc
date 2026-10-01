@@ -78,12 +78,11 @@ jitGEMMQuant<KType>::allocateReg(utils::quantGeneratorParams& params)
         vec128Reg = 0;
     }
 
-    // Reserve the vpmultishiftqb nibble-position control when B is handed over
-    // nibble-packed, plus whatever scratch the chosen variant needs.
+    // Reserve the vpmultishiftqb nibble-position control when B is handed
+    // over nibble-packed. The sign-extend is a GFNI affine from memory.
     bWidenInKernel = (params.bQuant.mode
                       == dlp::kernel_frame::opQuantMode::widenDequantInKernel);
     widenCtlReg    = bWidenInKernel ? 1 : 0;
-    widenAuxReg    = bWidenInKernel ? 1 : 0;
 
     // Scratch registers reserved below B: the A pool, plus the widen registers
     // when present.
@@ -95,7 +94,7 @@ jitGEMMQuant<KType>::allocateReg(utils::quantGeneratorParams& params)
 
     cRegIdx = numRegs - cReg; // Starting index for C (int32 accumulators)
     if (fBankInRegs) {
-        // Layout (top-down): C | fReg | B | vec128 | widenCtl | widenAux | A.
+        // Layout (top-down): C | fReg | B | vec128 | widenCtl | A.
         fRegIdx = cRegIdx - cReg;
         bRegIdx = fRegIdx - bReg;
     } else {
@@ -109,7 +108,6 @@ jitGEMMQuant<KType>::allocateReg(utils::quantGeneratorParams& params)
     int nextRegIdx = bRegIdx;
     vec128RegIdx   = vec128Reg == 1 ? --nextRegIdx : 0;
     widenCtlRegIdx = widenCtlReg == 1 ? --nextRegIdx : 0;
-    widenAuxRegIdx = widenAuxReg == 1 ? --nextRegIdx : 0;
 
     aRegIdx = 0;
     aReg    = nextRegIdx; // free A pool = zmm[nextRegIdx-1] .. zmm[0]
@@ -209,16 +207,9 @@ jitGEMMQuant<KType>::widenPoolQword(int off)
 
 template<utils::kernelInstrType KType>
 Xbyak::Address
-jitGEMMQuant<KType>::widenPoolDwordBcst(int off)
+jitGEMMQuant<KType>::widenPoolQwordBcst(int off)
 {
     return Xbyak::util::ptr_b[Xbyak::util::rip + widenConstPool + off];
-}
-
-template<utils::kernelInstrType KType>
-Xbyak::Address
-jitGEMMQuant<KType>::widenPoolZword(int off)
-{
-    return Xbyak::util::zword[Xbyak::util::rip + widenConstPool + off];
 }
 
 template<utils::kernelInstrType KType>
@@ -228,24 +219,17 @@ jitGEMMQuant<KType>::loadWidenControl()
     vpbroadcastq(Xbyak::Zmm(widenCtlRegIdx), widenPoolQword(kWidenCtlOff));
 }
 
-// Logic ported from int4_utils_avx512 which can be used as source of truth
+// Placement matches int4_utils_avx512. The affine reads only bits 0..3, so
+// the junk nibble vpmultishiftqb leaves in bits 4..7 needs no explicit and.
 template<utils::kernelInstrType KType>
 void
 jitGEMMQuant<KType>::widenBLoad(int dstIdx, const Xbyak::Reg64& base, int disp)
 {
     const Xbyak::Zmm dst(dstIdx);
-    const Xbyak::Zmm sign(widenAuxRegIdx);
 
-    // Place the 64 packed nibbles into separate bytes, clear the adjacent
-    // nibble left by vpmultishiftqb, then sign-extend bit 3 with the same
-    // bitwise chain used by the pre-kernel converter.
     vpmovzxdq(dst, Xbyak::util::yword[base + disp]);
     vpmultishiftqb(dst, Xbyak::Zmm(widenCtlRegIdx), dst);
-    vpandd(dst, dst, widenPoolDwordBcst(kLowNibbleOff));
-    vpandd(sign, dst, widenPoolDwordBcst(kSignBitOff));
-    vpxord(sign, sign, widenPoolDwordBcst(kSignBitOff));
-    vpaddb(sign, sign, widenPoolZword(kSignFillOff));
-    vpord(dst, dst, sign);
+    vgf2p8affineqb(dst, dst, widenPoolQwordBcst(kGfniAffineOff), 0);
 }
 
 template<utils::kernelInstrType KType>
@@ -260,13 +244,8 @@ jitGEMMQuant<KType>::embedWidenConstantPool()
     }
 
     L(widenConstPool);
-    dq(0x1C1814100C080400ULL);
-    dd(0x0F0F0F0FU);
-    dd(0x08080808U);
-    nop(kSignFillOff - 16);
-    for (int i = 0; i < 64; ++i) {
-        db(0xF8);
-    }
+    dq(kNibbleMultishiftCtl);
+    dq(kGfniSignExtendMatrix);
     L(poolEnd);
 }
 

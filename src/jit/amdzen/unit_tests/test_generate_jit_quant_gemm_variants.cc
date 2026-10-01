@@ -26,9 +26,11 @@
  *
  */
 
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "jit/amdzen/s8_gemm_quant_generator.hh"
 #include "jit_generator_tests_utils.hh"
@@ -52,12 +54,14 @@ struct GeneratedCode
 {
     dlp::jit::jitGeneratorError err  = dlp::jit::jitGeneratorError::error;
     std::size_t                 size = 0;
+    std::vector<uint8_t>        bytes;
 };
 
 // Mirrors the s8s4 symmetric group-quant metadata that
 // gemmQuantDEBackendUtils fills in: both operands retain s8 compute metadata,
-// while bQuant.mode alone distinguishes compact nibble loads from pre-widened
-// B. Neither carries a zero point, which reserves the +128 vec128 register.
+// while bQuant.mode distinguishes compact nibble loads from pre-widened B.
+// In-kernel widening is the GFNI affine only. Neither operand carries a zero
+// point, which reserves the +128 vec128 register.
 quantGeneratorParams
 makeS8S4Params(int MR, int nrIdx, opQuantMode bMode)
 {
@@ -107,8 +111,27 @@ generate(quantGeneratorParams& params)
     // AutoGrow may have relocated the buffer; ready() applies the pending
     // jump/branch fixups so getSize() matches what the orchestrator would run.
     gen.ready();
-    out.size = gen.getSize();
+    out.size         = gen.getSize();
+    const auto* code = gen.getCode();
+    out.bytes.assign(code, code + out.size);
     return out;
+}
+
+// EVEX form of vgf2p8affineqb: 0x62, opcode map 0F3A in P0[2:0], opcode 0xCE.
+// The legacy 0F 3A bytes are not present; the map lives in the prefix.
+bool
+containsGfniAffine(const std::vector<uint8_t>& bytes)
+{
+    if (bytes.size() < 5) {
+        return false;
+    }
+    for (std::size_t i = 0; i + 5 <= bytes.size(); ++i) {
+        if (bytes[i] == 0x62 && ((bytes[i + 1] & 0x07) == 0x03)
+            && bytes[i + 4] == 0xCE) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string
@@ -149,24 +172,19 @@ TEST_F(JitQuantGemmVariantsTest, AllShapesGenerateDequantInKernel)
     sweepGrid("bQuant.mode = dequantInKernel", opQuantMode::dequantInKernel);
 }
 
-// Reserving the vpmultishiftqb control and bitwise sign scratch costs two slots
-// out of the A pool. This sweep proves every production shape still resolves,
-// including MR=6/NR=64 where only one A register remains.
+// Reserving the vpmultishiftqb control costs one slot out of the A pool.
+// This sweep proves every production shape still resolves.
 TEST_F(JitQuantGemmVariantsTest, AllShapesGenerateWidenDequantInKernel)
 {
     sweepGrid("bQuant.mode = widenDequantInKernel",
               opQuantMode::widenDequantInKernel);
 }
 
-// Widen mode replaces each plain B load with the placement + sign-extension
-// sequence and appends the constant pool, so it must now be strictly larger
-// than the baseline on every shape. The floor is the pool alone: its last
-// 512-bit constant ends 192 bytes past the pool label, so a kernel that
-// reserved the registers but never emitted a widen site would miss this.
-TEST_F(JitQuantGemmVariantsTest, WidenModeEmitsWidenSequenceAndPool)
+// Widen mode replaces each plain B load with the GFNI placement sequence and
+// appends the two-qword constant pool. Every shape must actually emit the
+// affine.
+TEST_F(JitQuantGemmVariantsTest, WidenModeEmitsGfniAffine)
 {
-    constexpr std::size_t kPoolBytes = 128;
-
     for (int MR = 1; MR <= kMaxMR; ++MR) {
         for (int nrIdx = 0; nrIdx < kNRVariants; ++nrIdx) {
             auto baseParams =
@@ -182,9 +200,10 @@ TEST_F(JitQuantGemmVariantsTest, WidenModeEmitsWidenSequenceAndPool)
                 << name;
             ASSERT_EQ(widenCode.err, dlp::jit::jitGeneratorError::success)
                 << name;
-            EXPECT_GT(widenCode.size, baseCode.size + kPoolBytes)
-                << name << " did not grow by the widen sequence plus the "
-                << "constant pool";
+            EXPECT_GT(widenCode.size, baseCode.size)
+                << name << " widen kernel is not larger than the plain B load";
+            EXPECT_TRUE(containsGfniAffine(widenCode.bytes))
+                << name << " widen kernel did not emit vgf2p8affineqb";
         }
     }
 }

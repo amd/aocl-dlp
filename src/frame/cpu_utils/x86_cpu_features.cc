@@ -55,6 +55,7 @@ enum x86_bit_positions : uint32_t
     avx512bw_bit_pos           = (1u << 30), // cpuid[eax=7,ecx=0]    :ebx[30]
     avx512vl_bit_pos           = (1u << 31), // cpuid[eax=7,ecx=0]    :ebx[31]
     avx512vbmi_bit_pos         = (1u << 1),  // cpuid[eax=7,ecx=0]    :ecx[1]
+    gfni_bit_pos               = (1u << 8),  // cpuid[eax=7,ecx=0]    :ecx[8]
     avx512vnni_bit_pos         = (1u << 11), // cpuid[eax=7,ecx=0]    :ecx[11]
     movdiri_bit_pos            = (1u << 27), // cpuid[eax=7,ecx=0]    :ecx[27]
     movdir64b_bit_pos          = (1u << 28), // cpuid[eax=7,ecx=0]    :ecx[28]
@@ -161,6 +162,9 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
         if (dlp_cpuid_has_features(ecx, avx512vbmi_bit_pos)) {
             featureMap[utils::getUnderlyingValueOfEnum(
                 isaFeature::avx512vbmi)] = 1;
+        }
+        if (dlp_cpuid_has_features(ecx, gfni_bit_pos)) {
+            featureMap[utils::getUnderlyingValueOfEnum(isaFeature::gfni)] = 1;
         }
         if (dlp_cpuid_has_features(ecx, avx512vnni_bit_pos)) {
             featureMap[utils::getUnderlyingValueOfEnum(
@@ -298,6 +302,8 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
                     isaFeature::avx512bw)] = 0;
                 featureMap[utils::getUnderlyingValueOfEnum(
                     isaFeature::avx512vl)] = 0;
+                featureMap[utils::getUnderlyingValueOfEnum(isaFeature::gfni)] =
+                    0;
             }
 
             // The OS can manage the state of 256-bit ymm (AVX) registers

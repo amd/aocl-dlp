@@ -2033,7 +2033,7 @@ class gemmQuantS8DEBackend : public quantS8FamilyDEBackendBase
 class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
 {
   public:
-    gemmQuantS8S4DEBackend()                                         = default;
+    gemmQuantS8S4DEBackend();
     ~gemmQuantS8S4DEBackend() override                               = default;
     gemmQuantS8S4DEBackend(const gemmQuantS8S4DEBackend&)            = delete;
     gemmQuantS8S4DEBackend(gemmQuantS8S4DEBackend&&)                 = delete;
@@ -2119,16 +2119,14 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
         // the s8s8-sym B-load path: the frame/pack widens nibbles first.
         // Opt into nibble loads only for GEMM with reordered B when each IC
         // way fits in one micro-tile (otherwise B would be widened once per
-        // M-tile) and VBMI is present. GEMV-shaped m==1 / n==1 stay on
-        // dequantInKernel:
-        // the GEMV generators do not load nibbles, and n==1 reorder is already
-        // an s8 column.
+        // M-tile). VBMI and GFNI are a hard requirement of this backend, so
+        // they are not rechecked here. GEMV-shaped m==1 / n==1 stay on
+        // dequantInKernel: the GEMV generators do not load nibbles, and n==1
+        // reorder is already an s8 column.
         const md_t mr_blks  = (m + mr - 1) / mr;
         const md_t m_per_ic = ((mr_blks + ic_ways - 1) / ic_ways) * mr;
         const bool use_in_kernel =
-            (mtag_b == REORDERED) && (m > 1) && (n > 1) && (m_per_ic <= mr)
-            && cpu_utils::cpuFeaturesInstance().hasFeature(
-                cpu_utils::isaFeature::avx512vbmi);
+            (mtag_b == REORDERED) && (m > 1) && (n > 1) && (m_per_ic <= mr);
 
         if (use_in_kernel) {
             qKI.bQuant.mode = kernel_frame::opQuantMode::widenDequantInKernel;
