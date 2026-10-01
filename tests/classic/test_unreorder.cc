@@ -379,23 +379,28 @@ round_trip(SizeFn                     size_fn,
            UnreorderFn                unreorder_fn,
            char                       order,
            const Shape&               s,
-           const dlp_gemm_blocking_t* bp        = nullptr,
-           char                       trans_in  = 'n',
-           char                       trans_out = 'n',
-           md_t                       extra_ldb = 0)
+           const dlp_gemm_blocking_t* bp         = nullptr,
+           char                       trans_in   = 'n',
+           char                       trans_out  = 'n',
+           md_t                       extra_ldb  = 0,
+           const dlp_gemm_hints_t*    gemm_hints = nullptr)
 {
     const md_t   ldb_in  = plain_ldb(order, trans_in, s.k, s.n) + extra_ldb;
     const md_t   ldb_out = plain_ldb(order, trans_out, s.k, s.n) + extra_ldb;
     const size_t in_n    = plain_elems(order, trans_in, s.k, s.n, ldb_in);
     const size_t out_n   = plain_elems(order, trans_out, s.k, s.n, ldb_out);
 
-    auto with_bp = [bp]() {
+    // The reorder buffer does not record its blocking or hint-derived NR.
+    // Every operation which interprets it therefore needs the same metadata
+    // configuration the reorder used.
+    auto with_metadata = [bp, gemm_hints]() {
         dlp_metadata_t m = fresh_metadata();
         m.block_params   = const_cast<dlp_gemm_blocking_t*>(bp);
+        m.gemm_hints     = const_cast<dlp_gemm_hints_t*>(gemm_hints);
         return m;
     };
 
-    dlp_metadata_t md     = with_bp();
+    dlp_metadata_t md     = with_metadata();
     msz_t          buf_sz = size_fn(order, trans_in, 'B', s.k, s.n, &md);
     if (buf_sz == 0) {
         return false; // Not supported on this processor.
@@ -412,7 +417,7 @@ round_trip(SizeFn                     size_fn,
 
     fill_pattern(input.data(), in_n);
 
-    md = with_bp();
+    md = with_metadata();
     reorder_fn(order, trans_in, 'B', input.data(), (T*)packed.data(), s.k, s.n,
                ldb_in, &md);
     if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
@@ -425,7 +430,7 @@ round_trip(SizeFn                     size_fn,
         return true;
     }
 
-    md = with_bp();
+    md = with_metadata();
     unreorder_fn(order, trans_out, 'B', (const T*)packed.data(), output.data(),
                  s.k, s.n, ldb_out, &md);
     if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
@@ -489,6 +494,51 @@ round_trip_all_shapes(const char* label,
                     if (round_trip<T>(size_fn, reorder_fn, unreorder_fn, order,
                                       s)) {
                         supported++;
+                    }
+                }
+            }
+        }
+    }
+    if (supported == 0) {
+        GTEST_SKIP() << label << " is not supported on this processor";
+    }
+}
+
+// Drives every shape with each set of GEMM hints. As with blocking parameters,
+// the reorder buffer carries no record of the hint-derived NR, so each
+// un-reorder call must receive the same hints the reorder received.
+template<typename T, typename ReorderFn, typename UnreorderFn>
+void
+round_trip_gemm_hints(const char*                          label,
+                      SizeFn                               size_fn,
+                      ReorderFn                            reorder_fn,
+                      UnreorderFn                          unreorder_fn,
+                      const std::vector<dlp_gemm_hints_t>& hint_params)
+{
+    int supported = 0;
+    for (size_t hint_i = 0; hint_i < hint_params.size(); hint_i++) {
+        const dlp_gemm_hints_t& hints = hint_params[hint_i];
+        for (md_t threads : { (md_t)1, (md_t)-1 }) {
+            PinnedThreadCount pin(threads);
+            for (char order : { 'r', 'c' }) {
+                for (const std::vector<Shape>* list :
+                     { &shapes(), &large_shapes() }) {
+                    for (const Shape& s : *list) {
+                        const std::string desc =
+                            std::string(label) + " threads="
+                            + (threads < 0 ? std::string("default")
+                                           : std::to_string(threads))
+                            + " m_hint=" + std::to_string(hints.m_hint)
+                            + " nt_hint=" + std::to_string(hints.nt_hint)
+                            + " order=" + order + " k=" + std::to_string(s.k)
+                            + " n=" + std::to_string(s.n);
+                        SCOPED_TRACE(desc);
+                        set_current_case(desc);
+                        if (round_trip<T>(size_fn, reorder_fn, unreorder_fn,
+                                          order, s, nullptr, 'n', 'n', 0,
+                                          &hints)) {
+                            supported++;
+                        }
                     }
                 }
             }
@@ -655,6 +705,20 @@ variable_block_params()
     };
 }
 
+// A serial consumer, a modestly parallel consumer and a wider, highly
+// parallel consumer. All values are positive so the decision engine has a
+// complete model of the GEMM that will consume the reordered buffer.
+const std::vector<dlp_gemm_hints_t>&
+gemm_hint_params()
+{
+    static const std::vector<dlp_gemm_hints_t> hints = {
+        { 4, 32 },
+        { 16, 8 },
+        { 64, 32 },
+    };
+    return hints;
+}
+
 // This larger stress sweep is pinned at NR=64 to bound its runtime. NC and KC
 // vary independently of it, always as multiples of 64 so they remain legal for
 // every dtype (NC must be a multiple of NR; KC must be a multiple of the k
@@ -791,6 +855,41 @@ TEST(UnreorderRoundTrip, F16F16F16OF16Reference)
     round_trip_all_shapes<float16>(
         "f16f16f16of16", aocl_get_reorder_buf_size_f16f16f16of16,
         aocl_reorder_f16f16f16of16, aocl_unreorder_f16f16f16of16_reference);
+}
+
+// Exercise the hint-derived layout for several predicted GEMM shapes and
+// thread pools. The same hint set is supplied to the size query, reorder and
+// un-reorder because the buffer has no header recording the derived NR.
+TEST(UnreorderRoundTrip, Bf16Bf16F32OF32WithGemmHints)
+{
+    round_trip_gemm_hints<bfloat16>(
+        "bf16bf16f32of32 hints", aocl_get_reorder_buf_size_bf16bf16f32of32,
+        aocl_reorder_bf16bf16f32of32, aocl_unreorder_bf16bf16f32of32,
+        gemm_hint_params());
+}
+
+TEST(UnreorderRoundTrip, Bf16Bf16F32OF32ReferenceWithGemmHints)
+{
+    round_trip_gemm_hints<bfloat16>(
+        "bf16bf16f32of32 hints", aocl_get_reorder_buf_size_bf16bf16f32of32,
+        aocl_reorder_bf16bf16f32of32, aocl_unreorder_bf16bf16f32of32_reference,
+        gemm_hint_params());
+}
+
+TEST(UnreorderRoundTrip, S8S8S32OS32ReferenceWithGemmHints)
+{
+    round_trip_gemm_hints<int8_t>(
+        "s8s8s32os32 hints", aocl_get_reorder_buf_size_s8s8s32os32,
+        aocl_reorder_s8s8s32os32, aocl_unreorder_s8s8s32os32_reference,
+        gemm_hint_params());
+}
+
+TEST(UnreorderRoundTrip, U8S8S32OS32ReferenceWithGemmHints)
+{
+    round_trip_gemm_hints<int8_t>(
+        "u8s8s32os32 hints", aocl_get_reorder_buf_size_u8s8s32os32,
+        aocl_reorder_u8s8s32os32, aocl_unreorder_u8s8s32os32_reference,
+        gemm_hint_params());
 }
 
 // ---------------------------------------------------------------------------

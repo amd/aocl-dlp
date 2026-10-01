@@ -109,6 +109,27 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         return; // Error.
     }
 
+    err_no = dlp_gemm_validate_hints(&lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "GEMM hints must be zero (unset) or positive, got "
+                 "m_hint: %ld nt_hint: %ld\n",
+                 (lcntx_g.gemm_kernel_hints).m_hint,
+                 (lcntx_g.gemm_kernel_hints).nt_hint);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
+    // Hack to get the DE derived NR.
+    lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, k, rs_b,
+                                       cs_b, &lcntx_g);
+
+    // The init is done, so the panel width the reorder writes is final.
+    dlp_upd_pack_strides(DLP_KERNEL_BF16BF16F32OF32, &lcntx_g);
+
     err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
     if (err_no != DLP_CLSC_SUCCESS) {
         char msg[256];
@@ -202,6 +223,27 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
     }
+
+    err_no = dlp_gemm_validate_hints(&lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "GEMM hints must be zero (unset) or positive, got "
+                 "m_hint: %ld nt_hint: %ld\n",
+                 (lcntx_g.gemm_kernel_hints).m_hint,
+                 (lcntx_g.gemm_kernel_hints).nt_hint);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
+    // Hack to get the DE derived NR.
+    lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, k, rs_b,
+                                       cs_b, &lcntx_g);
+
+    // The init is done, so the panel width the reorder writes is final.
+    dlp_upd_pack_strides(DLP_KERNEL_BF16BF16F32OF32, &lcntx_g);
 
     err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
     if (err_no != DLP_CLSC_SUCCESS) {
@@ -661,6 +703,27 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
     }
+
+    err_no = dlp_gemm_validate_hints(&lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "GEMM hints must be zero (unset) or positive, got "
+                 "m_hint: %ld nt_hint: %ld\n",
+                 (lcntx_g.gemm_kernel_hints).m_hint,
+                 (lcntx_g.gemm_kernel_hints).nt_hint);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
+    // Hack to get the DE derived NR.
+    lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, k, rs_b,
+                                       cs_b, &lcntx_g);
+
+    // The init is done, so the panel width the reorder writes is final.
+    dlp_upd_pack_strides(DLP_KERNEL_BF16BF16F32OF32, &lcntx_g);
 
     err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
     if (err_no != DLP_CLSC_SUCCESS) {
