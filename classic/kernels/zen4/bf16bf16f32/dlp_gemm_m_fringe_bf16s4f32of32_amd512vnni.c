@@ -6209,35 +6209,43 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x64)
 
     md_t group_size = pre_ops_attr.group_size;
 
-    // B matrix storage bfloat type
-    __m512bh b0;
-    __m512bh b1;
-    __m512bh b2;
-    __m512bh b3;
+    /* int4 -> bf16 by table lookup. Every signed nibble value (-8..7) is
+     * exact in bf16, so the weights enter the dot product unscaled and the
+     * scale factor is applied once per group, to the group's fp32 partial
+     * sums, instead of being multiplied into every weight and rounded to
+     * bf16 first.  lut[n] = bf16(n < 8 ? n : n - 16); entries 16..31 are
+     * never selected. */
+    const __m512i s4_bf16_lut = _mm512_set_epi16(
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        (short)0xBF80, (short)0xC000, (short)0xC040, (short)0xC080,
+        (short)0xC0A0, (short)0xC0C0, (short)0xC0E0, (short)0xC100,
+        0x40E0, 0x40C0, 0x40A0, 0x4080, 0x4040, 0x4000, 0x3F80, 0x0000);
+    const __m512i s4_lo_nibble = _mm512_set1_epi32(0x0000000F);
+    const __m512i s4_hi_nibble = _mm512_set1_epi32(0x000F0000);
 
-    __m256i b0_s4;
-    __m256i b1_s4;
+    /* In the reordered B panel each k pair is 64 bytes: byte c holds column
+     * c, low nibble = even k, high nibble = odd k.  Widening 16 of those
+     * bytes to 32-bit lanes and splitting the nibbles into the two 16-bit
+     * halves gives lookup indices already laid out as the (even k, odd k)
+     * bf16 pairs that dpbf16 consumes, one lane per column. */
+#define S4_16COL_TO_BF16_PAIRS(src, out)                                     \
+    {                                                                        \
+        __m512i w_ = _mm512_cvtepu8_epi32(                                   \
+            _mm_loadu_si128((__m128i const*)(src)));                         \
+        __m512i idx_ = _mm512_or_si512(                                      \
+            _mm512_and_si512(w_, s4_lo_nibble),                              \
+            _mm512_and_si512(_mm512_slli_epi32(w_, 12), s4_hi_nibble));      \
+        (out) = DLP_CAST_SI512_BH(_mm512_permutexvar_epi16(idx_, s4_bf16_lut)); \
+    }
 
-    __m512i shift_idx_64;
-    MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp      = _mm512_set1_epi8(0x08);
-    bool    signed_upscale = true;
+    /* No software prefetch: for m == 1 this kernel reads the reordered B
+     * buffer strictly in order, which the hardware prefetcher already tracks;
+     * explicit prefetches measured 6-20% slower on Zen5. */
 
-    /* regs to store intermediate int8 values */
-    __m512i b0_s8, b1_s8;
+    __m512bh b0, b1, b2, b3;
 
-    /* Regs to store DLP_F32 scale values */
-    __m512 scale0, scale1, scale2, scale3, scale4, scale5, scale6, scale7;
-    /* Reg to store masks to interleave scale factor */
-    __m512i mask_scale1, mask_scale2;
-
-    mask_scale1 =
-        _mm512_set_epi32(0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04, 0x13,
-                         0x03, 0x12, 0x02, 0x11, 0x01, 0x10, 0x00);
-
-    mask_scale2 =
-        _mm512_set_epi32(0x1F, 0x0F, 0x1E, 0x0E, 0x1D, 0x0D, 0x1C, 0x0C, 0x1B,
-                         0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
+    /* Regs to store DLP_F32 scale values, one per column */
+    __m512 scale0, scale1, scale2, scale3;
 
     //  Registers to use for accumulating C.
     __m512 c_float_0p0 = _mm512_setzero_ps();
@@ -6276,37 +6284,26 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x64)
                 // load scale factor vectors
                 scale0 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
                                          + pre_op_sf_off);
-                scale2 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
+                scale1 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
                                          + pre_op_sf_off + 16);
-                scale4 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
+                scale2 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
                                          + pre_op_sf_off + 32);
-                scale6 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
+                scale3 = _mm512_loadu_ps((float*)(pre_ops_attr.scale_factor)
                                          + pre_op_sf_off + 48);
             } else {
                 // load and convert scale factor vectors to DLP_F32 type
                 scale0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
                     (bfloat16*)(pre_ops_attr.scale_factor) + pre_op_sf_off));
-                scale2 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                scale1 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
                     (bfloat16*)(pre_ops_attr.scale_factor) + pre_op_sf_off
                     + 16));
-                scale4 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                scale2 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
                     (bfloat16*)(pre_ops_attr.scale_factor) + pre_op_sf_off
                     + 32));
-                scale6 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                scale3 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
                     (bfloat16*)(pre_ops_attr.scale_factor) + pre_op_sf_off
                     + 48));
             }
-
-            // interleave scale factor vectors
-            scale1 = _mm512_permutex2var_ps(scale0, mask_scale2, scale0);
-            scale0 = _mm512_permutex2var_ps(scale0, mask_scale1, scale0);
-            scale3 = _mm512_permutex2var_ps(scale2, mask_scale2, scale2);
-            scale2 = _mm512_permutex2var_ps(scale2, mask_scale1, scale2);
-            scale5 = _mm512_permutex2var_ps(scale4, mask_scale2, scale4);
-            scale4 = _mm512_permutex2var_ps(scale4, mask_scale1, scale4);
-            scale7 = _mm512_permutex2var_ps(scale6, mask_scale2, scale6);
-            scale6 = _mm512_permutex2var_ps(scale6, mask_scale1, scale6);
-
         } else {
             pre_op_sf_off = 0;
 
@@ -6321,48 +6318,62 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x64)
             scale1 = scale0;
             scale2 = scale0;
             scale3 = scale0;
-            scale4 = scale0;
-            scale5 = scale0;
-            scale6 = scale0;
-            scale7 = scale0;
         }
 
-        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
-            // Broadcast a[0,kr]
+        /* Unscaled fp32 partial sums for this group; two independent sets
+         * (even and odd k pairs) so consecutive dpbf16 ops don't serialize. */
+        __m512 p0 = _mm512_setzero_ps(), q0 = _mm512_setzero_ps();
+        __m512 p1 = _mm512_setzero_ps(), q1 = _mm512_setzero_ps();
+        __m512 p2 = _mm512_setzero_ps(), q2 = _mm512_setzero_ps();
+        __m512 p3 = _mm512_setzero_ps(), q3 = _mm512_setzero_ps();
+
+        iter_t kr = 0;
+        for (; kr + 1 < k_full_pieces; kr += 2) {
+            int8_t const* bk0 = b_group + (rs_b * kr) / 2;
+            int8_t const* bk1 = b_group + (rs_b * (kr + 1)) / 2;
+
+            // Broadcast a[0,kr:kr+2] and a[0,kr+2:kr+4]
+            __m512bh a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
+            __m512bh a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                dlp_load_unaligned_int32(a_group + (rs_a * 0)
+                                         + (cs_a * (kr + 1)))));
+
+            S4_16COL_TO_BF16_PAIRS(bk0 + 0, b0);
+            S4_16COL_TO_BF16_PAIRS(bk0 + 16, b1);
+            S4_16COL_TO_BF16_PAIRS(bk0 + 32, b2);
+            S4_16COL_TO_BF16_PAIRS(bk0 + 48, b3);
+            p0 = _mm512_dpbf16_ps(p0, a_bf16_0, b0);
+            p1 = _mm512_dpbf16_ps(p1, a_bf16_0, b1);
+            p2 = _mm512_dpbf16_ps(p2, a_bf16_0, b2);
+            p3 = _mm512_dpbf16_ps(p3, a_bf16_0, b3);
+
+            S4_16COL_TO_BF16_PAIRS(bk1 + 0, b0);
+            S4_16COL_TO_BF16_PAIRS(bk1 + 16, b1);
+            S4_16COL_TO_BF16_PAIRS(bk1 + 32, b2);
+            S4_16COL_TO_BF16_PAIRS(bk1 + 48, b3);
+            q0 = _mm512_dpbf16_ps(q0, a_bf16_1, b0);
+            q1 = _mm512_dpbf16_ps(q1, a_bf16_1, b1);
+            q2 = _mm512_dpbf16_ps(q2, a_bf16_1, b2);
+            q3 = _mm512_dpbf16_ps(q3, a_bf16_1, b3);
+        } // k-loop, two k pairs at a time
+
+        for (; kr < k_full_pieces; kr += 1) {
+            int8_t const* bk0 = b_group + (rs_b * kr) / 2;
+
+            // Broadcast a[0,kr:kr+2]
             __m512bh a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
                 dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr))));
 
-            b0_s4 =
-                _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
-
-            CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                               sign_comp, signed_upscale);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
-            b1_s4 = _mm256_loadu_si256(
-                (__m256i const*)(b_group + ((rs_b * kr) / 2) + 32));
-
-            CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
-                                               sign_comp, signed_upscale);
-
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
-
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
-
-            // Perform column direction mat-mul with k = 2.
-            // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
-            c_float_0p0 = _mm512_dpbf16_ps(c_float_0p0, a_bf16_0, b0);
-            c_float_0p1 = _mm512_dpbf16_ps(c_float_0p1, a_bf16_0, b1);
-            c_float_0p2 = _mm512_dpbf16_ps(c_float_0p2, a_bf16_0, b2);
-            c_float_0p3 = _mm512_dpbf16_ps(c_float_0p3, a_bf16_0, b3);
-        } // k-loop
+            S4_16COL_TO_BF16_PAIRS(bk0 + 0, b0);
+            S4_16COL_TO_BF16_PAIRS(bk0 + 16, b1);
+            S4_16COL_TO_BF16_PAIRS(bk0 + 32, b2);
+            S4_16COL_TO_BF16_PAIRS(bk0 + 48, b3);
+            p0 = _mm512_dpbf16_ps(p0, a_bf16_0, b0);
+            p1 = _mm512_dpbf16_ps(p1, a_bf16_0, b1);
+            p2 = _mm512_dpbf16_ps(p2, a_bf16_0, b2);
+            p3 = _mm512_dpbf16_ps(p3, a_bf16_0, b3);
+        } // k-loop remainder
 
         a_group += k_full_pieces * cs_a;
         b_group += (k_full_pieces * rs_b) / 2;
@@ -6375,37 +6386,23 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x64)
             a_kfringe_buf     = *(a_group + (rs_a * 0));
             __m512bh a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi16(a_kfringe_buf));
 
-            b0_s4 = _mm256_loadu_si256((__m256i const*)(b_group));
-
-            CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                               sign_comp, signed_upscale);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
-            b1_s4 = _mm256_loadu_si256((__m256i const*)(b_group + 32));
-
-            CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
-                                               sign_comp, signed_upscale);
-
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
-
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
-
-            // Perform column direction mat-mul with k = 2.
-            // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
-            c_float_0p0 = _mm512_dpbf16_ps(c_float_0p0, a_bf16_0, b0);
-            c_float_0p1 = _mm512_dpbf16_ps(c_float_0p1, a_bf16_0, b1);
-            c_float_0p2 = _mm512_dpbf16_ps(c_float_0p2, a_bf16_0, b2);
-            c_float_0p3 = _mm512_dpbf16_ps(c_float_0p3, a_bf16_0, b3);
-
+            S4_16COL_TO_BF16_PAIRS(b_group + 0, b0);
+            S4_16COL_TO_BF16_PAIRS(b_group + 16, b1);
+            S4_16COL_TO_BF16_PAIRS(b_group + 32, b2);
+            S4_16COL_TO_BF16_PAIRS(b_group + 48, b3);
+            p0 = _mm512_dpbf16_ps(p0, a_bf16_0, b0);
+            p1 = _mm512_dpbf16_ps(p1, a_bf16_0, b1);
+            p2 = _mm512_dpbf16_ps(p2, a_bf16_0, b2);
+            p3 = _mm512_dpbf16_ps(p3, a_bf16_0, b3);
         } // k_partial_pieces
+
+        // Apply this group's scale once: c[0,0-63] += (p + q) * scale
+        c_float_0p0 = _mm512_fmadd_ps(_mm512_add_ps(p0, q0), scale0, c_float_0p0);
+        c_float_0p1 = _mm512_fmadd_ps(_mm512_add_ps(p1, q1), scale1, c_float_0p1);
+        c_float_0p2 = _mm512_fmadd_ps(_mm512_add_ps(p2, q2), scale2, c_float_0p2);
+        c_float_0p3 = _mm512_fmadd_ps(_mm512_add_ps(p3, q3), scale3, c_float_0p3);
     } // group loop
+#undef S4_16COL_TO_BF16_PAIRS
 
     // Load alpha and beta
     __m512 selector1 = _mm512_set1_ps(alpha);

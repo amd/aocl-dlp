@@ -408,6 +408,37 @@ gemm_tests:
             b_scale_granularity: ["PER_GROUP", "PER_CHANNEL", "PER_TENSOR"]
             group_size: ["0"]
 
+  # m == 1 (token decode) at LLM shapes, through the 1x64 fringe kernel:
+  # full 64-column panels, K spanning many 128-wide groups and crossing the
+  # KC=4096 block, N crossing the NC=1024 block, per-group scales in f32 and
+  # bf16, and B given both row-major and transposed (as zentorch passes it).
+  - name: "quant_api_bf16s4_woq_decode_m1"
+    a_type: ["bf16"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false, true]
+    m: [1]
+    n: [64, 1088]
+    k: [256, 4096, 4224]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_type: ["f32", "bf16"]
+            b_scale_granularity: ["PER_GROUP", "PER_CHANNEL", "PER_TENSOR"]
+            group_size: ["128"]
+
   # WOQ micro-kernels are MR=6 x NR=64. M leftovers use 1x..5x fringes;
   # N < 64 peels 48, then 32, then 16, then lt16 (n % 16). Cover every M
   # remainder (and one full 6-row tile plus each remainder) and every N peel
