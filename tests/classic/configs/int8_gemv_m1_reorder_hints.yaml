@@ -1,0 +1,295 @@
+# ============================================================================
+# INT8 (u8s8, s8s8) M=1 GEMM over a reordered B, under m_hint=32 / nt_hint=32.
+#
+# Reorder packs B at the NR the analytical shape model picks for
+# (m_hint, n, k, nt_hint); the m=1 call runs the GEMV M=1 kernel over that
+# buffer, so its NR must match the reorder's. INT8 has no B-streaming rule, so
+# the model picks between 6x64 and 8x48 only:
+#
+#   6x64_*   entries: the model picks NR=64 (strictly cheaper for n in
+#                     (768, 1024]; a tie, which keeps 6x64, below that).
+#   8x48_*   entries: the model picks NR=48 (strictly cheaper).
+#   large_*  entries: large n and k; the model picks NR=48.
+#   sanity_* entries: reorder at n=1, k=1 and m>1 under the same hints.
+#
+# A GEMV M=1 kernel fixed at NR=64 passes the 6x64 entries and produces
+# wrong output on the 8x48 and large entries with k > 4. At k <= 4 there is a
+# single K-quad, whose packed bytes do not depend on NR.
+#
+# The model is fenced to AVX512-VNNI Zen5; elsewhere every entry runs at the
+# baseline NR=64 and passes trivially.
+#
+# Must run with 32 threads, otherwise the call is rejected as diverging from
+# nt_hint:
+#   OMP_NUM_THREADS=32 ./test_gemm -f <this file>
+# ============================================================================
+
+gemm_tests:
+  - name: "int8_m1_reorder_hints_6x64_strict"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "s8", "u8", "f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [784, 896, 1000, 1024]
+    k: [64, 257, 2048]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0
+      absolute: 0
+
+  - name: "int8_m1_reorder_hints_6x64_tie"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "s8", "u8", "f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [256, 512, 2048]
+    k: [64, 257, 2048]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0
+      absolute: 0
+
+  - name: "int8_m1_reorder_hints_8x48"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "s8", "u8", "f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [288, 384, 768, 1040, 1280, 1536, 3072]
+    k: [64, 257, 2048]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0
+      absolute: 0
+
+  - name: "int8_m1_reorder_hints_8x48_alpha_beta"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [289, 768, 1535]
+    k: [1, 3, 64, 257]
+    alpha: [2]
+    beta: [0, 3]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0
+      absolute: 0
+
+  - name: "int8_m1_reorder_hints_large"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [12288, 12300, 16384]
+    k: [8192, 16384]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0
+      absolute: 0
+
+  - name: "int8_m1_reorder_hints_sanity_n1_k1"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 32, 100]
+    n: [1, 768]
+    k: [1, 257]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0
+      absolute: 0
+
+  - name: "int8_m1_reorder_hints_sanity_gemm"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32, 100]
+    n: [1, 384, 1000, 1536]
+    k: [1, 64, 257]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0
+      absolute: 0
+
+  # Post-ops over the M=1 kernel at the reordered width, across the NR=48
+  # fringes. The f32 scale and the non-linear ops are not exact. k=1 is left
+  # out: the f32 tolerance scales with k, and at k=1 it is below the GELU
+  # approximation's error.
+  - name: "int8_m1_reorder_hints_postops_bias_scale_act"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "s8", "f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [288, 289, 300, 335, 383, 384, 767, 768, 1040, 1041, 1279, 1535, 1536, 3071]
+    k: [64, 257]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0.01
+      absolute: 0.1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["n"]
+        - type: "Elementwise-RELU"
+        - type: "Elementwise-GELU-TANH"
+
+  - name: "int8_m1_reorder_hints_postops_matrix_add_mul"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [288, 289, 383, 768, 1041, 1535, 3071]
+    k: [1, 64, 257]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    gemm_hints:
+      m_hint: 32
+      nt_hint: 32
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 0.001
+      absolute: 0.01
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["f32"]
+        - type: "Matrix-Mul"
+          params:
+            matrix_type: ["f32"]

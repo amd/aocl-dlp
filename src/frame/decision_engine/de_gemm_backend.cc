@@ -119,7 +119,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->gemm_hints,
+            gemmIn->blksz_set_mask, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
@@ -231,7 +232,8 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->gemm_hints,
+            gemmIn->blksz_set_mask, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
@@ -301,7 +303,8 @@ gemmU8S8DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->gemm_hints,
+            gemmIn->blksz_set_mask, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
@@ -372,7 +375,8 @@ gemmS8DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->gemm_hints,
+            gemmIn->blksz_set_mask, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
@@ -659,7 +663,8 @@ gemmFP16DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->gemm_hints,
+            gemmIn->blksz_set_mask, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
@@ -714,7 +719,8 @@ gemmF32FP16DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->gemm_hints,
+            gemmIn->blksz_set_mask, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,

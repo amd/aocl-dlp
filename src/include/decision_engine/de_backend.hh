@@ -123,6 +123,8 @@ class iDEBackend : public optimizer::gemmOptimizer
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        const dlp_gemm_kernel_hints_t*    gemm_hints,
+        md_t                              blksz_set_mask,
         bool                              rerouted_from_other_backend) = 0;
 
     // Pack-B kernel selection, and with it the packed panel width.
@@ -227,25 +229,27 @@ class gemmF32DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        md_t                              m,
-        md_t                              n,
-        md_t                              k,
-        md_t                              rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        md_t                                            m,
+        md_t                                            n,
+        md_t                                            k,
+        md_t                                            rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        [[maybe_unused]] md_t                           cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        [[maybe_unused]] md_t                           blksz_set_mask,
         bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -739,6 +743,42 @@ class gemmBF16DEBackend final : public iDEBackend
         return (bBytes / dies) > l3BytesPerCCD;
     }
 
+    // The width a reordered B panel is packed at. Both the pack-B init of a
+    // Reorder and the GEMV M=1 kernel over that buffer read it from here, and
+    // they agree only because it is one search over one object.
+    //
+    // A Reorder is not a GEMM, so there is no call to answer for: no m, no
+    // thread count and no ways, and nothing in a packed panel depends on any of
+    // the three. The zeros say that rather than stand in for it.
+    //
+    // b_reordered is passed true because a packed panel is what this describes,
+    // and the hints are the only extents on offer.
+    //
+    // Only the NR is taken. The MR and the split that come back describe the
+    // GEMM the hints predict, and nothing in a packed B panel depends on
+    // either. Resolving them anyway is the price of running the identical
+    // search: a cost model ranks candidates by the split they would run under,
+    // so a tile-only variant here would be free to disagree with the GEMM.
+    DLP_ALWAYS_INLINE md_t
+    reorderedPanelNR(md_t                           n,
+                     md_t                           k,
+                     md_t                           mr_hint,
+                     md_t                           nr_hint,
+                     md_t                           blksz_set_mask,
+                     const dlp_gemm_kernel_hints_t* gemm_hints) const
+    {
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
+            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
+            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
+            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
+            /*b_reordered=*/true);
+
+        return canUseAnalyticalShapeModel(in)
+                   ? gemmBF16DEBackend::proposeShape(in).nr
+                   : in.nr;
+    }
+
   protected:
     // What BF16 does to the seed partition. It matches
     // dlp_gemm_bf16bf16f32of32_get_threading, with the runtime and context
@@ -860,6 +900,8 @@ class gemmBF16DEBackend final : public iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        const dlp_gemm_kernel_hints_t*    gemm_hints,
+        md_t                              blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -872,7 +914,7 @@ class gemmBF16DEBackend final : public iDEBackend
             return f32Backend->getGemvKernelInfoForInputFastPath(
                 k_dtype, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
                 beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, true);
+                c_downscale, gemm_hints, blksz_set_mask, true);
         }
 
         kernel_frame::scalingType alphaScalingType;
@@ -901,6 +943,14 @@ class gemmBF16DEBackend final : public iDEBackend
             mr       = 1;
             k_unroll = 4;
             kc       = 4096;
+
+            // A reordered B was packed at whatever width the Reorder resolved
+            // from the hints, and the M=1 kernel walks B at its own NR, so it
+            // has to be generated at that width rather than the fixed 64.
+            if (mtag_b == AOCL_DLP_MEMORY_TAG::REORDERED) {
+                nr = reorderedPanelNR(n, k, mr_hint, nr_hint, blksz_set_mask,
+                                      gemm_hints);
+            }
         }
 
         // L1-cache aliasing mitigation for BF16 GEMV N=1 (MR=16).
@@ -1136,38 +1186,13 @@ class gemmBF16DEBackend final : public iDEBackend
         // packing).
         constexpr md_t k_factor = 2;
 
-        // The model input, built exactly as the kernel init builds it, which is
-        // the whole of how a Reorder and a later GEMM arrive at one width.
-        //
-        // A Reorder is not a GEMM, so there is no call to answer for: no m, no
-        // thread count and no ways, and nothing in a packed panel depends on
-        // any of the three. The zeros say that rather than stand in for it.
-        //
-        // b_reordered is passed true because that is what this path is. There
-        // is no tag to read, reordering being the operation rather than a
-        // property of an operand, and the hints are the only extents on offer.
-        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
-            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
-            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
-            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
-            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
-            /*b_reordered=*/true);
-
         // The Reorder path is the one that decides the width, and it decides it
         // with the same call the GEMM path makes, so the two cannot drift.
         // Inside a GEMM the kernel init has already marked the tile in
-        // blksz_set_mask, so this is ineligible and in.nr -- the NR that init
-        // settled -- stands.
-        //
-        // Only the NR is taken. The MR and the split that come back describe
-        // the GEMM the hints predict, and nothing in a packed B panel depends
-        // on either. Resolving them anyway is the price of running the
-        // identical search: a cost model ranks candidates by the split they
-        // would run under, so a tile-only variant here would be free to
-        // disagree with the GEMM.
-        const md_t nr = canUseAnalyticalShapeModel(in)
-                            ? gemmBF16DEBackend::proposeShape(in).nr
-                            : in.nr;
+        // blksz_set_mask, so this is ineligible and the NR that init settled
+        // stands.
+        const md_t nr = reorderedPanelNR(n, k, mr_hint, nr_hint, blksz_set_mask,
+                                         gemm_hints);
 
         return dlp::kernel_frame::packKernelInfo(
             nr, k_factor, eKernelInstPref, kernel_frame::DataType::bf16,
@@ -1193,6 +1218,28 @@ class gemmInt8DEBackendBase : public iDEBackend
         return isAnalyticalShapeModelArch && in.b_reordered
                && gemmShapeModelUtils::isEligible(in) && (in.m > 1)
                && (in.n > 1);
+    }
+
+    // The width a reordered B panel is packed at, read by both the pack-B init
+    // of a Reorder and the GEMV M=1 kernel over that buffer. See the BF16
+    // reorderedPanelNR for why the inputs are what they are. The search is the
+    // concrete backend's own, so each of U8S8 and S8S8 agrees with itself.
+    DLP_ALWAYS_INLINE md_t
+    reorderedPanelNR(md_t                           n,
+                     md_t                           k,
+                     md_t                           mr_hint,
+                     md_t                           nr_hint,
+                     md_t                           blksz_set_mask,
+                     const dlp_gemm_kernel_hints_t* gemm_hints) const
+    {
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
+            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
+            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
+            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
+            /*b_reordered=*/true);
+
+        return canUseAnalyticalShapeModel(in) ? proposeShape(in).nr : in.nr;
     }
 
     // Keep this faithful to dlp_gemm_s32o32_get_threading(): after the shared
@@ -1288,6 +1335,8 @@ class gemmU8S8DEBackend final : public gemmInt8DEBackendBase
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        const dlp_gemm_kernel_hints_t*    gemm_hints,
+        md_t                              blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1332,6 +1381,14 @@ class gemmU8S8DEBackend final : public gemmInt8DEBackendBase
             nr       = 64;
             mr       = 1;
             k_unroll = 4;
+
+            // A reordered B was packed at whatever width the Reorder resolved
+            // from the hints, and the M=1 kernel walks B at its own NR, so it
+            // has to be generated at that width rather than the fixed 64.
+            if (mtag_b == AOCL_DLP_MEMORY_TAG::REORDERED) {
+                nr = reorderedPanelNR(n, k, mr_hint, nr_hint, blksz_set_mask,
+                                      gemm_hints);
+            }
         }
 
         md_t kc_rounded =
@@ -1480,16 +1537,8 @@ class gemmU8S8DEBackend final : public gemmInt8DEBackendBase
             kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
         }
 
-        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
-            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
-            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
-            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
-            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
-            /*b_reordered=*/true);
-
-        const md_t nr = canUseAnalyticalShapeModel(in)
-                            ? gemmU8S8DEBackend::proposeShape(in).nr
-                            : in.nr;
+        const md_t nr = reorderedPanelNR(n, k, mr_hint, nr_hint, blksz_set_mask,
+                                         gemm_hints);
 
         return dlp::kernel_frame::packKernelInfo(
             nr, k_factor, kInstPref, kernel_frame::DataType::s8,
@@ -1570,6 +1619,8 @@ class gemmS8DEBackend final : public gemmInt8DEBackendBase
                           md_t                              nr_hint,
                           md_t                              kc_hint,
                           md_t                              c_downscale,
+                          const dlp_gemm_kernel_hints_t*    gemm_hints,
+                          md_t                              blksz_set_mask,
                           [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1616,6 +1667,13 @@ class gemmS8DEBackend final : public gemmInt8DEBackendBase
             nr       = 64;
             mr       = 1;
             k_unroll = 4;
+
+            // See the U8S8 M=1 arm: over a reordered B the kernel has to walk
+            // the panel at the width the Reorder packed it at.
+            if (mtag_b == AOCL_DLP_MEMORY_TAG::REORDERED) {
+                nr = reorderedPanelNR(n, k, mr_hint, nr_hint, blksz_set_mask,
+                                      gemm_hints);
+            }
         }
 
         md_t kc_rounded =
@@ -1765,16 +1823,8 @@ class gemmS8DEBackend final : public gemmInt8DEBackendBase
             kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
         }
 
-        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
-            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
-            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
-            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
-            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
-            /*b_reordered=*/true);
-
-        const md_t nr = canUseAnalyticalShapeModel(in)
-                            ? gemmS8DEBackend::proposeShape(in).nr
-                            : in.nr;
+        const md_t nr = reorderedPanelNR(n, k, mr_hint, nr_hint, blksz_set_mask,
+                                         gemm_hints);
 
         return dlp::kernel_frame::packKernelInfo(
             nr, k_factor, kInstPref, kernel_frame::DataType::s8,
@@ -2240,25 +2290,27 @@ class gemmFP16DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        md_t                              m,
-        md_t                              n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        md_t                                            m,
+        md_t                                            n,
+        md_t                                            k,
+        [[maybe_unused]] md_t                           rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        [[maybe_unused]] md_t                           cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        [[maybe_unused]] md_t                           blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -2395,25 +2447,27 @@ class gemmF32FP16DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        md_t                              m,
-        md_t                              n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        md_t                                            m,
+        md_t                                            n,
+        md_t                                            k,
+        [[maybe_unused]] md_t                           rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        [[maybe_unused]] md_t                           cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        [[maybe_unused]] md_t                           blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {

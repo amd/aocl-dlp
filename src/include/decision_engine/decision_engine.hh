@@ -381,7 +381,7 @@ class decisionEngine
                 return backend->T::getGemvKernelInfoForInputFastPath(
                     dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
                     beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                    c_downscale, false);
+                    c_downscale, gemm_hints, blksz_set_mask, false);
             }
             return backend->T::getGemmKernelInfoForInputFastPath(
                 dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
