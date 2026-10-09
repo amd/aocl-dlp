@@ -28,3 +28,12 @@
 dlp_add_unit_tests(
     INCLUDE_DIRS ${DLP_SOURCE_DIR}/src ${DLP_SOURCE_DIR}/src/include ${DLP_SOURCE_DIR}/third_party
 )
+
+# These unit tests use the BF16S4 intrinsic widening code as the reference,
+# so this target needs the Zen4 ISA flags (AVX512-VBMI and GFNI). Remove this
+# when the intrinsic code is deprecated.
+if(TARGET test_gfni_nibble_widen)
+    dlp_set_arch_flags(test_gfni_nibble_widen zen4)
+    target_include_directories(test_gfni_nibble_widen PRIVATE
+        ${DLP_SOURCE_DIR}/classic/kernels/zen4)
+endif()

@@ -201,6 +201,13 @@
                                                                                \
     output = _mm512_or_epi32(output, hi_bits_512);
 
+/* vpmultishiftqb places each nibble in bits 0..3 of a byte. This affine
+ * transform reads only those bits and replicates bit 3 into bits 4..7, so it
+ * sign-extends directly without first clearing the junk high nibble. */
+#define SIGN_EXTEND_GFNI_64ELEM(output)                                        \
+    output = _mm512_gf2p8affine_epi64_epi8(                                    \
+        output, _mm512_set1_epi64(0x0102040808080808ULL), 0);
+
 #define SIGN_EXTEND_BITWISE_OPS_32ELEM(output, sign_comp)                      \
     /* Comparison of signed bit in int4 and appending sign bits. */            \
     /* Set 4th bit (bit[3]/MSB/sign bit) of negative int4 values (signed bit   \
@@ -244,6 +251,15 @@
         if (signed_scale == TRUE) {                                            \
             SIGN_EXTEND_BITWISE_OPS_64ELEM(output, sign_comp);                 \
         }                                                                      \
+    } while (0);
+
+/* Signed BF16S4 widening. Packers keep the bitwise macro above. */
+#define CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(input, output, shift_idx)      \
+    do {                                                                       \
+        /* Keep the high-nibble junk for GFNI: the affine ignores it. */       \
+        output = _mm512_multishift_epi64_epi8(shift_idx,                       \
+                                              _mm512_cvtepu32_epi64(input));   \
+        SIGN_EXTEND_GFNI_64ELEM(output);                                       \
     } while (0);
 
 #define CREATE_CVT_INT4_INT8_PERM_IDX_64ELEM_ODD_LD(var_name)                  \

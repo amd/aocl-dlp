@@ -70,6 +70,24 @@ dlp_cpuid_is_avx512bf16_supported(void)
     return archConfigManager::getInstance().isAvx512Bf16SupportedByArch();
 }
 
+bool
+dlp_cpuid_is_avx512vbmi_supported(void)
+{
+    return cpuFeaturesInstance().hasFeature(isaFeature::avx512vbmi);
+}
+
+bool
+dlp_cpuid_is_gfni_supported(void)
+{
+    return cpuFeaturesInstance().hasFeature(isaFeature::gfni);
+}
+
+bool
+dlp_cpuid_is_nibble_widen_supported(void)
+{
+    return dlp_cpuid_is_avx512vbmi_supported() && dlp_cpuid_is_gfni_supported();
+}
+
 // Determine if the configured architecture has support for AVX512_BF16.
 bool
 dlp_cpuid_is_avx512bf16_configured(void)

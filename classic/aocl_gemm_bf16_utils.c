@@ -764,11 +764,12 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_bf16 ISA is supported, dlp_gemm matmul only works with
-    // it.
-    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
-        dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
-                      "cannot perform bf16bf16f32 gemm.",
+    // AVX512-BF16 selects the bf16 kernel. The s4 packers that consume this
+    // reorder buffer execute vpmultishiftqb, which needs AVX512-VBMI.
+    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+        || (dlp_cpuid_is_avx512vbmi_supported() == FALSE)) {
+        dlp_print_msg(" AVX512_BF16 and AVX512_VBMI are required, "
+                      "cannot perform bf16s4f32 reorder.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         return 0; // Error.
@@ -832,11 +833,12 @@ aocl_reorder_bf16s4f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_bf16 ISA is supported, dlp_gemm matmul only works with
-    // it.
-    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
-        dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
-                      "cannot perform bf16bf16f32 gemm.",
+    // AVX512-BF16 selects the bf16 kernel. The s4 packers that consume this
+    // reorder buffer execute vpmultishiftqb, which needs AVX512-VBMI.
+    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+        || (dlp_cpuid_is_avx512vbmi_supported() == FALSE)) {
+        dlp_print_msg(" AVX512_BF16 and AVX512_VBMI are required, "
+                      "cannot perform bf16s4f32 reorder.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         return; // Error.

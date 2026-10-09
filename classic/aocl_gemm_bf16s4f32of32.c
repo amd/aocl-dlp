@@ -78,11 +78,12 @@ aocl_gemm_bf16s4f32of32(const char      order,
     DLP_METADATA_SET_ERROR(metadata,
                            DLP_CLSC_SUCCESS); // Set default error to success.
 
-    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
-    // it.
-    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
-        dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
-                      "cannot perform bf16bf16f32 gemm.",
+    // AVX512-BF16 selects the bf16 kernel. Nibble widening additionally
+    // needs AVX512-VBMI and GFNI, which are independent of AVX512-BF16.
+    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+        || (dlp_cpuid_is_nibble_widen_supported() == FALSE)) {
+        dlp_print_msg(" AVX512_BF16, AVX512_VBMI and GFNI are required, "
+                      "cannot perform bf16s4f32 gemm.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
@@ -276,11 +277,12 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     DLP_METADATA_SET_ERROR(metadata,
                            DLP_CLSC_SUCCESS); // Set default error to success.
 
-    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
-    // it.
-    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
-        dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
-                      "cannot perform bf16bf16f32 gemm.",
+    // AVX512-BF16 selects the bf16 kernel. Nibble widening additionally
+    // needs AVX512-VBMI and GFNI, which are independent of AVX512-BF16.
+    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+        || (dlp_cpuid_is_nibble_widen_supported() == FALSE)) {
+        dlp_print_msg(" AVX512_BF16, AVX512_VBMI and GFNI are required, "
+                      "cannot perform bf16s4f32obf16 gemm.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;

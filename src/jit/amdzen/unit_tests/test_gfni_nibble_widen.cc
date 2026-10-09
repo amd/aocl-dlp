@@ -30,9 +30,11 @@
 #include <cstring>
 
 #include <gtest/gtest.h>
+#include <immintrin.h>
 
 #include "arch_utils/arch_config_manager.hh"
 #include "cpu_utils/cpu_features.hh"
+#include "int4_utils_avx512.h"
 #include "jit/amdzen/s8_gemm_quant_generator.hh"
 #include "xbyak/xbyak.h"
 #include "xbyak/xbyak_util.h"
@@ -93,6 +95,18 @@ hostHasGfniWiden()
            && cpu.hasFeature(dlp::cpu_utils::isaFeature::gfni);
 }
 
+void
+gfniWiden64Intrinsic(const uint8_t* src, int8_t* dst)
+{
+    const __m256i input =
+        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
+    __m512i shift_idx;
+    __m512i output;
+    MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx);
+    CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(input, output, shift_idx);
+    _mm512_storeu_si512(dst, output);
+}
+
 } // namespace
 
 // Every packed byte value in every source lane. This is the placement the
@@ -116,6 +130,34 @@ TEST(GfniNibbleWiden, MatchesScalarSignExtend)
             src[pos] = static_cast<uint8_t>(value);
             std::memset(dst, 0x5A, sizeof(dst));
             widen(src, dst);
+            for (int lane = 0; lane < 64; ++lane) {
+                const int8_t exp = refNibble(src[lane >> 1], lane & 1);
+                if (dst[lane] != exp) {
+                    ++mismatches;
+                }
+            }
+        }
+    }
+
+    EXPECT_EQ(mismatches, 0);
+}
+
+// Intrinsic BF16S4 widening. These tests will be deprecated when moved to JIT.
+TEST(GfniNibbleWiden, Bf16s4IntrinsicMatchesScalarSignExtend)
+{
+    if (!hostHasGfniWiden()) {
+        GTEST_SKIP() << "Requires AVX-512, AVX512-VBMI, and GFNI";
+    }
+
+    int mismatches = 0;
+
+    for (int pos = 0; pos < 32; ++pos) {
+        for (int value = 0; value < 256; ++value) {
+            alignas(64) uint8_t src[32] = {};
+            alignas(64) int8_t  dst[64];
+            src[pos] = static_cast<uint8_t>(value);
+            std::memset(dst, 0x5A, sizeof(dst));
+            gfniWiden64Intrinsic(src, dst);
             for (int lane = 0; lane < 64; ++lane) {
                 const int8_t exp = refNibble(src[lane >> 1], lane & 1);
                 if (dst[lane] != exp) {

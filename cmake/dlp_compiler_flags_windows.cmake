@@ -60,7 +60,7 @@ set(DLP_GENERIC_FLAGS_OTHER -Wall)
 set(DLP_RELEASE_FLAGS_OTHER -O3)
 set(DLP_DEBUG_FLAGS_OTHER -g -O0)
 set(DLP_ARCH_ZEN_FLAGS_OTHER -mavx2 -mfma)
-set(DLP_ARCH_ZEN4_FLAGS_OTHER -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512ifma -mavx512vbmi -mavx512vbmi2 -mavx512vnni -mavx512bf16 -mvaes)
+set(DLP_ARCH_ZEN4_FLAGS_OTHER -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512ifma -mavx512vbmi -mgfni -mavx512vbmi2 -mavx512vnni -mavx512bf16 -mvaes)
 
 # Create interface libraries for different flag sets
 add_library(dlp_compiler_flags INTERFACE)

@@ -63,9 +63,6 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp = _mm512_set1_epi8(0x08);
-
-    bool signed_upscale = true;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8;
@@ -163,8 +160,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
                 b0_s4 = _mm256_maskz_loadu_epi8(
                     lmask, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -229,8 +225,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
                 b0_s4 =
                     _mm256_maskz_loadu_epi8(lmask, (__m256i const*)(b_group));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -1295,9 +1290,6 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x16m)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp = _mm512_set1_epi8(0x08);
-
-    bool signed_upscale = true;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8;
@@ -1390,8 +1382,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x16m)
                 b0_s4 = _mm256_maskz_loadu_epi8(
                     0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -1456,8 +1447,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x16m)
                 b0_s4 =
                     _mm256_maskz_loadu_epi8(0xFFFF, (__m256i const*)(b_group));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -2478,9 +2468,6 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x32m)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp = _mm512_set1_epi8(0x08);
-
-    bool signed_upscale = true;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8;
@@ -2586,8 +2573,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x32m)
                 b0_s4 = _mm256_loadu_si256(
                     (__m256i const*)(b_group + (rs_b * kr) / 2));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -2661,8 +2647,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x32m)
             if (k_partial_pieces) {
                 b0_s4 = _mm256_loadu_si256((__m256i const*)(b_group));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -4058,9 +4043,6 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp = _mm512_set1_epi8(0x08);
-
-    bool signed_upscale = true;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8;
@@ -4198,8 +4180,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
                 b0_s4 = _mm256_loadu_si256(
                     (__m256i const*)(b_group + (rs_b * kr) / 2));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -4212,8 +4193,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
                 b1_s4 = _mm256_maskz_loadu_epi8(
                     0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2) + 32));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b1_s4, b1_s8, shift_idx_64);
 
                 b2 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
@@ -4289,8 +4269,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
             if (k_partial_pieces) {
                 b0_s4 = _mm256_loadu_si256((__m256i const*)(b_group));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b0_s4, b0_s8, shift_idx_64);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -4303,8 +4282,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
                 b1_s4 = _mm256_maskz_loadu_epi8(0xFFFF,
                                                 (__m256i const*)(b_group + 32));
 
-                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
-                                                   sign_comp, signed_upscale);
+                CVT_INT4_TO_INT8_64ELEM_MULTISHIFT_GFNI(b1_s4, b1_s8, shift_idx_64);
 
                 b2 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),

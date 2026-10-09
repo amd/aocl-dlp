@@ -102,6 +102,20 @@ dlp_cpuid_is_avx512vnni_supported(void);
 bool
 dlp_cpuid_is_avx512bf16_supported(void);
 
+// API to check if AVX512_VBMI is supported. vpmultishiftqb needs this bit.
+// It is independent of AVX512_BF16.
+bool
+dlp_cpuid_is_avx512vbmi_supported(void);
+
+// API to check if GFNI is supported. vgf2p8affineqb needs this bit.
+// It is independent of AVX512_BF16 and AVX512_VBMI.
+bool
+dlp_cpuid_is_gfni_supported(void);
+
+// Nibble widening requires both AVX512_VBMI and GFNI.
+bool
+dlp_cpuid_is_nibble_widen_supported(void);
+
 // API to check if AVX512_bf16 is supported or not by the configured
 // architecture, i.e. after any downgrade requested through
 // AOCL_DLP_ENABLE_INSTRUCTIONS. This is the query the decision engine uses to
