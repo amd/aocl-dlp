@@ -89,13 +89,8 @@ jitBF16GEMVN1<KType>::initializeParameters(
     // gemvn1params variable created is loaded to stack via execute kernel at
     // runtime like any other function parameter loaded on its stack
 
-    if (c_downscale < DLP_F32) {
-        // Broadcast the left shift offset onto a ZMM register
-        // Store to allocated stack space, then broadcast from memory
-        // Using rsp(instead of stackPtr in order to use the local stack space)
-        mov(dword[rsp + 0],
-            0x10); // Store value 16 to local stack (safely allocated)
-    }
+    // BF16->F32 shift-by-16 constant is broadcast from eax at the beta-scale
+    // use site (no StackFrame local / winAbi rsp dependency).
 
     mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, rsA)]);
     mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, csA)]);
@@ -660,8 +655,11 @@ jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
 
-        vpbroadcastd(Xbyak::Zmm(tmpBaseIdx),
-                     ptr[rsp + 0]); // Broadcast from memory
+        // Broadcast shift-by-16 from eax (not a StackFrame temp) — immune to
+        // winAbi rsp layout. Do not reintroduce a [rsp+0] spill; on Windows
+        // that corrupted the caller's saved xmm6.
+        mov(eax, 0x10);
+        vpbroadcastd(Xbyak::Zmm(tmpBaseIdx), eax);
 
         // Store complete SIMD-width chunks
         for (iter_t i = 0; i < mSize / simdWidthF32; i += 1) {
@@ -1074,8 +1072,9 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
+    // No StackFrame locals: BF16 beta shift broadcasts from eax.
     Xbyak::util::StackFrame frame(this, 1,
-                                  12 | Xbyak::util::UseRBPAsFramePointer, 16);
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(frame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64

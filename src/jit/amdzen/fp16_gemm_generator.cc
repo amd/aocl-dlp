@@ -76,9 +76,6 @@ jitFP16_GEMM<KType>::initializeParameters(bool mLoop)
         mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
         mov(regMiter,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
-        mov(regTmp3, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
-        // Scale psA for FP16 (2 bytes per element)
-        lea(regTmp3, ptr[regTmp3 * FP16_ELEM_SIZE]);
     }
 
     // Load post_op_c_i for downscale buffer addressing
@@ -820,7 +817,10 @@ jitFP16_GEMM<KType>::generateKernel(utils::generatorParams& params)
 
     // StackFrame manages general purpose registers
     {
-        Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+        // UseRBPAsFramePointer: reserve rbp as a frame pointer for debuggable
+        // stack walks (matches f32/bf16 GEMM generators).
+        Xbyak::util::StackFrame stackFrame(
+            this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
         initializeStackFrame(stackFrame);
 
         // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -856,9 +856,12 @@ jitFP16_GEMM<KType>::generateMLoop(utils::generatorParams& params)
     // Move to next M block
     RETURN_IF_ERROR(moveCPtr());
 
-    // Update A pointer for next M block
+    // Update A pointer for next M block (psA reloaded — no dedicated reg;
+    // UseRBPAsFramePointer limits temps to 12).
+    mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
+    lea(regTmp1, ptr[regTmp1 * FP16_ELEM_SIZE]);
     mov(regTmpAptr, regAPtr);
-    lea(regTmpAptr, ptr[regTmpAptr + regTmp3]);
+    lea(regTmpAptr, ptr[regTmpAptr + regTmp1]);
     mov(regAPtr, regTmpAptr);
 
     lea(regTmp2, ptr[regTmp2 + MR]);
@@ -922,6 +925,9 @@ template<utils::kernelInstrType KType>
 void
 jitFP16_GEMM<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.  psA is reloaded from memory at each M-loop step.
     stackPtr = stackFrame.p[0];
 
     regTmpAptr = stackFrame.t[0];
@@ -936,7 +942,6 @@ jitFP16_GEMM<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
     regAPtr    = stackFrame.t[9];
     regTmp1    = stackFrame.t[10];
     regTmp2    = stackFrame.t[11];
-    regTmp3    = stackFrame.t[12];
 }
 
 template<utils::kernelInstrType KType>

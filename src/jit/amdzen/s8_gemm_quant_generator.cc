@@ -125,6 +125,9 @@ template<utils::kernelInstrType KType>
 void
 jitGEMMQuant<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.
     stackPtr = stackFrame.p[0];
 
     regTmpAptr = stackFrame.t[0];
@@ -139,7 +142,11 @@ jitGEMMQuant<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
     regAPtr    = stackFrame.t[9];
     regTmp1    = stackFrame.t[10];
     regTmp2    = stackFrame.t[11];
-    regTmp3    = stackFrame.t[12];
+    // regTmp3 aliases regTmpAptr (t[0]). INVARIANT: do not use regTmp3
+    // before the K loop ends — regTmpAptr is live as the running A pointer
+    // and is re-seeded from regAPtr at each M iteration. Post-K / group-
+    // loop paths spill/reload around uses that overwrite it.
+    regTmp3 = regTmpAptr;
 
     // Alias the three running group pointers onto temps that are unused
     // across .QGROUPLOOP. regTmpCptr is the freed group index (gAbs); regRsC
@@ -915,7 +922,9 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
     // Third 8B scratch slot for the caller's rsp, which the alignment below
     // discards.
     const int scratchOff3 = scratchOff + 16;
-    const int totalStack  = bankBytes + 64; // 64B scratch (keeps 64B align)
+    // Fourth 8B slot: saved A pointer while regTmp3 aliases regTmpAptr.
+    const int scratchAptrOff = scratchOff + 24;
+    const int totalStack     = bankBytes + 64; // 64B scratch (keeps 64B align)
 
     // Align the frame to 64 bytes. regTmp1 is unused at this time.
     mov(regTmp1, rsp);                     // store rsp for restoring later
@@ -1019,6 +1028,8 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
     mov(ptr[rsp + scratchOff], regMiter);
     mov(ptr[rsp + scratchOff2], regCPtr);
 
+    mov(ptr[rsp + scratchAptrOff], regTmpAptr);
+
     // Initialize the three running group pointers once for the starting
     // group (gAbs == nLeft). Each is advanced by its stride at the loop bottom
     // instead of being recomputed with an imul every group. regKIter holds
@@ -1063,6 +1074,8 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
     }
     lea(regAsclPtr, ptr[regAsclPtr + regTmp1 * aScaleElemBytes()]);
 
+    mov(regTmpAptr, ptr[rsp + scratchAptrOff]);
+
     L(".QGROUPLOOP");
     initializeRegisters();
 
@@ -1103,6 +1116,8 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
 
     L(".QGRP_AFTERK");
 
+    mov(ptr[rsp + scratchAptrOff], regTmpAptr);
+
     // Compensation for converting signed int8 A to uint8 for sym_quant
     if ((qParams.aQuant.zeroPoint.storeDt
          == dlp::kernel_frame::DataType::invalid)
@@ -1131,6 +1146,7 @@ jitGEMMQuant<KType>::generateIrLoop(utils::quantGeneratorParams& qParams)
     }
 
     sub(regMiter, 1); // groups remaining--
+    mov(regTmpAptr, ptr[rsp + scratchAptrOff]);
     jne(".QGROUPLOOP", T_NEAR);
 
     // Restore the mLoop counter, then bring the running F32 total into cReg for
@@ -1246,7 +1262,8 @@ jitGEMMQuant<KType>::generateKernel(utils::quantGeneratorParams& params)
     // Scoped so the StackFrame destructor emits the epilogue and ret before
     // the constant pool below, which must sit outside the executed path.
     {
-        Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+        Xbyak::util::StackFrame stackFrame(
+            this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
         initializeStackFrame(stackFrame);
 
         // Preserve callee-saved xmm6-15 across the kernel call on Windows x64

@@ -866,7 +866,18 @@ static constexpr uint8_t INVALID_REG_SOURCE = 255;
 // ─────────────────────────────────────────────────────────────────────────
 class winAbiVectorGuard
 {
+  public:
+    // Default save range and size — single source of truth for
+    // kWinAbiVectorGuardStackBytes / winAbiStackLocalOffset. Kernels that
+    // pass a non-default [loReg, hiReg] must use a matching local offset.
+    static constexpr int kDefaultLoReg = 6;
+    static constexpr int kDefaultHiReg = 15;
+    static constexpr int kBytesPerXmm  = 16;
+    static constexpr int kDefaultSaveBytes =
+        (kDefaultHiReg - kDefaultLoReg + 1) * kBytesPerXmm;
+
 #if DLP_OS_WINDOWS
+  private:
     Xbyak::CodeGenerator* jit_      = nullptr;
     int                   loReg_    = 0;
     int                   numSaved_ = 0;
@@ -876,24 +887,24 @@ class winAbiVectorGuard
     // Defaults preserve the full callee-saved set. Pass a tighter [loReg,hiReg]
     // when the kernel's max used register index is known, to emit fewer stores.
     explicit winAbiVectorGuard(Xbyak::CodeGenerator* jit,
-                               int                   loReg = 6,
-                               int                   hiReg = 15)
+                               int                   loReg = kDefaultLoReg,
+                               int                   hiReg = kDefaultHiReg)
         : jit_(jit)
     {
-        if (loReg < 6)
-            loReg = 6;
-        if (hiReg > 15)
-            hiReg = 15;
+        if (loReg < kDefaultLoReg)
+            loReg = kDefaultLoReg;
+        if (hiReg > kDefaultHiReg)
+            hiReg = kDefaultHiReg;
         if (jit_ == nullptr || hiReg < loReg)
             return;
 
         loReg_    = loReg;
         numSaved_ = hiReg - loReg + 1;
 
-        // One aligned scratch block (16 B per xmm), then store each register.
-        jit_->sub(jit_->rsp, numSaved_ * 16);
+        // One aligned scratch block, then store each register.
+        jit_->sub(jit_->rsp, numSaved_ * kBytesPerXmm);
         for (int i = 0; i < numSaved_; ++i)
-            jit_->vmovups(jit_->ptr[jit_->rsp + i * 16],
+            jit_->vmovups(jit_->ptr[jit_->rsp + i * kBytesPerXmm],
                           Xbyak::Xmm(loReg_ + i));
     }
 
@@ -903,14 +914,13 @@ class winAbiVectorGuard
             return;
         for (int i = 0; i < numSaved_; ++i)
             jit_->vmovups(Xbyak::Xmm(loReg_ + i),
-                          jit_->ptr[jit_->rsp + i * 16]);
-        jit_->add(jit_->rsp, numSaved_ * 16);
+                          jit_->ptr[jit_->rsp + i * kBytesPerXmm]);
+        jit_->add(jit_->rsp, numSaved_ * kBytesPerXmm);
     }
 #else
-  public:
     explicit winAbiVectorGuard(Xbyak::CodeGenerator* /*jit*/,
-                               int /*loReg*/ = 6,
-                               int /*hiReg*/ = 15)
+                               int /*loReg*/ = kDefaultLoReg,
+                               int /*hiReg*/ = kDefaultHiReg)
     {
     }
 #endif
@@ -918,6 +928,36 @@ class winAbiVectorGuard
     winAbiVectorGuard(const winAbiVectorGuard&)            = delete;
     winAbiVectorGuard& operator=(const winAbiVectorGuard&) = delete;
 };
+
+#if DLP_OS_WINDOWS
+// Derived from winAbiVectorGuard::kDefaultSaveBytes (not a second magic 160).
+inline constexpr int kWinAbiVectorGuardStackBytes =
+    winAbiVectorGuard::kDefaultSaveBytes;
+static_assert(winAbiVectorGuard::kDefaultSaveBytes == 160);
+#else
+inline constexpr int kWinAbiVectorGuardStackBytes = 0;
+#endif
+
+// rsp-relative offset to a StackFrame scratch slot once winAbiVectorGuard is
+// active. Shared by GEMM and GEMV (not algorithm-specific). StackFrame
+// reserves locals first; the guard is constructed immediately after and (on
+// Windows) lowers rsp again below those slots. Linux/SysV: guard is a no-op,
+// so this equals frameBaseOffset.
+// Prefer avoiding StackFrame locals for tiny constants (broadcast from a GPR)
+// when UseRBPAsFramePointer is set — that path is immune to winAbi rsp moves.
+inline constexpr int
+winAbiStackLocalOffset(int frameBaseOffset)
+{
+    return kWinAbiVectorGuardStackBytes + frameBaseOffset;
+}
+
+// regIncK spill slot within the StackFrame scratch (Linux layout: +40).
+// Equivalent to the former per-header pattern:
+//   Windows: ((15 - 6 + 1) * 16) + 40  (default xmm6..15 save + local +40)
+//   Linux:   40
+inline constexpr int kWinAbiIncKLocalOffset = 40;
+inline constexpr int kWinAbiIncKStackOffset =
+    winAbiStackLocalOffset(kWinAbiIncKLocalOffset);
 
 // ─────────────────────────────────────────────────────────────────────────
 // registerGuard<REG_TYPE>: standalone RAII register guard (dual-mode)

@@ -90,6 +90,12 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
 
+    // StackFrame locals after winAbiVectorGuard (Windows: +160).
+    static constexpr int kBF16FringeOffset = utils::winAbiStackLocalOffset(0);
+    static constexpr int kBF16ShiftOffset  = utils::winAbiStackLocalOffset(16);
+    static constexpr int kBF16Bit16Offset  = utils::winAbiStackLocalOffset(20);
+    static constexpr int kBF16RoundOffset  = utils::winAbiStackLocalOffset(24);
+
     Xbyak::Reg64 regkernelOpsList, regkernelOpsAttr;
 
     Xbyak::Label label_store_result;

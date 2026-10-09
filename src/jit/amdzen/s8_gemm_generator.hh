@@ -75,7 +75,9 @@ class jitGEMMS8 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmpAptr, regBptr, regTmpCptr, regRsA, regCsA, regRsB,
         regRsC, regKIter;
     Xbyak::Reg64 regMiter;
-    Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
+    Xbyak::Reg64 regTmp1, regTmp2;
+    // regTmp3 aliases regTmpAptr (non-overlapping lifetimes); see init.
+    Xbyak::Reg64 regTmp3;
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
 

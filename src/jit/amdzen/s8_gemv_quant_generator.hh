@@ -126,7 +126,14 @@ class jitGEMVQuantN1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regRsC;
     Xbyak::Reg64 regMIter;
     Xbyak::Reg64 regKIter;
-    Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
+    Xbyak::Reg64 regTmp1, regTmp2;
+    // regTmp3 aliases regTmpAptr (see initializeStackFrame).
+    Xbyak::Reg64 regTmp3;
+
+    // Stack scratch sized from MR at codegen (strided-Y and A-scale gather).
+    int n1ScratchBytes    = 0;
+    int n1AptrSpillOffset = 0;
+
     Xbyak::Reg64 regGIter;
 
     // Setup and initialization.
@@ -242,7 +249,12 @@ class jitGEMVQuantM1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regRsB;
     Xbyak::Reg64 regGAbs;
     Xbyak::Reg64 regTmp1, regTmp2;
-    Xbyak::Reg64 regIncN, regIncK;
+    Xbyak::Reg64 regIncN;
+
+    // Relative to the post-guard M1_SCRATCH_BYTES (64 B) slab from
+    // sub(rsp, M1_SCRATCH_BYTES) in s8_gemv_quant_generator.cc — not
+    // StackFrame locals / utils::kWinAbiIncKStackOffset.
+    static constexpr int kIncKOffset = 40;
 
     // Number of 16-lane output bands this variant touches, and the index of
     // the partially masked one (-1 when every touched band is full).

@@ -51,6 +51,9 @@ template<utils::kernelInstrType KType>
 void
 jitGEMVS8N1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.
     stackPtr   = frame.p[0];
     regAptr    = frame.t[0];
     regTmpAptr = frame.t[1];
@@ -64,7 +67,10 @@ jitGEMVS8N1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regKIter   = frame.t[9];
     regTmp1    = frame.t[10];
     regTmp2    = frame.t[11];
-    regTmp3    = frame.t[12];
+    // regTmp3 aliases regCsA (loaded but unused in N1). INVARIANT: do not
+    // use regTmp3 before the K loop ends; store paths take it as scratch
+    // only after K completes.
+    regTmp3 = regCsA;
 }
 
 template<utils::kernelInstrType KType>
@@ -161,10 +167,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMVS8N1<KType>::loadAValues(int aRegIdx, bool isFringe)
 {
-    vxorps(RegType(vec128Idx), RegType(vec128Idx), RegType(vec128Idx));
-    mov(regTmp3, 128);
-    vpbroadcastb(RegType(vec128Idx), regTmp3.cvt8());
-
     if (isFringe) {
         // k1 is a byte-granular K-remainder mask (see loadXValues). Load A
         // with vmovdqu8 so only the k_left valid K bytes are read and the
@@ -1049,7 +1051,8 @@ dlp::jit::jitGeneratorError
 jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
-    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(frame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -1073,10 +1076,10 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
     mov(regTmpAptr, regAptr);
     mov(regTmpYptr, regAptr);
 
-    // Broadcast 128 to temp register
-    // vxorps(RegType(vec128Idx), RegType(vec128Idx), RegType(vec128Idx));
-    // mov(regTmp1, 128);
-    // vpbroadcastb(RegType(vec128Idx), regTmp1.cvt8());
+    // Broadcast 128 for signed-to-unsigned A bias (symmetric quant path).
+    vxorps(RegType(vec128Idx), RegType(vec128Idx), RegType(vec128Idx));
+    mov(regTmp1, 128);
+    vpbroadcastb(RegType(vec128Idx), regTmp1.cvt8());
 
     inLocalLabel();
 
@@ -1193,6 +1196,9 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
 
             VecPoolType vecPool;
+            // +128 bias must survive post-ops; the m-loop reuses it on the next
+            // tile's K path (broadcast is hoisted out of loadAValues).
+            vecPool.addPreserve(vec128Idx);
             vecPool.setAccumulators(accumBaseIdx, numCRegs);
             RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
@@ -1211,6 +1217,9 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(MR, true));
+
+            // vec128Idx stays live via addPreserve above (spill/restore under
+            // pressure); no re-broadcast needed for the next m-loop K path.
             jmp(".POST_STOREC", T_NEAR);
         }
 
@@ -1348,6 +1357,9 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
 
             VecPoolType vecPool;
+            // +128 bias must survive post-ops; the m-loop reuses it on the next
+            // tile's K path (broadcast is hoisted out of loadAValues).
+            vecPool.addPreserve(vec128Idx);
             vecPool.setAccumulators(accumBaseIdx, numCRegs);
             RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
@@ -1366,6 +1378,8 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(M_LEFT, true));
+
+            // vec128Idx stays live via addPreserve above.
             jmp(".POST_STOREC_MFRINGE", T_NEAR);
         }
 
@@ -1404,6 +1418,9 @@ template<utils::kernelInstrType KType>
 void
 jitGEMVS8M1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.
     stackPtr    = frame.p[0];
     regBptr     = frame.t[0];
     regXptr     = frame.t[1];
@@ -1417,7 +1434,8 @@ jitGEMVS8M1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regTmp1     = frame.t[9];
     regTmp2     = frame.t[10];
     regIncN     = frame.t[11];
-    regIncK     = frame.t[12];
+    // regIncK spilled to stack at [rsp + kIncKOffset]; UseRBPAsFramePointer
+    // reserves RBP, leaving only 12 temp registers.
 }
 
 template<utils::kernelInstrType KType>
@@ -2271,7 +2289,8 @@ dlp::jit::jitGeneratorError
 jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
-    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 48);
     initializeStackFrame(frame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -2314,8 +2333,9 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         L(label_n_loop_start);
 
         regInit(accumBaseIdx, accumReg); // zero out accumulator registers
-        xor_(regIncK, regIncK); // regIncK is used to increment the pointer for
-                                // K dimensions
+        mov(qword[rsp + kIncKOffset],
+            0); // regIncK is used to increment the pointer for
+                // K dimensions
 
         // Skip k-loop if alpha is zero.
         if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -2341,7 +2361,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);
                 lea(regBptr, ptr[regBptr + regTmp2]);
@@ -2353,7 +2373,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 kLoop(false, false);
 
                 mov(regTmp2, KC);
-                add(regIncK, regTmp2);
+                add(qword[rsp + kIncKOffset], regTmp2);
                 sub(regKIter, 1);
                 jnz(label_n_loop_k_loop_start, T_NEAR);
             }
@@ -2380,7 +2400,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);
                 lea(regBptr, ptr[regBptr + regTmp2]);
@@ -2456,12 +2476,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(false, true));
 
-            // Re-broadcasting 128 to vec128BaseIdx to reset the register as
-            // it is overwritten for post-ops with high register pressure.
-            vxorps(RegType(vec128BaseIdx), RegType(vec128BaseIdx),
-                   RegType(vec128BaseIdx));
-            mov(regTmp2, 128);
-            vpbroadcastb(RegType(vec128BaseIdx), regTmp2.cvt8());
+            // vec128BaseIdx stays live via addPreserve above.
             jmp(label_post_storey, T_NEAR);
         }
 
@@ -2521,7 +2536,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         L(label_n_fringe_start);
         regInit(accumBaseIdx, accumReg);
-        xor_(regIncK, regIncK);
+        mov(qword[rsp + kIncKOffset], 0);
 
         // Skip k-loop if alpha is zero.
         if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -2548,7 +2563,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
 
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);
                 lea(regBptr, ptr[regBptr + regTmp2]);
@@ -2561,7 +2576,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 kLoop(false, true);
 
                 mov(regTmp2, KC);
-                add(regIncK, regTmp2);
+                add(qword[rsp + kIncKOffset], regTmp2);
                 sub(regKIter, 1);
                 jnz(label_n_fringe_k_loop_start, T_NEAR);
             }
@@ -2588,7 +2603,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);
                 lea(regBptr, ptr[regBptr + regTmp2]);
@@ -2666,12 +2681,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(true, true));
 
-            // Re-broadcasting 128 to vec128BaseIdx to reset the register as
-            // it is overwritten for post-ops with high register pressure.
-            vxorps(RegType(vec128BaseIdx), RegType(vec128BaseIdx),
-                   RegType(vec128BaseIdx));
-            mov(regTmp2, 128);
-            vpbroadcastb(RegType(vec128BaseIdx), regTmp2.cvt8());
+            // vec128BaseIdx stays live via addPreserve above.
             jmp(label_post_storey, T_NEAR);
         }
 

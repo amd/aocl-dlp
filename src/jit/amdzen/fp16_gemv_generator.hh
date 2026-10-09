@@ -121,7 +121,6 @@ class jitFP16GEMVN1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regKIter;
     Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regTmp2;
-    Xbyak::Reg64 regTmp3;
 
     // =================================================================
     // CORE SETUP AND INITIALIZATION
@@ -277,7 +276,8 @@ class jitFP16GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regTmp2;
     Xbyak::Reg64 regIncN;
-    Xbyak::Reg64 regIncK;
+
+    static constexpr int kIncKOffset = utils::kWinAbiIncKStackOffset;
 
     // Labels for code sections
     Xbyak::Label label_n_loop_start;

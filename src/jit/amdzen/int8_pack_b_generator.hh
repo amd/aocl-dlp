@@ -152,11 +152,12 @@ class jitPackBINT8 : public Xbyak::CodeGenerator
     static constexpr int MASK_LT16 = 1; // k1
 
     Xbyak::Reg64 pParams;
+    // After panel bases are seeded, regSrc is reused as 3*rs_src (k+3 row
+    // stride) so the packer fits in 12 temps under UseRBPAsFramePointer.
     Xbyak::Reg64 regSrc;
     Xbyak::Reg64 regDst;
     Xbyak::Reg64 regK;
     Xbyak::Reg64 regLdbBytes;
-    Xbyak::Reg64 regLdb3; // 3 * rs_src bytes, for the k+3 row
     Xbyak::Reg64 regDstPanelStride;
     Xbyak::Reg64 regSrcEnd;
     Xbyak::Reg64 regSrcBase;

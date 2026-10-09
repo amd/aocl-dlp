@@ -101,7 +101,7 @@ class jitFP16_GEMM : public Xbyak::CodeGenerator
     Xbyak::Reg64 regRsA, regCsA, regRsB, regRsC;
     Xbyak::Reg64 regKIter, regMiter;
     Xbyak::Reg64 regCPtr, regAPtr;
-    Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
+    Xbyak::Reg64 regTmp1, regTmp2;
 
     // =================================================================
     // OPMASK REGISTERS

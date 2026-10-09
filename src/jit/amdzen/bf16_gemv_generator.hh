@@ -234,7 +234,7 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
 
     // regIncK spilled to stack at [rsp + kIncKOffset] since frame
     // pointer mode reserves RBP, leaving only 12 temp registers.
-    static constexpr int kIncKOffset = 0;
+    static constexpr int kIncKOffset = utils::winAbiStackLocalOffset(0);
     Xbyak::Opmask        mask_regs[utils::NUM_USABLE_MASKS];
 
     Xbyak::Label label_n_loop_start;

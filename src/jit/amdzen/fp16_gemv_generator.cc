@@ -59,7 +59,8 @@ jitFP16GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regTmp1     = frame.t[9];
     regTmp2     = frame.t[10];
     regIncN     = frame.t[11];
-    regIncK     = frame.t[12];
+    // regIncK spilled to stack at [rsp + kIncKOffset]; UseRBPAsFramePointer
+    // reserves RBP, leaving only 12 temp registers.
 }
 
 template<utils::kernelInstrType KType>
@@ -976,7 +977,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
 
     {
-        Xbyak::util::StackFrame frame(this, 1, 13, 0);
+        Xbyak::util::StackFrame frame(
+            this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 48);
         initializeStackFrame(frame);
 
         // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -1006,7 +1008,7 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             L(label_n_loop_start);
 
             regInit(accumBaseIdx, accumReg);
-            xor_(regIncK, regIncK);
+            mov(qword[rsp + kIncKOffset], 0);
 
             if (params.alphaScalingType
                 != dlp::kernel_frame::scalingType::zero) {
@@ -1044,7 +1046,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         imul(regTmpYptr,
                              regPsB); // jc_cur_loop_rem * psB (bytes)
                         imul(regTmp2,
-                             regIncK); // n_sub_updated * regIncK (elements)
+                             qword[rsp + kIncKOffset]); // n_sub_updated *
+                                                        // regIncK (elements)
                         lea(regTmp2,
                             ptr[regTmp2 * sizeof(uint16_t)]); // Scale to bytes
 
@@ -1056,8 +1059,9 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         // calculation
                         mov(regPsB, sizeof(uint16_t)); // psB = 2 bytes
                         mov(regTmp2, regRsB);
-                        imul(regTmp2, regIncK); // rsB * regIncK (bytes, rsB
-                                                // already scaled)
+                        imul(regTmp2,
+                             qword[rsp + kIncKOffset]); // rsB * regIncK (bytes,
+                                                        // rsB already scaled)
 
                         add(regBptr, regTmp2);
                     }
@@ -1070,7 +1074,7 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     loopKSubIter(false, false);
 
                     mov(regTmp2, KC);
-                    add(regIncK, regTmp2);
+                    add(qword[rsp + kIncKOffset], regTmp2);
                     sub(regKIter, 1);
                     jnz(label_n_loop_k_loop_start, T_NEAR);
                 }
@@ -1108,7 +1112,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         imul(regTmpYptr,
                              regPsB); // jc_cur_loop_rem * psB (bytes)
                         imul(regTmp2,
-                             regIncK); // n_sub_updated * regIncK (elements)
+                             qword[rsp + kIncKOffset]); // n_sub_updated *
+                                                        // regIncK (elements)
                         lea(regTmp2,
                             ptr[regTmp2 * sizeof(uint16_t)]); // Scale to bytes
 
@@ -1120,7 +1125,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         lea(regPsB,
                             ptr[regPsB * sizeof(uint16_t)]); // psB = 2 bytes
                         mov(regTmp2, regRsB);
-                        imul(regTmp2, regIncK); // rsB * regIncK (bytes)
+                        imul(regTmp2,
+                             qword[rsp + kIncKOffset]); // rsB * regIncK (bytes)
 
                         add(regBptr, regTmp2);
                     }
@@ -1215,7 +1221,7 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             L(label_n_fringe_start);
 
             regInit(accumBaseIdx, accumReg);
-            xor_(regIncK, regIncK);
+            mov(qword[rsp + kIncKOffset], 0);
 
             if (params.alphaScalingType
                 != dlp::kernel_frame::scalingType::zero) {
@@ -1251,7 +1257,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         imul(regTmpYptr,
                              regPsB); // jc_cur_loop_rem * psB (bytes)
                         imul(regTmp2,
-                             regIncK); // n_sub_updated * regIncK (elements)
+                             qword[rsp + kIncKOffset]); // n_sub_updated *
+                                                        // regIncK (elements)
                         lea(regTmp2,
                             ptr[regTmp2 * sizeof(uint16_t)]); // Scale to bytes
 
@@ -1263,7 +1270,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         lea(regPsB,
                             ptr[regPsB * sizeof(uint16_t)]); // psB = 2 bytes
                         mov(regTmp2, regRsB);
-                        imul(regTmp2, regIncK); // rsB * regIncK (bytes)
+                        imul(regTmp2,
+                             qword[rsp + kIncKOffset]); // rsB * regIncK (bytes)
 
                         add(regBptr, regTmp2);
                     }
@@ -1275,7 +1283,7 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     loopKSubIter(false, true);
 
                     mov(regTmp2, KC);
-                    add(regIncK, regTmp2);
+                    add(qword[rsp + kIncKOffset], regTmp2);
                     sub(regKIter, 1);
                     jnz(label_n_fringe_k_loop_start, T_NEAR);
                 }
@@ -1313,7 +1321,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         imul(regTmpYptr,
                              regPsB); // jc_cur_loop_rem * psB (bytes)
                         imul(regTmp2,
-                             regIncK); // n_sub_updated * regIncK (elements)
+                             qword[rsp + kIncKOffset]); // n_sub_updated *
+                                                        // regIncK (elements)
                         lea(regTmp2,
                             ptr[regTmp2 * sizeof(uint16_t)]); // Scale to bytes
 
@@ -1325,7 +1334,8 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                         lea(regPsB,
                             ptr[regPsB * sizeof(uint16_t)]); // psB = 2 bytes
                         mov(regTmp2, regRsB);
-                        imul(regTmp2, regIncK); // rsB * regIncK (bytes)
+                        imul(regTmp2,
+                             qword[rsp + kIncKOffset]); // rsB * regIncK (bytes)
 
                         add(regBptr, regTmp2);
                     }
@@ -1404,7 +1414,6 @@ jitFP16GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regKIter   = frame.t[9];
     regTmp1    = frame.t[10];
     regTmp2    = frame.t[11];
-    regTmp3    = frame.t[12];
 }
 
 template<utils::kernelInstrType KType>
@@ -2190,7 +2199,8 @@ jitFP16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
     RETURN_IF_ERROR(allocateRegisters());
 
     {
-        Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+        Xbyak::util::StackFrame stackFrame(
+            this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
         initializeStackFrame(stackFrame);
 
         // Preserve callee-saved xmm6-15 across the kernel call on Windows x64

@@ -78,16 +78,16 @@ jitF32GEMVN1<KType>::initializeParameters(utils::gemvN1GeneratorParams& params)
     simdWidth = RegBytes / sizeof(float); // For f32
 
     if (c_downscale < DLP_F32) {
-        // Initialize F32→BF16 conversion constants on stack
-        // Stack layout: [0-15]: final result, [16-47]: constants
+        // Stack layout: [kBF16Scratch0Offset .. +15]: final result,
+        // [kBF16Scratch1Offset .. +31]: constants (see f32_gemv_generator.hh).
 
-        // Store constant 0x00010000 at [rsp + 16] for bit 16 extraction
+        // Store constant 0x00010000 for bit 16 extraction
         mov(regTmp1.cvt32(), 0x00010000);
-        mov(dword[rsp + 16], regTmp1.cvt32());
+        mov(dword[rsp + kBF16Scratch1Offset], regTmp1.cvt32());
 
-        // Store constant 0x00007FFF at [rsp + 20] for rounding
+        // Store constant 0x00007FFF for rounding
         mov(regTmp1.cvt32(), 0x00007FFF);
-        mov(dword[rsp + 20], regTmp1.cvt32());
+        mov(dword[rsp + kBF16Scratch2Offset], regTmp1.cvt32());
     }
 
     // Load pointers and strides from the stack
@@ -467,14 +467,16 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
                 // Load BF16 value from C matrix to stack
                 mov(regXptr.cvt16(),
                     word[regTmpYptr + regKIter * sizeof(int16_t)]);
-                mov(word[rsp + regKIter * sizeof(int16_t)], regXptr.cvt16());
+                mov(word[rsp + kBF16Scratch0Offset
+                         + regKIter * sizeof(int16_t)],
+                    regXptr.cvt16());
 
                 inc(regKIter.cvt32()); // elem_idx++
                 jmp(loop_load_start, T_NEAR);
 
                 L(loop_load_end);
 
-                movdqu(Xbyak::Xmm(tmpBaseIdx), ptr[rsp]);
+                movdqu(Xbyak::Xmm(tmpBaseIdx), ptr[rsp + kBF16Scratch0Offset]);
                 vpmovsxwd(Xbyak::Ymm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
                 vpslld(Xbyak::Ymm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx), 16);
                 vfmadd231ps(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
@@ -967,14 +969,14 @@ jitF32GEMVN1<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
 {
     // AVX512 ZMM variant: Convert 16 f32 in Zmm to 16 bf16 in Ymm
     vbroadcastss(RegType(scratch1),
-                 ptr[rsp + 16]); // Load 0x00010000
+                 ptr[rsp + kBF16Scratch1Offset]); // Load 0x00010000
     vpandd(RegType(scratch1), RegType(destIdx),
            RegType(scratch1)); // Extract bit 16
     vpsrld(RegType(scratch1), RegType(scratch1),
            16); // Shift to position 0 → tlsb
 
     vbroadcastss(RegType(scratch2),
-                 ptr[rsp + 20]); // Load 0x00007FFF
+                 ptr[rsp + kBF16Scratch2Offset]); // Load 0x00007FFF
     vpaddd(RegType(scratch2), RegType(destIdx),
            RegType(scratch2)); // Add rounding to original
 
@@ -1006,14 +1008,14 @@ jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
     int scratch1, int scratch2, int destIdx)
 {
     vbroadcastss(RegType(scratch1),
-                 ptr[rsp + 16]); // Load 0x00010000
+                 ptr[rsp + kBF16Scratch1Offset]); // Load 0x00010000
     vpand(RegType(scratch1), RegType(destIdx),
           RegType(scratch1)); // Extract bit 16
     vpsrld(RegType(scratch1), RegType(scratch1),
            16); // Shift to position 0 → tlsb
 
     vbroadcastss(RegType(scratch2),
-                 ptr[rsp + 20]); // Load 0x00007FFF
+                 ptr[rsp + kBF16Scratch2Offset]); // Load 0x00007FFF
     vpaddd(RegType(scratch2), RegType(destIdx),
            RegType(scratch2)); // Add rounding to original
 
@@ -1104,7 +1106,7 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
 
                 // Now Xmm(scratch2) contains 8×BF16 values
                 // Store the BF16 result to stack for element-wise access
-                movdqu(ptr[rsp + 0],
+                movdqu(ptr[rsp + kBF16Scratch0Offset],
                        Xbyak::Xmm(tmpBaseIdx + 1)); // 8×16-bit to stack
 
                 // Get n_remainder: n % 8
@@ -1122,7 +1124,8 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
 
                 // Load BF16 value from stack and store to destination
                 // Use regYptr as temporary (done with B matrix access)
-                mov(regXptr.cvt16(), word[rsp + regKIter * sizeof(int16_t)]);
+                mov(regXptr.cvt16(), word[rsp + kBF16Scratch0Offset
+                                          + regKIter * sizeof(int16_t)]);
                 mov(word[regTmpYptr + regKIter * sizeof(int16_t)],
                     regXptr.cvt16());
 
@@ -1807,15 +1810,16 @@ jitF32GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
 
     if (c_downscale < DLP_F32) {
         // Initialize F32→BF16 conversion constants on stack
-        // Stack layout: [0-15]: final result, [16-47]: constants
+        // Stack layout: [kBF16Scratch0Offset .. +15]: final result,
+        // [kBF16Scratch1Offset .. +31]: constants (see f32_gemv_generator.hh).
 
-        // Store constant 0x00010000 at [rsp + 16] for bit 16 extraction
+        // Store constant 0x00010000 for bit 16 extraction
         mov(regTmp1.cvt32(), 0x00010000);
-        mov(dword[rsp + 16], regTmp1.cvt32());
+        mov(dword[rsp + kBF16Scratch1Offset], regTmp1.cvt32());
 
-        // Store constant 0x00007FFF at [rsp + 20] for rounding
+        // Store constant 0x00007FFF for rounding
         mov(regTmp1.cvt32(), 0x00007FFF);
-        mov(dword[rsp + 20], regTmp1.cvt32());
+        mov(dword[rsp + kBF16Scratch2Offset], regTmp1.cvt32());
     }
 
     if ((mtag_b == REORDERED) || (mtag_b == PACK)) {
@@ -2256,14 +2260,16 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
                 // Load BF16 value from C matrix to stack
                 mov(regBptr.cvt16(),
                     word[regTmpYptr + regKIter * sizeof(int16_t)]);
-                mov(word[rsp + regKIter * sizeof(int16_t)], regBptr.cvt16());
+                mov(word[rsp + kBF16Scratch0Offset
+                         + regKIter * sizeof(int16_t)],
+                    regBptr.cvt16());
 
                 inc(regKIter.cvt32()); // elem_idx++
                 jmp(loop_load_start, T_NEAR);
 
                 L(loop_load_end);
 
-                movdqu(halfRegType(tmpBaseIdx), ptr[rsp]);
+                movdqu(halfRegType(tmpBaseIdx), ptr[rsp + kBF16Scratch0Offset]);
                 vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
                 vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
                 vfmadd231ps(RegType(accumBaseIdx + n_iter), RegType(xBaseIdx),
@@ -2480,14 +2486,14 @@ jitF32GEMVM1<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
 {
     // AVX512 ZMM variant: Convert 16 f32 in Zmm to 16 bf16 in Ymm
     vbroadcastss(RegType(scratch1),
-                 ptr[rsp + 16]); // Load 0x00010000
+                 ptr[rsp + kBF16Scratch1Offset]); // Load 0x00010000
     vpandd(RegType(scratch1), RegType(destIdx),
            RegType(scratch1)); // Extract bit 16
     vpsrld(RegType(scratch1), RegType(scratch1),
            16); // Shift to position 0 → tlsb
 
     vbroadcastss(RegType(scratch2),
-                 ptr[rsp + 20]); // Load 0x00007FFF
+                 ptr[rsp + kBF16Scratch2Offset]); // Load 0x00007FFF
     vpaddd(RegType(scratch2), RegType(destIdx),
            RegType(scratch2)); // Add rounding to original
 
@@ -2519,14 +2525,14 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
     int scratch1, int scratch2, int destIdx)
 {
     vbroadcastss(RegType(scratch1),
-                 ptr[rsp + 16]); // Load 0x00010000
+                 ptr[rsp + kBF16Scratch1Offset]); // Load 0x00010000
     vpand(RegType(scratch1), RegType(destIdx),
           RegType(scratch1)); // Extract bit 16
     vpsrld(RegType(scratch1), RegType(scratch1),
            16); // Shift to position 0 → tlsb
 
     vbroadcastss(RegType(scratch2),
-                 ptr[rsp + 20]); // Load 0x00007FFF
+                 ptr[rsp + kBF16Scratch2Offset]); // Load 0x00007FFF
     vpaddd(RegType(scratch2), RegType(destIdx),
            RegType(scratch2)); // Add rounding to original
 
@@ -2625,7 +2631,7 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
 
             // Store the BF16 result to stack for element-wise access
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-                movdqu(ptr[rsp + 0],
+                movdqu(ptr[rsp + kBF16Scratch0Offset],
                        halfRegType(tmpBaseIdx + 1)); // 8×16-bit to stack
                 // Get n_remainder
                 mov(regTmp2, n_left);
@@ -2642,7 +2648,8 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
 
                 // Load BF16 value from stack and store to destination
                 // Use regBptr as temporary (done with B matrix access)
-                mov(regBptr.cvt16(), word[rsp + regKIter * sizeof(int16_t)]);
+                mov(regBptr.cvt16(), word[rsp + kBF16Scratch0Offset
+                                          + regKIter * sizeof(int16_t)]);
                 mov(word[regTmpYptr + regKIter * sizeof(int16_t)],
                     regBptr.cvt16());
 

@@ -56,9 +56,11 @@ jitPackBINT8<KType>::generateKernel(utils::packBGeneratorParams& params)
 
     RETURN_IF_ERROR(allocateReg());
 
-    // 1 param + 13 temps (14 GPRs). No UseRBPAsFramePointer so the 13th temp
-    // (3*ldb) is available; matches the INT8 GEMM packer's StackFrame budget.
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+    // 1 param + 12 temps; UseRBPAsFramePointer reserves rbp for unwind.
+    // 3*ldb is recomputed into regSrc at the start of each panel body after
+    // the source/dest bases have been copied out of regSrc/regDst.
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64.
@@ -126,20 +128,22 @@ template<utils::kernelInstrType KType>
 void
 jitPackBINT8<KType>::initializeStackFrame(Xbyak::util::StackFrame& sf)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum. Layout matches bf16 row-major pack-B.
     pParams           = sf.p[0];
     regSrc            = sf.t[0];
     regDst            = sf.t[1];
     regK              = sf.t[2];
     regLdbBytes       = sf.t[3];
-    regLdb3           = sf.t[4];
-    regDstPanelStride = sf.t[5];
-    regSrcEnd         = sf.t[6];
-    regSrcBase        = sf.t[7];
-    regDstBase        = sf.t[8];
-    regSrcRow         = sf.t[9];
-    regDstRow         = sf.t[10];
-    regKFull          = sf.t[11];
-    regKr             = sf.t[12];
+    regDstPanelStride = sf.t[4];
+    regSrcEnd         = sf.t[5];
+    regSrcBase        = sf.t[6];
+    regDstBase        = sf.t[7];
+    regSrcRow         = sf.t[8];
+    regDstRow         = sf.t[9];
+    regKFull          = sf.t[10];
+    regKr             = sf.t[11];
     regColSum         = rax; // not a StackFrame temp; see header
 }
 
@@ -154,8 +158,8 @@ jitPackBINT8<KType>::initializeParameters()
     // Source row stride (bytes): one K-row step is rs_src int8 elements.
     mov(regLdbBytes,
         ptr[pParams + offsetof(dlp::kernels::packBParams, rs_src)]);
-    // ELEM_BYTES == 1, no shift.
-    lea(regLdb3, ptr[regLdbBytes + regLdbBytes * 2]); // 3 * ldb
+    // ELEM_BYTES == 1, no shift. 3*ldb is formed in regSrc inside
+    // generatePanelBody once the panel bases no longer need regSrc.
 
     if (nLoop_) {
         // Packed n-panel stride (bytes) = KC_updated * NR, where KC_updated
@@ -187,6 +191,10 @@ void
 jitPackBINT8<KType>::generatePanelBody()
 {
     Xbyak::Label l_kr_loop, l_kr_done, l_no_ktail, l_rem1, l_rem2;
+
+    // Reuse regSrc as 3*ldb for the k+3 row loads; panel bases already hold
+    // the original source/dest pointers.
+    lea(regSrc, ptr[regLdbBytes + regLdbBytes * 2]);
 
     xor_(regKr, regKr);
     cmp(regKr, regKFull);
@@ -322,7 +330,7 @@ jitPackBINT8<KType>::interleaveKQuad(int nLiveRows)
         loadRow16(a, ptr[regSrcRow + srcOff], true);
         loadRow16(b, ptr[regSrcRow + regLdbBytes + srcOff], live1);
         loadRow16(c, ptr[regSrcRow + regLdbBytes * 2 + srcOff], live2);
-        loadRow16(d, ptr[regSrcRow + regLdb3 + srcOff], live3);
+        loadRow16(d, ptr[regSrcRow + regSrc + srcOff], live3);
 
         if (accColSum_) {
             accXmm16(bj, a, true);
@@ -396,7 +404,7 @@ jitPackBINT8<KType>::interleaveKQuad64(int nLiveRows, int bj)
     loadRow64(a, ptr[regSrcRow + srcOff], true);
     loadRow64(b, ptr[regSrcRow + regLdbBytes + srcOff], live1);
     loadRow64(c, ptr[regSrcRow + regLdbBytes * 2 + srcOff], live2);
-    loadRow64(d, ptr[regSrcRow + regLdb3 + srcOff], live3);
+    loadRow64(d, ptr[regSrcRow + regSrc + srcOff], live3);
 
     if (accColSum_) {
         accZmm64(bj, a, b, c, d, nLiveRows);

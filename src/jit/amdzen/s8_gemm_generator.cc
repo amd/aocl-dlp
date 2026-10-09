@@ -79,6 +79,9 @@ template<utils::kernelInstrType KType>
 void
 jitGEMMS8<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.
     stackPtr = stackFrame.p[0];
 
     regTmpAptr = stackFrame.t[0];
@@ -93,7 +96,11 @@ jitGEMMS8<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
     regAPtr    = stackFrame.t[9];
     regTmp1    = stackFrame.t[10];
     regTmp2    = stackFrame.t[11];
-    regTmp3    = stackFrame.t[12];
+    // regTmp3 aliases regTmpAptr (t[0]). INVARIANT: do not use regTmp3
+    // before the K loop ends — regTmpAptr is live as the running A pointer
+    // and is re-seeded from regAPtr at each M iteration. Post-K paths
+    // (b_sum load, BF16 store scratch) may overwrite it.
+    regTmp3 = regTmpAptr;
 }
 
 template<utils::kernelInstrType KType>
@@ -1000,7 +1007,8 @@ jitGEMMS8<KType>::generateKernel(utils::generatorParams& params)
     // need not be used by the kernel.
     // Putting inside a scope so that some tables can be generated post
     // the ret instr. StackFrame inserts a ret instr in its destructor.
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64

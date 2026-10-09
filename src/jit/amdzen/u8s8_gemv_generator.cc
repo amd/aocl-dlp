@@ -117,7 +117,9 @@ void
 jitU8S8VNNI_GEMVN1<KType>::initializeStackFrame(
     Xbyak::util::StackFrame& stackFrame)
 {
-    // Map preserved and transient registers similar to f32 GEMV implementation
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.
     stackPtr   = stackFrame.p[0];
     regAptr    = stackFrame.t[0];
     regTmpAptr = stackFrame.t[1];
@@ -131,7 +133,10 @@ jitU8S8VNNI_GEMVN1<KType>::initializeStackFrame(
     regKIter   = stackFrame.t[9];
     regTmp1    = stackFrame.t[10];
     regTmp2    = stackFrame.t[11];
-    regTmp3    = stackFrame.t[12];
+    // regTmp3 aliases regTmpAptr. INVARIANT: do not use regTmp3 before the
+    // K loop ends — regTmpAptr is live and re-seeded via mov(regTmpAptr,
+    // regAptr) at each M iteration before gather loads.
+    regTmp3 = regTmpAptr;
 }
 
 template<utils::kernelInstrType KType>
@@ -1079,7 +1084,8 @@ jitU8S8VNNI_GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
     // Putting inside a scope so that constant data can be generated post
     // the ret instr. StackFrame inserts a ret instr in its destructor.
     {
-        Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+        Xbyak::util::StackFrame stackFrame(
+            this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
         initializeStackFrame(stackFrame);
 
         // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -1225,7 +1231,8 @@ jitU8S8VNNI_GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regTmp1     = frame.t[9];
     regTmp2     = frame.t[10];
     regIncN     = frame.t[11];
-    regIncK     = frame.t[12];
+    // regIncK spilled to stack at [rsp + kIncKOffset]; UseRBPAsFramePointer
+    // reserves RBP, leaving only 12 temp registers.
 }
 
 template<utils::kernelInstrType KType>
@@ -2110,7 +2117,8 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     // the ret instr. StackFrame inserts a ret instr in its destructor.
     {
         // Using Xbyak's utility for managing the stack frame
-        Xbyak::util::StackFrame frame(this, 1, 13, 0);
+        Xbyak::util::StackFrame frame(
+            this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 48);
         initializeStackFrame(frame);
 
         // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -2141,10 +2149,10 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
             // Zero out accumulator registers for this n iteration
             regInit(accumBaseIdx, accumReg);
-            xor_(regIncK,
-                 regIncK); // regIncK is used to increment
-                           // the pointer for K dimension(zeroed before the
-                           // kloop)
+            mov(qword[rsp + kIncKOffset],
+                0); // regIncK is used to increment
+                    // the pointer for K dimension(zeroed before the
+                    // kloop)
 
             // K-loop is not needed if alpha is zero
             if (params.alphaScalingType
@@ -2174,7 +2182,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                      + offsetof(dlp::kernels::gemvM1Params,
                                                 n_sub_updated)]);
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
                     // lea(regTmp2, ptr[regTmp2 * sizeof(int32_t)]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2192,7 +2200,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     // Decrement the k-loop iterator
                     // Also, increment the pointer offset
                     mov(regTmp2, KC);
-                    add(regIncK, regTmp2);
+                    add(qword[rsp + kIncKOffset], regTmp2);
                     sub(regKIter, 1);
                     jnz(label_n_loop_k_loop_start, T_NEAR);
                 }
@@ -2221,7 +2229,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                      + offsetof(dlp::kernels::gemvM1Params,
                                                 n_sub_updated)]);
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);
                     lea(regBptr, ptr[regBptr + regTmp2]);
@@ -2350,7 +2358,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             L(label_n_fringe_start);
             // Zero out accumulator registers for this n iteration
             regInit(accumBaseIdx, accumReg);
-            xor_(regIncK, regIncK);
+            mov(qword[rsp + kIncKOffset], 0);
 
             // K-loop is not needed if alpha is zero
             if (params.alphaScalingType
@@ -2381,7 +2389,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                                 n_sub_updated)]);
 
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
                     // lea(regTmp2, ptr[regTmp2 * sizeof(int32_t)]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2397,7 +2405,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     // Decrement the k-loop iterator
                     // Also, increment the pointer offset
                     mov(regTmp2, KC);
-                    add(regIncK, regTmp2);
+                    add(qword[rsp + kIncKOffset], regTmp2);
                     sub(regKIter, 1);
                     jnz(label_n_fringe_k_loop_start, T_NEAR);
                 }
@@ -2427,7 +2435,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                      + offsetof(dlp::kernels::gemvM1Params,
                                                 n_sub_updated)]);
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
                     // lea(regTmp2, ptr[regTmp2 * sizeof(int32_t)]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);

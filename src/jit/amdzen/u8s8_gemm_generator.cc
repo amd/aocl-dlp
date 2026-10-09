@@ -77,7 +77,6 @@ jitU8S8VNNI_GEMM<KType>::initializeParameters(bool mLoop)
         mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
         mov(regMiter,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
-        mov(regTmp3, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
     }
 
     // Load post_op_c_i for downscale buffer addressing
@@ -824,7 +823,8 @@ jitU8S8VNNI_GEMM<KType>::generateKernel(utils::generatorParams& params)
     // Putting inside a scope so that some tables can be generated post
     // the ret instr. StackFrame inserts a ret instr in its destructor.
     {
-        Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+        Xbyak::util::StackFrame stackFrame(
+            this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
         initializeStackFrame(stackFrame);
 
         // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -860,9 +860,11 @@ jitU8S8VNNI_GEMM<KType>::generateMLoop(utils::generatorParams& params)
     // Move to next M block
     RETURN_IF_ERROR(moveCPtr());
 
-    // Update A pointer for next M block
+    // Update A pointer for next M block (psA reloaded — no dedicated reg;
+    // UseRBPAsFramePointer limits temps to 12).
+    mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
     mov(regTmpAptr, regAPtr);
-    lea(regTmpAptr, ptr[regTmpAptr + regTmp3]);
+    lea(regTmpAptr, ptr[regTmpAptr + regTmp1]);
     mov(regAPtr, regTmpAptr);
 
     lea(regTmp2, ptr[regTmp2 + MR]);
@@ -936,6 +938,9 @@ void
 jitU8S8VNNI_GEMM<KType>::initializeStackFrame(
     Xbyak::util::StackFrame& stackFrame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.  psA is reloaded from memory at each M-loop step.
     stackPtr = stackFrame.p[0];
 
     regTmpAptr = stackFrame.t[0];
@@ -950,7 +955,6 @@ jitU8S8VNNI_GEMM<KType>::initializeStackFrame(
     regAPtr    = stackFrame.t[9];
     regTmp1    = stackFrame.t[10];
     regTmp2    = stackFrame.t[11];
-    regTmp3    = stackFrame.t[12];
 }
 
 template<utils::kernelInstrType KType>

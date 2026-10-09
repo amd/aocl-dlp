@@ -218,8 +218,10 @@ class jitGEMVS8M1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp1;             // General purpose temporary register 1
     Xbyak::Reg64 regTmp2;             // General purpose temporary register 2
     Xbyak::Reg64 regIncN;             // N increment counter
-    Xbyak::Reg64 regIncK;             // K increment counter
-    Xbyak::Reg64 regDebugPtr;         // Debug buffer pointer register
+
+    static constexpr int kIncKOffset = utils::kWinAbiIncKStackOffset;
+
+    Xbyak::Reg64 regDebugPtr; // Debug buffer pointer register
 
     // Labels for code sections to prevent "duplicate label" errors
     Xbyak::Label label_n_loop_start;            // Main n-dimension loop

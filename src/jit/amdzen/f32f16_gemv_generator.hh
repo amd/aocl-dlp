@@ -112,7 +112,6 @@ class jitF32FP16GEMVN1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regKIter;
     Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regTmp2;
-    Xbyak::Reg64 regTmp3;
 
     int simdWidth;
 
@@ -224,7 +223,8 @@ class jitF32FP16GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regTmp2;
     Xbyak::Reg64 regIncN;
-    Xbyak::Reg64 regIncK;
+
+    static constexpr int kIncKOffset = utils::kWinAbiIncKStackOffset;
 
     Xbyak::Label label_n_loop_start;
     Xbyak::Label label_n_loop_end;

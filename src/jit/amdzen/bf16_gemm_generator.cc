@@ -91,14 +91,6 @@ jitGEMMBF16<KType>::initializeParameters(bool addIrLoop)
     // being held in a dedicated register, since UseRBPAsFramePointer
     // limits us to 12 temp registers.
 
-    if (c_downscale < DLP_F32) {
-        // Broadcast the left shift offset onto a ZMM register
-        // Store to allocated stack space, then broadcast from memory
-        // Using rsp(instead of stackPtr in order to use the local stack space)
-        mov(dword[rsp + 0],
-            0x10); // Store value 16 to local stack (safely allocated)
-    }
-
     mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
     mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsA)]);
     mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csA)]);
@@ -309,8 +301,13 @@ jitGEMMBF16<KType>::scaleBeta()
         imul(regKIter, regTmp1);
         add(regTmpCptr, regKIter);
 
-        vpbroadcastd(Xbyak::Zmm(aRegIdx + 1),
-                     ptr[rsp + 0]); // Broadcast from memory
+        // BF16->F32 via sign-extend + left-shift by 16. Broadcast from eax
+        // (not a StackFrame temp) so this never depends on winAbi rsp layout.
+        // Do not reintroduce a prologue spill to [rsp+0] — on Windows that
+        // landed in the xmm6 save slot and corrupted the caller's xmm6.
+        // regTmp1 still holds rs_c_downscale for the row walk below.
+        mov(eax, 0x10);
+        vpbroadcastd(Xbyak::Zmm(aRegIdx + 1), eax);
 
         for (iter_t i = 0; i < MR; i++) {
             for (iter_t j = 0; j < bFullReg; j++) {
@@ -791,10 +788,10 @@ jitGEMMBF16<KType>::generateKernel(utils::generatorParams& params)
 
     RETURN_IF_ERROR(allocateReg());
 
-    // Initialize stack frame and parameters
-    // Allocate 16 bytes of local stack space for temporary constants
+    // Initialize stack frame and parameters (no StackFrame locals: the BF16
+    // beta shift constant is broadcast from a GPR, not spilled to rsp).
     Xbyak::util::StackFrame stackFrame(
-        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 16);
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64

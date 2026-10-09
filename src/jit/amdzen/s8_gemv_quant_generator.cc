@@ -35,6 +35,7 @@
 #include "jit_generator_utils.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 
+#include <algorithm>
 #include <memory>
 
 namespace amdzen::gen {
@@ -54,10 +55,6 @@ using namespace Xbyak;
     (offsetof(dlp::kernels::gemvN1Params, grpKernelOpsAttr)                    \
      + offsetof(dlp_gemm_grp_post_op_attr, field))
 
-// Stack scratch used to bounce a strided C column through memory, so the
-// gather/scatter is a plain scalar copy loop rather than a lane-insert chain.
-static constexpr int N1_SCRATCH_BYTES = 64;
-
 template<utils::kernelInstrType KType>
 jitGEMVQuantN1<KType>::jitGEMVQuantN1(size_t maxSize)
     : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
@@ -68,6 +65,9 @@ template<utils::kernelInstrType KType>
 void
 jitGEMVQuantN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.
     stackPtr   = frame.p[0];
     regAptr    = frame.t[0];
     regTmpAptr = frame.t[1];
@@ -81,7 +81,10 @@ jitGEMVQuantN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regKIter   = frame.t[9];
     regTmp1    = frame.t[10];
     regTmp2    = frame.t[11];
-    regTmp3    = frame.t[12];
+    // regTmp3 aliases regTmpAptr. INVARIANT: do not use regTmp3 before the
+    // K loop ends — regTmpAptr is live as the running A pointer. Post-K
+    // paths that overwrite it spill/reload via n1AptrSpillOffset.
+    regTmp3 = regTmpAptr;
 }
 
 template<utils::kernelInstrType KType>
@@ -610,6 +613,8 @@ jitGEMVQuantN1<KType>::groupLoop(int mSize)
 
     L(kFringeEnd);
 
+    mov(qword[rsp + n1AptrSpillOffset], regTmpAptr);
+
     RETURN_IF_ERROR(reduceAccumulation(mSize));
     RETURN_IF_ERROR(conversionCompensationGroup(mSize));
 
@@ -621,6 +626,8 @@ jitGEMVQuantN1<KType>::groupLoop(int mSize)
     }
 
     RETURN_IF_ERROR(dequantAccumToFAcc(mSize));
+
+    mov(regTmpAptr, qword[rsp + n1AptrSpillOffset]);
 
     add(regGIter, 1); // group += 1
     mov(regTmp1, ptr[stackPtr + N1_OFF(num_groups)]);
@@ -922,6 +929,22 @@ jitGEMVQuantN1<KType>::generateKernel(utils::quantGemvN1GeneratorParams& params)
     RETURN_IF_ERROR(
         utils::jitGeneratorUtils::checkValidGemvN1Params(params.base));
 
+    // Strided row-major Y and strided A-scale gather use [rsp .. rsp+Y) where
+    // Y = max(MR*sizeof(float), nBands*RegBytes).  The decision engine pins
+    // GEMV N1 MR to 16 (nBands=1, Y=64); size from MR so direct codegen stays
+    // safe when MR > vnniWidth.
+    {
+        const int mr     = params.base.MR;
+        const int vnniW  = Traits::regBytes / static_cast<int>(sizeof(int32_t));
+        const int nBands = (mr + vnniW - 1) / vnniW;
+        const int yScratch = std::max(mr * static_cast<int>(sizeof(float)),
+                                      nBands * Traits::regBytes);
+        n1AptrSpillOffset  = yScratch;
+        // Round up so sub(rsp, n1ScratchBytes) keeps 16-byte rsp alignment.
+        n1ScratchBytes =
+            (yScratch + static_cast<int>(sizeof(uint64_t)) + 15) & ~15;
+    }
+
     // NOTE Asymmetric quantization is not supported for now; return.
     if ((params.aQuant.zeroPoint.storeDt
          != dlp::kernel_frame::DataType::invalid)
@@ -968,7 +991,9 @@ jitGEMVQuantN1<KType>::generateKernel(utils::quantGemvN1GeneratorParams& params)
                  || (params.bQuant.zeroPoint.storeDt
                      == dlp::kernel_frame::DataType::invalid));
 
-    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    // Scratch lives in the n1ScratchBytes slab below; StackFrame locals unused.
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(frame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
@@ -980,7 +1005,7 @@ jitGEMVQuantN1<KType>::generateKernel(utils::quantGemvN1GeneratorParams& params)
     RETURN_IF_ERROR(allocateRegisters());
 
     // Allocate stack scratch bytes
-    sub(rsp, N1_SCRATCH_BYTES);
+    sub(rsp, n1ScratchBytes);
 
     // Load A and Y pointers from stack
     mov(regAptr, ptr[stackPtr + N1_OFF(a)]);
@@ -1041,7 +1066,7 @@ jitGEMVQuantN1<KType>::generateKernel(utils::quantGemvN1GeneratorParams& params)
         L(fringeEnd);
     }
 
-    add(rsp, N1_SCRATCH_BYTES);
+    add(rsp, n1ScratchBytes);
     vzeroupper();
 
     return dlp::jit::jitGeneratorError::success;
@@ -1091,7 +1116,8 @@ jitGEMVQuantM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regTmp1     = frame.t[9];
     regTmp2     = frame.t[10];
     regIncN     = frame.t[11];
-    regIncK     = frame.t[12];
+    // regIncK spilled to stack at [rsp + kIncKOffset]; UseRBPAsFramePointer
+    // reserves RBP, leaving only 12 temp registers.
 }
 
 template<utils::kernelInstrType KType>
@@ -1586,7 +1612,7 @@ jitGEMVQuantM1<KType>::setupPanelBBase(bool nMask, bool isLastPanel)
     mov(regTmpYptr, ptr[stackPtr + M1_OFF(jc_cur_loop_rem)]);
     mov(regTmp2, ptr[stackPtr + M1_OFF(n_sub_updated)]);
     imul(regTmpYptr, regTmp1);
-    imul(regTmp2, regIncK);
+    imul(regTmp2, qword[rsp + kIncKOffset]);
 
     lea(regBptr, ptr[regBptr + regTmpYptr]);
     lea(regBptr, ptr[regBptr + regTmp2]);
@@ -1871,7 +1897,7 @@ jitGEMVQuantM1<KType>::emitNTile(utils::quantGemvM1GeneratorParams& params,
     const int tileCols = nMask ? N_LEFT : NR;
 
     regInit(fAccBaseIdx, fAccReg);
-    xor_(regIncK, regIncK);
+    mov(qword[rsp + kIncKOffset], 0);
 
     // The absolute group index restarts at group_start for every n tile. It
     // stays live in regGAbs across every KC panel below.
@@ -1892,7 +1918,7 @@ jitGEMVQuantM1<KType>::emitNTile(utils::quantGemvM1GeneratorParams& params,
         L(panelBegin);
         RETURN_IF_ERROR(groupLoop(nMask, false));
         mov(regTmp2, KC);
-        add(regIncK, regTmp2);
+        add(qword[rsp + kIncKOffset], regTmp2);
         sub(regKIter, 1);
         jnz(panelBegin, T_NEAR);
 
@@ -1917,13 +1943,8 @@ jitGEMVQuantM1<KType>::emitNTile(utils::quantGemvM1GeneratorParams& params,
     RETURN_IF_ERROR(generatePostOps(params.base, nMask));
     RETURN_IF_ERROR(storeYF32(nMask));
 
-    // The post-op emitter may have reused the +128 register under pressure.
-    if (useVec128) {
-        vxorps(RegType(vec128BaseIdx), RegType(vec128BaseIdx),
-               RegType(vec128BaseIdx));
-        mov(regTmp2, 128);
-        vpbroadcastb(RegType(vec128BaseIdx), regTmp2.cvt8());
-    }
+    // vec128BaseIdx stays live across post-ops via addPreserve in
+    // generatePostOps; no re-broadcast needed for the next n-tile.
 
     // Advance the per-tile column bases this kernel owns. b_sum_offset,
     // post_op_c_j and grp_post_op_j all index the absolute output column, so
@@ -2004,7 +2025,10 @@ jitGEMVQuantM1<KType>::generateKernel(utils::quantGemvM1GeneratorParams& params)
                  || (params.bQuant.zeroPoint.storeDt
                      == dlp::kernel_frame::DataType::invalid));
 
-    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    // Scratch lives in the M1_SCRATCH_BYTES slab below; StackFrame locals
+    // unused.
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(frame);
 
     // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
