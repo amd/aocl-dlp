@@ -29,14 +29,11 @@
  * Regression tests for AOCL_DLP_ENABLE_INSTRUCTIONS=zen3 on VNNI / BF16 capable
  * hardware (CPUPL-9424).
  *
- * "zen3" is an AMD architecture token. Applying it on another vendor would
- * pin that process to an AMD arch name, which is what a future vendor-neutral
- * configuration must not do. The override is therefore set only after CPUID
- * reports an AMD Zen CPU (vendor AuthenticAMD, family 17h or newer). Every
- * other machine skips. Detection reads CPUID directly and does not call into
- * DLP: dlp_cpuid_is_similar_zen_*() is an ISA-feature check, true on non-AMD
- * CPUs with the same extensions, and dlp_get_arch() returns the configured
- * arch, which this process is about to override.
+ * The test is vendor-neutral: it runs on any x86 CPU (AMD or Intel), because
+ * the regression it guards is in the raw-hardware ISA gates, which reproduce
+ * on any VNNI / BF16 capable part. Non-x86 builds skip the suite. The override
+ * token "zen3" is accepted by the library regardless of CPU vendor, so setting
+ * it here does not change behaviour beyond what the library already allows.
  *
  * With the override the configured arch has no AVX512-VNNI / AVX512-BF16, so
  * the int8 and bf16 s4/u4 weight-only-quant entry points must report
@@ -50,10 +47,10 @@
  *
  * The architecture is fixed the first time the library is used, so the
  * override is set from a static initializer, before any DLP call, and this
- * file is its own executable. On AMD Zen parts that really lack VNNI / BF16
- * the APIs return NOT_SUPPORTED with or without the override, so the tests
- * pass trivially there; they only guard the regression on zen4 / zen5 class
- * parts.
+ * file is its own executable. On x86 parts that really lack VNNI / BF16 the
+ * APIs return NOT_SUPPORTED with or without the override, so the tests pass
+ * trivially there; they guard the regression on VNNI / BF16 capable hardware
+ * (AMD Zen4 / Zen5 and Intel AVX512-VNNI / BF16 parts).
  */
 #include "aocl_dlp.h"
 #include "framework/utils/process_env.hh"
@@ -62,68 +59,21 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
-#include <intrin.h>
-#define DLP_TEST_HAS_CPUID 1
-#elif defined(__x86_64__) || defined(__i386__)
-#include <cpuid.h>
-#define DLP_TEST_HAS_CPUID 1
-#else
-#define DLP_TEST_HAS_CPUID 0
-#endif
-
 namespace {
 
-// Hardware identity only. Must not construct archConfigManager: that latches
-// AOCL_DLP_ENABLE_INSTRUCTIONS on first use.
-bool
-isAmdZenCpu()
-{
-#if !DLP_TEST_HAS_CPUID
-    return false;
+// Compile-time x86 check (covers MSVC, GCC and Clang on x86 and x86-64).
+// Non-x86 builds skip the suite. No CPUID query is needed: the outcome under
+// the override does not depend on the CPU vendor.
+#if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__)                 \
+    || defined(__i386__)
+constexpr bool kIsX86 = true;
 #else
-    uint32_t regs[4] = { 0, 0, 0, 0 };
-#if defined(_MSC_VER)
-    int msvc_regs[4] = { 0, 0, 0, 0 };
-    __cpuid(msvc_regs, 0);
-    for (int i = 0; i < 4; ++i) {
-        regs[i] = static_cast<uint32_t>(msvc_regs[i]);
-    }
-#else
-    __cpuid(0, regs[0], regs[1], regs[2], regs[3]);
+constexpr bool kIsX86 = false;
 #endif
 
-    char vendor[13] = {};
-    std::memcpy(vendor + 0, &regs[1], 4); // EBX
-    std::memcpy(vendor + 4, &regs[3], 4); // EDX
-    std::memcpy(vendor + 8, &regs[2], 4); // ECX
-    if (std::strcmp(vendor, "AuthenticAMD") != 0) {
-        return false;
-    }
-
-#if defined(_MSC_VER)
-    __cpuid(msvc_regs, 1);
-    for (int i = 0; i < 4; ++i) {
-        regs[i] = static_cast<uint32_t>(msvc_regs[i]);
-    }
-#else
-    __cpuid(1, regs[0], regs[1], regs[2], regs[3]);
-#endif
-
-    // Display family. Zen starts at 17h; 15h/16h are Bulldozer and Jaguar.
-    const uint32_t base_family = (regs[0] >> 8) & 0xFu;
-    const uint32_t ext_family  = (regs[0] >> 20) & 0xFFu;
-    const uint32_t family = (base_family == 0xFu) ? (base_family + ext_family)
-                                                  : base_family;
-    return family >= 0x17u;
-#endif
-}
-
-// Runs before main() and before any library call. Non-AMD CPUs never see the
-// zen3 token.
-const bool kIsAmdZen = isAmdZenCpu();
+// Runs before main() and before any library call.
 const bool kZen3OverrideApplied =
-    kIsAmdZen
+    kIsX86
     && dlp::testing::utils::setEnvironmentVariable(
         "AOCL_DLP_ENABLE_INSTRUCTIONS", "zen3", true);
 
@@ -262,10 +212,10 @@ class CpuDetection : public ::testing::Test
   protected:
     void SetUp() override
     {
-        if (!kIsAmdZen) {
-            GTEST_SKIP() << "AOCL_DLP_ENABLE_INSTRUCTIONS=zen3 is an AMD Zen "
-                            "override. Skipped: this machine is not an AMD "
-                            "Zen CPU.";
+        if (!kIsX86) {
+            GTEST_SKIP()
+                << "The configured-arch ISA gate is x86-only. Skipped: "
+                   "this build is not x86.";
         }
         ASSERT_TRUE(kZen3OverrideApplied)
             << "Failed to set AOCL_DLP_ENABLE_INSTRUCTIONS=zen3";
