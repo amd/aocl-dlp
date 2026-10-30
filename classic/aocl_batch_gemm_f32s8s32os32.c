@@ -71,7 +71,7 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
                                 ldb, mem_format_b, beta, ldc, metadata);
 
     // Check if avx512_vnni ISA is supported.
-    if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
+    if (dlp_cpuid_is_avx512vnni_configured() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform f32s8s32 gemm.",
                       __FILE__, __LINE__);

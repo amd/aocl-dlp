@@ -766,7 +766,7 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
 
     // AVX512-BF16 selects the bf16 kernel. The s4 packers that consume this
     // reorder buffer execute vpmultishiftqb, which needs AVX512-VBMI.
-    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+    if ((dlp_cpuid_is_avx512bf16_configured() == FALSE)
         || (dlp_cpuid_is_avx512vbmi_supported() == FALSE)) {
         dlp_print_msg(" AVX512_BF16 and AVX512_VBMI are required, "
                       "cannot perform bf16s4f32 reorder.",
@@ -835,7 +835,7 @@ aocl_reorder_bf16s4f32of32(const char      order,
 
     // AVX512-BF16 selects the bf16 kernel. The s4 packers that consume this
     // reorder buffer execute vpmultishiftqb, which needs AVX512-VBMI.
-    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+    if ((dlp_cpuid_is_avx512bf16_configured() == FALSE)
         || (dlp_cpuid_is_avx512vbmi_supported() == FALSE)) {
         dlp_print_msg(" AVX512_BF16 and AVX512_VBMI are required, "
                       "cannot perform bf16s4f32 reorder.",

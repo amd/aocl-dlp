@@ -80,7 +80,7 @@ aocl_gemm_bf16s4f32of32(const char      order,
 
     // AVX512-BF16 selects the bf16 kernel. Nibble widening additionally
     // needs AVX512-VBMI and GFNI, which are independent of AVX512-BF16.
-    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+    if ((dlp_cpuid_is_avx512bf16_configured() == FALSE)
         || (dlp_cpuid_is_nibble_widen_supported() == FALSE)) {
         dlp_print_msg(" AVX512_BF16, AVX512_VBMI and GFNI are required, "
                       "cannot perform bf16s4f32 gemm.",
@@ -279,7 +279,7 @@ aocl_gemm_bf16s4f32obf16(const char      order,
 
     // AVX512-BF16 selects the bf16 kernel. Nibble widening additionally
     // needs AVX512-VBMI and GFNI, which are independent of AVX512-BF16.
-    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+    if ((dlp_cpuid_is_avx512bf16_configured() == FALSE)
         || (dlp_cpuid_is_nibble_widen_supported() == FALSE)) {
         dlp_print_msg(" AVX512_BF16, AVX512_VBMI and GFNI are required, "
                       "cannot perform bf16s4f32obf16 gemm.",

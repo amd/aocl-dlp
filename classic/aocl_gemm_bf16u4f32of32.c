@@ -85,7 +85,7 @@ aocl_gemm_bf16u4f32_impl(const char        order,
 
     // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
     // it.
-    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
+    if (dlp_cpuid_is_avx512bf16_configured() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
                       __FILE__, __LINE__);

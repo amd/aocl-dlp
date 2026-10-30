@@ -72,7 +72,7 @@ aocl_gemm_s8s4s32of32(const char      order,
 
     // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
     // it.
-    if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
+    if (dlp_cpuid_is_avx512vnni_configured() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform s8s4s32 gemm.",
                       __FILE__, __LINE__);

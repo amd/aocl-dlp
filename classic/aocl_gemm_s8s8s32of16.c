@@ -65,7 +65,7 @@ aocl_gemm_s8s8s32of16(const char      order,
     DLP_METADATA_SET_ERROR(metadata,
                            DLP_CLSC_SUCCESS); // Set default error to success.
 
-    if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
+    if (dlp_cpuid_is_avx512vnni_configured() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform s8s8s32 gemm.",
                       __FILE__, __LINE__);
@@ -244,7 +244,7 @@ aocl_gemm_s8s8s32of16(const char      order,
     lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
     dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_S8S8S32OF16, n_use, k_use,
                                        rs_b_use, cs_b_use, &lcntx_l);
-    if ((dlp_cpuid_is_avx512vnni_supported() == TRUE) && (lcntx_l.blksz.NR > 1)
+    if ((dlp_cpuid_is_avx512vnni_configured() == TRUE) && (lcntx_l.blksz.NR > 1)
         && (lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL)) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         goto err_hndl;

@@ -166,7 +166,7 @@ aocl_gemm_f32s8s32_impl(const char        order,
     // HARDWARE ISA VALIDATION
     // =========================================================================
     // Verify processor supports required instruction set extensions.
-    if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
+    if (dlp_cpuid_is_avx512vnni_configured() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform f32s8s32 gemm.",
                       __FILE__, __LINE__);

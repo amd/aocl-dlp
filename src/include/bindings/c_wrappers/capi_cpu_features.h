@@ -124,6 +124,16 @@ dlp_cpuid_is_nibble_widen_supported(void);
 bool
 dlp_cpuid_is_avx512bf16_configured(void);
 
+// API to check if AVX512_VNNI is supported or not by the configured
+// architecture, i.e. after any downgrade requested through
+// AOCL_DLP_ENABLE_INSTRUCTIONS. The INT8 kernels are only generated for an
+// AVX512 VNNI configured architecture and have no AVX2 fallback, so the INT8
+// APIs use this query (and not dlp_cpuid_is_avx512vnni_supported, which only
+// reflects the hardware) to report DLP_CLSC_NOT_SUPPORTED when the
+// architecture has been downgraded to one without VNNI.
+bool
+dlp_cpuid_is_avx512vnni_configured(void);
+
 // API to check if AVX512_fp16 is supported or not on the current platform.
 bool
 dlp_cpuid_is_avx512fp16_supported(void);
