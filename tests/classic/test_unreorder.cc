@@ -65,6 +65,7 @@
  */
 
 #include "aocl_dlp.h"
+#include "kernels/f32f32f32/dlp_gemm_pack_f32.h"
 #include <climits>
 #include <csignal>
 #include <cstdint>
@@ -1647,10 +1648,13 @@ ref_api_negative(const char* label,
                        n, n, &bp, DLP_CLSC_INVALID_BLOCK_PARAMS);
         expect_unreorder("NR % min_NR != 0", 'r', 'n', 'B', scratch, scratch, k,
                          n, n, &bp, DLP_CLSC_INVALID_BLOCK_PARAMS);
-    } else {
-        // f32 min_NR == NR, so the layout check cannot fail on granularity.
-        // NC not a multiple of NR is still illegal.
-        dlp_gemm_blocking_t bp = { 0, 16, 0, 24, 256 };
+    }
+
+    {
+        // NC that is not a multiple of NR is illegal even when NR itself is
+        // a legal tile width.
+        const md_t          nr = (min_NR > 1) ? min_NR : (md_t)16;
+        dlp_gemm_blocking_t bp = { 0, nr, 0, nr + (nr / 2), 256 };
         expect_size("NC % NR != 0", 'r', 'n', 'B', k, n, &bp,
                     DLP_CLSC_INVALID_BLOCK_PARAMS);
         expect_reorder("NC % NR != 0", 'r', 'n', 'B', scratch, scratch, k, n, n,
@@ -1694,7 +1698,8 @@ TEST(RefApiNegative, F32F32F32OF32)
     ref_api_negative<float>("f32f32f32of32",
                             aocl_get_reorder_buf_size_f32f32f32of32,
                             aocl_reorder_f32f32f32of32_reference,
-                            aocl_unreorder_f32f32f32of32_reference, 1, 1);
+                            aocl_unreorder_f32f32f32of32_reference,
+                            dlp_get_packb_f32f32f32of32_min_NR(), 1);
 }
 
 TEST(RefApiNegative, Bf16Bf16F32OF32)
@@ -1928,6 +1933,89 @@ TEST(UnreorderRoundTrip, TransFlagMatchesLogicalInput)
     if (supported == 0) {
         GTEST_SKIP() << "f32f32f32of32 is not supported on this processor";
     }
+}
+
+// NR must be a multiple of the f32 pack-B SIMD width (8 on AVX2, 16 on
+// AVX-512). NR=17 and NR=65 used to pass the size API because the check was
+// NR % NR, then the tuned reorder rejected the same metadata.
+TEST(ReorderBufSize, F32RejectsNrNotMultipleOfMinTile)
+{
+    const md_t k      = 37;
+    const md_t n      = 45;
+    const md_t min_NR = dlp_get_packb_f32f32f32of32_min_NR();
+
+    auto size_for = [&](md_t nr, dlp_clsc_err_t* err) {
+        dlp_gemm_blocking_t bp = { 0, nr, 0, 0, 0 };
+        dlp_metadata_t      md = fresh_metadata();
+        md.block_params        = &bp;
+        msz_t sz =
+            aocl_get_reorder_buf_size_f32f32f32of32('r', 'n', 'B', k, n, &md);
+        *err = md.error_hndl.error_code;
+        return sz;
+    };
+
+    dlp_clsc_err_t err = DLP_CLSC_SUCCESS;
+    EXPECT_EQ(size_for(17, &err), (msz_t)0);
+    EXPECT_EQ(err, DLP_CLSC_INVALID_BLOCK_PARAMS);
+    EXPECT_EQ(size_for(65, &err), (msz_t)0);
+    EXPECT_EQ(err, DLP_CLSC_INVALID_BLOCK_PARAMS);
+
+    EXPECT_GT(size_for(16, &err), (msz_t)0);
+    EXPECT_EQ(err, DLP_CLSC_SUCCESS);
+    EXPECT_GT(size_for(64, &err), (msz_t)0);
+    EXPECT_EQ(err, DLP_CLSC_SUCCESS);
+
+    // AVX2 pack-B accepts NR=8 and NR=24; AVX-512 ZMM does not.
+    if (min_NR == 8) {
+        EXPECT_GT(size_for(8, &err), (msz_t)0);
+        EXPECT_EQ(err, DLP_CLSC_SUCCESS);
+        EXPECT_GT(size_for(24, &err), (msz_t)0);
+        EXPECT_EQ(err, DLP_CLSC_SUCCESS);
+    } else {
+        EXPECT_EQ(size_for(8, &err), (msz_t)0);
+        EXPECT_EQ(err, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        EXPECT_EQ(size_for(24, &err), (msz_t)0);
+        EXPECT_EQ(err, DLP_CLSC_INVALID_BLOCK_PARAMS);
+    }
+
+    std::vector<float>  scratch(k * n, 0.0f);
+    dlp_gemm_blocking_t bp = { 0, 17, 0, 0, 0 };
+    dlp_metadata_t      md = fresh_metadata();
+    md.block_params        = &bp;
+    aocl_reorder_f32f32f32of32('r', 'n', 'B', scratch.data(), scratch.data(), k,
+                               n, n, &md);
+    if (md.error_hndl.error_code != DLP_CLSC_NOT_SUPPORTED) {
+        EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_JIT_KERNEL);
+    }
+
+    md              = fresh_metadata();
+    md.block_params = &bp;
+    aocl_reorder_f32f32f32of32_reference('r', 'n', 'B', scratch.data(),
+                                         scratch.data(), k, n, n, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_BLOCK_PARAMS);
+}
+
+// Argument checks run before the symmetric-quant group-size lookup, so k <= 0
+// and a NULL buffer are not reported as INVALID_GROUP_DIMENSION.
+TEST(ReorderValidation, S8S4ChecksArgsBeforeGroupSize)
+{
+    dlp_metadata_t md      = fresh_metadata();
+    int8_t         out[32] = {};
+    int8_t         in[32]  = {};
+
+    aocl_reorder_s8s4s32os32('r', 'n', 'B', in, out, /*k=*/0, 21, 21, &md);
+    if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+        GTEST_SKIP() << "s8s4 reorder is not supported on this processor";
+    }
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_MATRIX_DIMENSION);
+
+    md = fresh_metadata();
+    aocl_reorder_s8s4s32os32('r', 'n', 'B', nullptr, out, /*k=*/0, 21, 21, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NULL_POINTER);
+
+    md = fresh_metadata();
+    aocl_reorder_s8s4s32os32('r', 'n', 'B', nullptr, out, /*k=*/8, 16, 16, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NULL_POINTER);
 }
 
 } // namespace

@@ -37,6 +37,16 @@
 #include "threading/dlp_gemm_thread_utils.h"
 #include "threading/dlp_omp_runtime.h"
 
+md_t
+dlp_get_packb_f32f32f32of32_min_NR(void)
+{
+    // Mirror gemmF32DEBackend::getGemmPackBInfoForInputFastPath, which keys
+    // the AVX-512 ZMM pack-B (16 floats) off
+    // isAvx512SupportedByConfiguredArch(). The same predicate honours
+    // AOCL_DLP_ENABLE_INSTRUCTIONS downgrades.
+    return dlp_cpuid_is_avx512_configured() ? 16 : 8;
+}
+
 msz_t
 aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
                                         const char      trans,
@@ -91,7 +101,8 @@ aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
         return 0; // Error.
     }
     const md_t NR = lcntx_l.blksz.NR;
-    if (!dlp_reorder_ref_blocks_legal(NR, NR, lcntx_l.blksz.KC, 1)) {
+    if (!dlp_reorder_ref_blocks_legal(NR, dlp_get_packb_f32f32f32of32_min_NR(),
+                                      lcntx_l.blksz.KC, 1)) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
         return 0;
     }
@@ -388,7 +399,8 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
     md_t KC = lcntx.blksz.KC;
     md_t NR = lcntx.blksz.NR;
 
-    if (!dlp_reorder_ref_blocks_legal(NR, NR, KC, 1)) {
+    if (!dlp_reorder_ref_blocks_legal(NR, dlp_get_packb_f32f32f32of32_min_NR(),
+                                      KC, 1)) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
         return;
     }
@@ -496,7 +508,8 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
         return; // Error.
     }
 
-    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR, lcntx_g.blksz.NR,
+    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR,
+                                      dlp_get_packb_f32f32f32of32_min_NR(),
                                       lcntx_g.blksz.KC, 1)) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
         return;

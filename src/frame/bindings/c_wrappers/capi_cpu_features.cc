@@ -96,6 +96,13 @@ dlp_cpuid_is_avx512bf16_configured(void)
         .isAvx512Bf16SupportedByConfiguredArch();
 }
 
+// Determine if the configured architecture has support for AVX512 (ZMM).
+bool
+dlp_cpuid_is_avx512_configured(void)
+{
+    return archConfigManager::getInstance().isAvx512SupportedByConfiguredArch();
+}
+
 // Determine if the configured architecture has support for AVX512_VNNI.
 bool
 dlp_cpuid_is_avx512vnni_configured(void)

@@ -202,8 +202,20 @@ aocl_reorder_s8s4s32os32(const char      order,
         return; // Error.
     }
 
-    dlp_clsc_err_t err_no     = DLP_CLSC_SUCCESS;
-    md_t           group_size = 0;
+    // Standard argument checks first. A zero-initialized metadata with k <= 0
+    // makes the group-size helper derive group_size == k and reject it as
+    // INVALID_GROUP_DIMENSION, which hides a NULL buffer or a bad dimension.
+    dlp_init_global_cntx();
+
+    dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
+    AOCL_DLP_REORDER_CHECK("s8s4s32os32", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
+    md_t group_size = 0;
     err_no =
         dlp_get_sym_quant_group_size_from_metadata(metadata, k, &group_size);
     if (err_no != DLP_CLSC_SUCCESS) {
@@ -211,16 +223,6 @@ aocl_reorder_s8s4s32os32(const char      order,
             " Invalid group size for s8s4s32os32; expected a multiple of 4 "
             "carried in metadata->b_quant_op.",
             __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
-
-    // Set MC, NC, KC, NR, MR.
-    dlp_init_global_cntx();
-
-    AOCL_DLP_REORDER_CHECK("s8s4s32os32", order, trans, mat_type,
-                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
-    if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
     }

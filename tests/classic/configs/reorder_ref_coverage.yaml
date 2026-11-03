@@ -8,11 +8,16 @@
 # Keep k and n at packing-granularity edges (16/32/64 and nearby odds) only.
 # Reference pack/unpack does not change often, so large K/N grids belong
 # outside nightly.
+#
+# NOTE: the f32 min_nr values below are IGNORED. test_reorder_ref_yaml.cc
+# overrides them at load time with dlp_get_packb_f32f32f32of32_min_NR(), which
+# is 8 on AVX2 and 16 on AVX-512 (ZMM). Only the non-f32 min_nr values are
+# read from this file. Making f32 data-driven here is a follow-up.
 
 reorder_ref_tests:
   - name: size_grid
     dtypes:
-      - { name: f32,  min_nr: 1,  k_factor: 1 }
+      - { name: f32,  min_nr: 8,  k_factor: 1 }
       - { name: bf16, min_nr: 16, k_factor: 2 }
       - { name: s8,   min_nr: 16, k_factor: 4 }
       - { name: u8s8, min_nr: 16, k_factor: 4 }
@@ -31,7 +36,7 @@ reorder_ref_tests:
   # (row-major + t => ldb >= k). Keep this set small; size_grid covers trans n.
   - name: trans_t
     dtypes:
-      - { name: f32,  min_nr: 1,  k_factor: 1 }
+      - { name: f32,  min_nr: 8,  k_factor: 1 }
       - { name: bf16, min_nr: 16, k_factor: 2 }
       - { name: s8,   min_nr: 16, k_factor: 4 }
       - { name: u8s8, min_nr: 16, k_factor: 4 }

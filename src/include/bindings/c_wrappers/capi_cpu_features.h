@@ -134,6 +134,13 @@ dlp_cpuid_is_avx512bf16_configured(void);
 bool
 dlp_cpuid_is_avx512vnni_configured(void);
 
+// API to check if AVX512 (ZMM) is supported by the configured architecture,
+// i.e. after any downgrade requested through AOCL_DLP_ENABLE_INSTRUCTIONS.
+// Same predicate the decision engine uses to pick the AVX-512 pack-B and
+// kernel backend, so C-side size/validation logic stays in step with it.
+bool
+dlp_cpuid_is_avx512_configured(void);
+
 // API to check if AVX512_fp16 is supported or not on the current platform.
 bool
 dlp_cpuid_is_avx512fp16_supported(void);

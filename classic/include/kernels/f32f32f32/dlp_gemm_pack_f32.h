@@ -28,6 +28,8 @@
 #ifndef DLP_GEMM_F32_PACKAB
 #define DLP_GEMM_F32_PACKAB
 
+#include "classic/dlp_macros.h"
+
 void
 dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                        const float* a,
@@ -76,6 +78,15 @@ typedef void (*dlp_gemm_pack_f32)(float*,
                                   const md_t,
                                   md_t*,
                                   md_t*);
+
+// Smallest f32 pack-B tile for the backend the DE will pick. The pack-B
+// requires NR to be a multiple of the SIMD float width: 16 on AVX-512 (ZMM),
+// 8 on AVX2 (YMM). So NR=8 and NR=24 are accepted on AVX2 and rejected on
+// AVX-512; NR=17 and NR=65 are rejected on both.
+DLP_BEGIN_EXTERN_C
+md_t
+dlp_get_packb_f32f32f32of32_min_NR(void);
+DLP_END_EXTERN_C
 
 void
 dlp_packb_nr64_f32f32f32of32(float*       pack_b_buffer,

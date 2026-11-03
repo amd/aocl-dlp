@@ -34,6 +34,7 @@
  */
 
 #include "aocl_dlp.h"
+#include "kernels/f32f32f32/dlp_gemm_pack_f32.h"
 #include "test_config.hh"
 
 #include <cstdint>
@@ -254,7 +255,12 @@ load_yaml_cases()
             proto.trans    = trans;
             proto.min_nr   = (md_t)dt["min_nr"].as<int64_t>();
             proto.k_factor = (md_t)dt["k_factor"].as<int64_t>();
-            proto.blocks   = blocks;
+            // f32 pack-B SIMD width is ISA-dependent (AVX2 YMM=8,
+            // AVX-512 ZMM=16), so the yaml f32 min_nr is replaced here.
+            if (proto.dtype == "f32") {
+                proto.min_nr = dlp_get_packb_f32f32f32of32_min_NR();
+            }
+            proto.blocks = blocks;
 
             for (md_t k : ks) {
                 for (md_t n : ns) {
