@@ -218,7 +218,7 @@ TEST_F(JitPackBBF16Test, GenerateValidNR_RowMajor)
     if (!bf16Supported())
         GTEST_SKIP() << "AVX512-BF16 not supported";
 
-    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112 }) {
+    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128 }) {
         SCOPED_TRACE("NR=" + std::to_string(NR));
         EXPECT_NE(generate(NR, false), nullptr);
     }
@@ -229,7 +229,7 @@ TEST_F(JitPackBBF16Test, GenerateValidNR_ColMajor)
     if (!bf16Supported())
         GTEST_SKIP() << "AVX512-BF16 not supported";
 
-    for (md_t NR : { 16, 32, 64 }) {
+    for (md_t NR : { 16, 32, 64, 128 }) {
         SCOPED_TRACE("NR=" + std::to_string(NR));
         EXPECT_NE(generate(NR, true), nullptr);
     }
@@ -243,6 +243,18 @@ TEST_F(JitPackBBF16Test, InvalidNR_ReturnsError)
     for (md_t NR : { 0, 1, 8, 15, 17, 33 }) {
         SCOPED_TRACE("NR=" + std::to_string(NR));
         EXPECT_EQ(generate(NR, false), nullptr);
+    }
+}
+
+TEST_F(JitPackBBF16Test, OversizedNR_ReturnsError)
+{
+    if (!bf16Supported())
+        GTEST_SKIP() << "AVX512-BF16 not supported";
+
+    for (md_t NR : { 144, 1048576 }) {
+        SCOPED_TRACE("NR=" + std::to_string(NR));
+        EXPECT_EQ(generate(NR, false), nullptr);
+        EXPECT_EQ(generate(NR, true), nullptr);
     }
 }
 

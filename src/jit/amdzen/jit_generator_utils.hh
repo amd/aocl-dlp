@@ -70,6 +70,11 @@ using jit_pack_b_kernel  = void (*)(dlp::kernels::packBParams*);
 // xbyak in autogrow mode will automatically grow the buffer size if needed.
 constexpr uint64_t JIT_KERNEL_SIZE = 8 * 4096;
 
+// BF16/INT8 pack-B emits one fringe kernel per 16 columns of NR. Bound the
+// total synchronous JIT work; S8's row-major column-sum register allocation
+// also tops out at 128 columns.
+constexpr md_t MAX_PACK_B_JIT_NR = 128;
+
 // The caller passes a null C whenever it downscales without checking out a
 // temporary accumulation buffer: the kernel keeps the tile in registers and
 // writes it out through the post-op downscale buffer, so C is never

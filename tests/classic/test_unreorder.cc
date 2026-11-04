@@ -1167,15 +1167,79 @@ TEST(ReorderTunedValidation, SupportsDynamicInt8Nr)
             aocl_get_reorder_buf_size_s8s8s32os32, aocl_reorder_s8s8s32os32,
             aocl_unreorder_s8s8s32os32_reference, 'r', shape, &bp));
     }
+}
 
-    // U8 packing has no fused column-sum accumulators, so its register-feasible
-    // GEMM widths extend beyond the S8 limit of 128.
-    for (md_t nr : { (md_t)144, (md_t)160 }) {
-        dlp_gemm_blocking_t bp = { 0, nr, 0, 7 * nr, 100 };
-        SCOPED_TRACE("U8-only NR=" + std::to_string(nr));
-        EXPECT_TRUE(round_trip<int8_t>(
-            aocl_get_reorder_buf_size_u8s8s32os32, aocl_reorder_u8s8s32os32,
-            aocl_unreorder_u8s8s32os32_reference, 'r', shape, &bp));
+TEST(ReorderTunedValidation, RejectsOversizedBf16PackBJitNr)
+{
+    const Shape shape = { 4, 16 };
+
+    // Establish support using round_trip, consistent with
+    // SupportsDynamicInt8Nr. If not supported on this processor, the test
+    // skips.
+    if (!round_trip<bfloat16>(aocl_get_reorder_buf_size_bf16bf16f32of32,
+                              aocl_reorder_bf16bf16f32of32,
+                              aocl_unreorder_bf16bf16f32of32_reference, 'r',
+                              shape)) {
+        GTEST_SKIP() << "BF16 reorder not supported on this processor";
+    }
+
+    std::vector<bfloat16> bf16_in(shape.k * shape.n, 0);
+    std::vector<bfloat16> bf16_out(shape.k * shape.n, 0);
+
+    for (md_t nr : { (md_t)144, (md_t)1048576 }) {
+        SCOPED_TRACE("NR=" + std::to_string(nr));
+        dlp_gemm_blocking_t bp = { 0, nr, 0, 0, 0 };
+
+        dlp_metadata_t md = fresh_metadata();
+        md.block_params   = &bp;
+        aocl_reorder_bf16bf16f32of32('r', 'n', 'B', bf16_in.data(),
+                                     bf16_out.data(), shape.k, shape.n, shape.n,
+                                     &md);
+        // If JIT is available, expect rejection. If reference fallback is
+        // being used (e.g., AOCL_DLP_ENABLE_INSTRUCTIONS=avx2), the reference
+        // will succeed (no JIT to reject), which is fine.
+        if (md.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+            EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_JIT_KERNEL);
+        }
+    }
+}
+
+TEST(ReorderTunedValidation, RejectsOversizedInt8PackBJitNr)
+{
+    const Shape shape = { 4, 16 };
+
+    // Establish support using round_trip. If not supported on this processor,
+    // the test skips.
+    if (!round_trip<int8_t>(aocl_get_reorder_buf_size_u8s8s32os32,
+                            aocl_reorder_u8s8s32os32,
+                            aocl_unreorder_u8s8s32os32_reference, 'r', shape)) {
+        GTEST_SKIP() << "U8S8 reorder not supported on this processor";
+    }
+    if (!round_trip<int8_t>(aocl_get_reorder_buf_size_s8s8s32os32,
+                            aocl_reorder_s8s8s32os32,
+                            aocl_unreorder_s8s8s32os32_reference, 'r', shape)) {
+        GTEST_SKIP() << "S8S8 reorder not supported on this processor";
+    }
+
+    std::vector<int8_t> int8_in(shape.k * shape.n, 0);
+    // The S8 baseline probe also writes column sums after the packed bytes.
+    std::vector<int8_t> int8_out(4 * shape.k * shape.n, 0);
+
+    for (md_t nr : { (md_t)144, (md_t)1048576 }) {
+        SCOPED_TRACE("NR=" + std::to_string(nr));
+        dlp_gemm_blocking_t bp = { 0, nr, 0, 0, 0 };
+
+        dlp_metadata_t md = fresh_metadata();
+        md.block_params   = &bp;
+        aocl_reorder_u8s8s32os32('r', 'n', 'B', int8_in.data(), int8_out.data(),
+                                 shape.k, shape.n, shape.n, &md);
+        EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_JIT_KERNEL);
+
+        md              = fresh_metadata();
+        md.block_params = &bp;
+        aocl_reorder_s8s8s32os32('r', 'n', 'B', int8_in.data(), int8_out.data(),
+                                 shape.k, shape.n, shape.n, &md);
+        EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_JIT_KERNEL);
     }
 }
 

@@ -280,7 +280,7 @@ TEST_F(JitPackBINT8Test, GenerateValidNR_RowMajor)
     if (!vnniSupported())
         GTEST_SKIP() << "AVX-512 VNNI not supported";
 
-    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128, 144, 160 }) {
+    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128 }) {
         SCOPED_TRACE("NR=" + std::to_string(NR));
         EXPECT_NE(generate(NR, false), nullptr);
     }
@@ -292,6 +292,18 @@ TEST_F(JitPackBINT8Test, InvalidNR_ReturnsError)
         GTEST_SKIP() << "AVX-512 VNNI not supported";
 
     for (md_t NR : { 0, 24, -1, 1, 8, 15, 17 }) {
+        SCOPED_TRACE("NR=" + std::to_string(NR));
+        EXPECT_EQ(generate(NR, false), nullptr);
+        EXPECT_EQ(generate(NR, true), nullptr);
+    }
+}
+
+TEST_F(JitPackBINT8Test, OversizedU8NR_ReturnsError)
+{
+    if (!vnniSupported())
+        GTEST_SKIP() << "AVX-512 VNNI not supported";
+
+    for (md_t NR : { 144, 1048576 }) {
         SCOPED_TRACE("NR=" + std::to_string(NR));
         EXPECT_EQ(generate(NR, false), nullptr);
         EXPECT_EQ(generate(NR, true), nullptr);
@@ -316,7 +328,10 @@ TEST_F(JitPackBINT8Test, S8NRAboveAccumulatorCapacity_ReturnsError)
     if (!vnniSupported())
         GTEST_SKIP() << "AVX-512 VNNI not supported";
 
+    EXPECT_NE(generate(/*NR=*/128, /*colMajor=*/false, /*s8=*/true), nullptr);
+    EXPECT_NE(generate(/*NR=*/128, /*colMajor=*/true, /*s8=*/true), nullptr);
     EXPECT_EQ(generate(/*NR=*/144, /*colMajor=*/false, /*s8=*/true), nullptr);
+    EXPECT_EQ(generate(/*NR=*/144, /*colMajor=*/true, /*s8=*/true), nullptr);
 }
 
 TEST_F(JitPackBINT8Test, GenerateValidNR_ColMajor)
@@ -324,7 +339,7 @@ TEST_F(JitPackBINT8Test, GenerateValidNR_ColMajor)
     if (!vnniSupported())
         GTEST_SKIP() << "AVX-512 VNNI not supported";
 
-    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128, 144, 160 }) {
+    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128 }) {
         SCOPED_TRACE("NR=" + std::to_string(NR));
         EXPECT_NE(generate(NR, true), nullptr);
     }
@@ -337,7 +352,7 @@ TEST_F(JitPackBINT8Test, FullPanelsAndFringe_VsGenericReference)
 
     const md_t kVals[] = { 1, 2, 3, 4, 5, 7, 8, 16, 32, 63, 64, 65, 67, 96 };
 
-    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128, 144, 160 }) {
+    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128 }) {
         const std::vector<md_t> nVals = { 1,      16,        NR,      NR + 1,
                                           NR + 7, NR + 15,   NR + 16, NR + 17,
                                           2 * NR, 2 * NR + 3 };
@@ -361,7 +376,7 @@ TEST_F(JitPackBINT8Test, FullPanelsAndFringe_VsGenericReference_ColMajor)
 
     const md_t kVals[] = { 1, 2, 3, 4, 5, 7, 16, 32, 63, 64, 65, 67, 96 };
 
-    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128, 144, 160 }) {
+    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128 }) {
         const std::vector<md_t> nVals = { 1,      16,        NR,      NR + 1,
                                           NR + 7, NR + 15,   NR + 16, NR + 17,
                                           2 * NR, 2 * NR + 3 };
@@ -382,7 +397,7 @@ TEST_F(JitPackBINT8Test, SameLogicalB_RowAndColMajorMatch)
 
     const md_t kVals[] = { 1, 3, 4, 17, 63, 64, 65, 67 };
 
-    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128, 144, 160 }) {
+    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128 }) {
         const std::vector<md_t> nVals = {
             1, 16, NR, NR + 7, NR + 16, 2 * NR + 3
         };
@@ -404,7 +419,7 @@ TEST_F(JitPackBINT8Test, PaddedLeadingDim_RowAndColMajor)
     constexpr md_t ldPad   = 11;
     const md_t     kVals[] = { 3, 17, 65, 67 };
 
-    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128, 144, 160 }) {
+    for (md_t NR : { 16, 32, 48, 64, 80, 96, 112, 128 }) {
         for (md_t N : { static_cast<md_t>(1), NR, NR + 7 }) {
             for (md_t K : kVals) {
                 SCOPED_TRACE("NR=" + std::to_string(NR) + " N="

@@ -429,7 +429,9 @@ jitAmdZenPackBBF16::generateAllKernels(
     // silently drop its top (NR % kernelWidth) columns, so degrade to
     // notSupported and let the caller fall back to the intrinsic packer
     // instead.
-    if (kernelWidth <= 0 || NR <= 0 || (NR % kernelWidth) != 0) {
+    // Reject before narrowing NR to int and allocating the kernel ladder.
+    if (kernelWidth <= 0 || NR <= 0 || NR > utils::MAX_PACK_B_JIT_NR
+        || (NR % kernelWidth) != 0) {
         return dlp::jit::jitGeneratorError::notSupported;
     }
 
@@ -689,7 +691,9 @@ jitAmdZenPackBINT8::generateAllKernels(
     //                         (i == nf is the main full-NR kernel)
     const md_t kernelWidth = static_cast<md_t>(numElemsPerReg) / K_FACTOR;
 
-    if (kernelWidth <= 0 || NR <= 0 || (NR % kernelWidth) != 0) {
+    // Reject before narrowing NR to int and allocating the kernel ladder.
+    if (kernelWidth <= 0 || NR <= 0 || NR > utils::MAX_PACK_B_JIT_NR
+        || (NR % kernelWidth) != 0) {
         return dlp::jit::jitGeneratorError::notSupported;
     }
 
