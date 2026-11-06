@@ -37,6 +37,10 @@
  * @param[in] n Number of elements in the vector.
  * @param[inout] x Pointer to the vector.
  * @param[in] incx Stride between consecutive elements in the vector.
+ *
+ * Non-positive @p n or @p incx, a NULL @p x, a value above the same
+ * dimension limit used for GEMM, or a last-element index (n-1)*incx past
+ * that limit, is ignored and @p x is left unchanged.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx);
@@ -46,6 +50,10 @@ aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx);
  * @param[in] n Number of elements in the vector.
  * @param[inout] x Pointer to the vector.
  * @param[in] incx Stride between consecutive elements in the vector.
+ *
+ * Non-positive @p n or @p incx, a NULL @p x, a value above the same
+ * dimension limit used for GEMM, or a last-element index (n-1)*incx past
+ * that limit, is ignored and @p x is left unchanged.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx);
@@ -55,6 +63,10 @@ aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx);
  * @param[in] n Number of elements in the vector.
  * @param[inout] x Pointer to the vector.
  * @param[in] incx Stride between consecutive elements in the vector.
+ *
+ * Non-positive @p n or @p incx, a NULL @p x, a value above the same
+ * dimension limit used for GEMM, or a last-element index (n-1)*incx past
+ * that limit, is ignored and @p x is left unchanged.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx);

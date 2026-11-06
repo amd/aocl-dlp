@@ -26,6 +26,7 @@
  *
  */
 
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_util_interface_apis.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_types.h"
@@ -47,7 +48,7 @@ aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx)
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-    if ((n <= 0) || (x == NULL) || (incx <= 0)) {
+    if (AOCL_DLP_L1_VECTOR_REJECT(n, x, incx)) {
         return; // Error.
     }
 
@@ -71,7 +72,7 @@ aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx)
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-    if ((n <= 0) || (x == NULL) || (incx <= 0)) {
+    if (AOCL_DLP_L1_VECTOR_REJECT(n, x, incx)) {
         return; // Error.
     }
 
@@ -95,7 +96,7 @@ aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx)
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-    if ((n <= 0) || (x == NULL) || (incx <= 0)) {
+    if (AOCL_DLP_L1_VECTOR_REJECT(n, x, incx)) {
         return; // Error.
     }
 

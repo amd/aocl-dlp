@@ -35,12 +35,30 @@
 #include "classic/dlp_errors.h"
 
 /*
- * Maximum allowed value for any single GEMM dimension (m, n, k).
- * Set to INT32_MAX so that any pairwise product (m*k, k*n, m*n)
- * is guaranteed to fit in int64_t without overflow, and internal
- * buffer-size computations remain safe.
+ * Maximum allowed value for any single GEMM dimension (m, n, k) or
+ * leading dimension (lda, ldb, ldc, and the same role on reorder,
+ * eltwise, and GLU).
+ *
+ * A pairwise product of two such values, times an 8-byte element, must
+ * fit in int64_t. INT32_MAX does not provide that: (2^31-1)^2 * 4
+ * overflows a 64-bit byte offset, and a leading dimension of 2^30 (still
+ * under INT32_MAX) is then used directly as a stride, so kernels form
+ * pointers hundreds of gigabytes past the caller's buffer.
+ *
+ * 2^28 (268435456) keeps 2^28 * 2^28 * 8 = 2^59 inside int64_t and is
+ * still far above a single dimension this library targets.
  */
-#define DLP_MAX_GEMM_DIM ((int64_t)INT32_MAX)
+#define DLP_MAX_GEMM_DIM ((int64_t)1 << 28)
+
+/* True when a length-n vector at stride incx would address an element
+ * past DLP_MAX_GEMM_DIM, or when n, incx, or x is otherwise unusable.
+ * The earlier clauses already reject incx <= 0, so the division below only
+ * sees a positive incx. incx == 1 is skipped because the n bound covers it.
+ */
+#define AOCL_DLP_L1_VECTOR_REJECT(n, x, incx)                                  \
+    (((n) <= 0) || ((n) > DLP_MAX_GEMM_DIM) || ((x) == NULL) || ((incx) <= 0)  \
+     || ((incx) > DLP_MAX_GEMM_DIM)                                            \
+     || (((incx) > 1) && (((n) - 1) > (DLP_MAX_GEMM_DIM / (incx)))))
 
 /* Maximum allowed group size. Set to INT32_MAX so that group_size can be
  * safely used in loop bounds and indexed operations that assume 32-bit

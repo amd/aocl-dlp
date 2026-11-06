@@ -162,9 +162,9 @@ aocl_reorder_f16f16f16of16(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return; // A reorder not supported.
+        return; // Only B is supported.
     }
 
     // When n == 1, B matrix becomes a vector.

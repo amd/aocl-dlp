@@ -82,6 +82,39 @@ TEST(GluValidation, RejectsGemvSingleColumnWidth)
     EXPECT_EQ(run_glu(6, 1, 64, {}), DLP_CLSC_INVALID_MATRIX_DIMENSION);
 }
 
+// ld_d above the shared GEMM dimension limit must be rejected before the
+// kernel uses it as the D stride. 2^30 used to pass every check.
+TEST(GluValidation, RejectsBillionScaleLdD)
+{
+    const md_t            m = 4, n = 16, k = 32;
+    const md_t            lda = k, ldb = n, ldc = n;
+    std::vector<bfloat16> A((size_t)m * lda, f2bf16(0.1f));
+    std::vector<bfloat16> B((size_t)k * ldb, f2bf16(0.1f));
+    std::vector<float>    C((size_t)m * ldc, 0.0f);
+    std::vector<float>    D(8, 0.0f);
+
+    dlp_metadata_t md;
+    std::memset(&md, 0, sizeof(md));
+    md.seq_length = 0;
+    md.seq_vector = NULL;
+
+    dlp_term_op_glu glu;
+    std::memset(&glu, 0, sizeof(glu));
+    glu.algo_type = GATED_SWIGLU;
+    glu.alpha     = NULL;
+    glu.beta      = NULL;
+    glu.stor_type = DLP_INVALID;
+    glu.d         = D.data();
+    glu.ld_d      = (md_t)1 << 30;
+    md.glu        = &glu;
+
+    aocl_gemm_bf16bf16f32of32('R', 'N', 'N', m, n, k, 1.0f, A.data(), lda, 'N',
+                              B.data(), ldb, 'N', 0.0f, C.data(), ldc, &md);
+
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_LEADING_DIMENSION);
+    EXPECT_EQ(D[0], 0.0f);
+}
+
 // Positive control: a valid even-width single GLU must not be rejected by the
 // validation guards. On the AVX512-BF16 BF16 datapath it runs and returns
 // SUCCESS. On machines without AVX512-BF16 (e.g. Zen3) the BF16 API reroutes to

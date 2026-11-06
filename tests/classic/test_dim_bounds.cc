@@ -29,8 +29,8 @@
 /*
  * Regression tests for the leading-dimension / matrix-dimension upper-bound
  * checks in the classic input validators. Each public entry point must reject
- * a dimension above DLP_MAX_GEMM_DIM (INT32_MAX) via its error code rather than
- * feeding the out-of-range value into stride/offset math (CWE-190 -> -787/125).
+ * a dimension above DLP_MAX_GEMM_DIM via its error code rather than feeding
+ * the out-of-range value into stride/offset math (CWE-190 -> CWE-787/125).
  *
  * These call the raw C API directly (rather than the UAL harness) so the
  * assertions land on the validator's error code. Note that a *missing* bound
@@ -48,9 +48,12 @@
 
 namespace {
 
-// One past DLP_MAX_GEMM_DIM (== INT32_MAX). md_t is int64_t, so this is a live
-// value the bound must catch, not an overflowed constant.
+// Well above DLP_MAX_GEMM_DIM. md_t is int64_t, so this is a live value the
+// bound must catch, not an overflowed constant.
 constexpr md_t kOverMax = static_cast<md_t>(INT32_MAX) + 100;
+
+// 2^30 used to pass the old INT32_MAX cap and was then consumed as a stride.
+constexpr md_t kBillionScale = (md_t)1 << 30;
 
 dlp_metadata_t
 make_metadata()
@@ -204,4 +207,107 @@ TEST(DimBounds, UnreorderRejectsOversizedLdb)
     if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
         GTEST_SKIP() << "f32 unreorder not supported on this processor";
     EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_LEADING_DIMENSION);
+}
+
+// 2^30 is under the old INT32_MAX cap. It must now be rejected on its own,
+// with the other dimensions small enough that only the argument under test
+// trips the bound.
+TEST(DimBounds, GemmRejectsBillionScaleN)
+{
+    const md_t         m = 4, n = kBillionScale, k = 4;
+    std::vector<float> a((size_t)m * k, 1.0f), b((size_t)k * 4, 1.0f),
+        c((size_t)m * 4, 0.0f);
+    dlp_metadata_t md = make_metadata();
+
+    aocl_gemm_f32f32f32of32('r', 'n', 'n', m, n, k, 1.0f, a.data(), k, 'n',
+                            b.data(), 4, 'n', 0.0f, c.data(), 4, &md);
+
+    if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
+        GTEST_SKIP() << "f32 GEMM not supported on this processor";
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_MATRIX_DIMENSION);
+    EXPECT_EQ(c[0], 0.0f);
+}
+
+TEST(DimBounds, GemmRejectsBillionScaleLdb)
+{
+    // Column-major, B transposed: the minimum ldb is n, so 2^30 passes the
+    // lower bound and has to be stopped by the upper bound.
+    const md_t         m = 22, n = 16, k = 64;
+    std::vector<float> a((size_t)m * k, 1.0f), b((size_t)k * n, 1.0f),
+        c((size_t)m * n, 0.0f);
+    dlp_metadata_t md = make_metadata();
+
+    aocl_gemm_f32f32f32of32('c', 'n', 't', m, n, k, 1.0f, a.data(), m, 'n',
+                            b.data(), kBillionScale, 'n', 0.0f, c.data(), m,
+                            &md);
+
+    if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
+        GTEST_SKIP() << "f32 GEMM not supported on this processor";
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_LEADING_DIMENSION);
+    EXPECT_EQ(c[0], 0.0f);
+}
+
+// GELU / softmax return void. A rejected call must leave the buffer alone.
+// A missing bound walks off this allocation and the process dies.
+TEST(DimBounds, L1OpsRejectBillionScaleLengthAndStride)
+{
+    std::vector<float> x(8, 3.5f);
+
+    aocl_gemm_gelu_tanh_f32(kBillionScale, x.data(), 1);
+    aocl_gemm_gelu_erf_f32(kBillionScale, x.data(), 1);
+    aocl_gemm_softmax_f32(kBillionScale, x.data(), 1);
+    for (float v : x)
+        EXPECT_EQ(v, 3.5f);
+
+    aocl_gemm_gelu_tanh_f32(4, x.data(), kBillionScale);
+    aocl_gemm_gelu_erf_f32(4, x.data(), kBillionScale);
+    aocl_gemm_softmax_f32(4, x.data(), kBillionScale);
+    for (float v : x)
+        EXPECT_EQ(v, 3.5f);
+
+    // Each of n and incx is under 2^28, but the last element index is not.
+    const md_t wide = ((md_t)1 << 27) + 1;
+    aocl_gemm_gelu_tanh_f32(3, x.data(), wide);
+    aocl_gemm_gelu_erf_f32(3, x.data(), wide);
+    aocl_gemm_softmax_f32(3, x.data(), wide);
+    for (float v : x)
+        EXPECT_EQ(v, 3.5f);
+}
+
+// The matrix_add operand's ldm is a leading dimension, so it gets the same
+// upper bound as lda/ldb/ldc.
+TEST(DimBounds, MatrixAddRejectsBillionScaleLdm)
+{
+    const md_t         m = 4, n = 4, k = 4;
+    std::vector<float> a(m * k, 1.0f), b(k * n, 1.0f), c(m * n, 0.0f);
+    std::vector<float> addend(m * n, 1.0f);
+
+    dlp_post_op_matrix_add add;
+    std::memset(&add, 0, sizeof(add));
+    add.matrix    = addend.data();
+    add.ldm       = kBillionScale;
+    add.stor_type = DLP_F32;
+    add.sf        = NULL;
+
+    DLP_POST_OP_TYPE seq[1] = { MATRIX_ADD };
+    dlp_metadata_t   md     = make_metadata();
+    md.seq_vector           = seq;
+    md.seq_length           = 1;
+    md.matrix_add           = &add;
+
+    aocl_gemm_f32f32f32of32('r', 'n', 'n', m, n, k, 1.0f, a.data(), k, 'n',
+                            b.data(), n, 'n', 0.0f, c.data(), n, &md);
+
+    if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
+        GTEST_SKIP() << "f32 GEMM not supported on this processor";
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_LEADING_DIMENSION);
+}
+
+TEST(DimBounds, GeluTanhStillRunsInRange)
+{
+    std::vector<float> x = { 1.0f, 2.0f, -1.0f, 0.5f };
+    aocl_gemm_gelu_tanh_f32((md_t)x.size(), x.data(), 1);
+    // AVX2 is the f32 baseline. A no-op here means the new bound rejected a
+    // legal vector.
+    EXPECT_NE(x[0], 1.0f);
 }

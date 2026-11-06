@@ -27,6 +27,7 @@
  */
 
 #include "dlp_gemm_post_ops.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 #include "gemm_utils/dlp_gemm_utils.h"
@@ -1035,6 +1036,12 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         __FILE__, __LINE__);
                     return DLP_CLSC_NULL_POINTER;
                 }
+                if ((metadata->matrix_add + m_i)->ldm > DLP_MAX_GEMM_DIM) {
+                    dlp_print_msg(" Post_op.matrix_add ldm exceeds the maximum "
+                                  "GEMM dimension. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_INVALID_LEADING_DIMENSION;
+                }
                 DLP_TYPE tmp_stor_type = dlp_gemm_get_stor_type(
                     (metadata->matrix_add + m_i)->stor_type);
 
@@ -1103,6 +1110,12 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         " Post_op.matrix_mul attributes are invalid. Exiting..",
                         __FILE__, __LINE__);
                     return DLP_CLSC_NULL_POINTER;
+                }
+                if ((metadata->matrix_mul + mul_i)->ldm > DLP_MAX_GEMM_DIM) {
+                    dlp_print_msg(" Post_op.matrix_mul ldm exceeds the maximum "
+                                  "GEMM dimension. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_INVALID_LEADING_DIMENSION;
                 }
                 DLP_TYPE tmp_stor_type = dlp_gemm_get_stor_type(
                     (metadata->matrix_mul + mul_i)->stor_type);
@@ -1233,6 +1246,12 @@ dlp_gemm_translate_glu_term_op(dlp_metadata_t*   metadata,
     if ((md_t)metadata->glu->ld_d < min_ld_d) {
         dlp_print_msg(" GLU ld_d is smaller than the D leading dimension "
                       "(I for row-major, m for column-major). Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_INVALID_LEADING_DIMENSION;
+    }
+    if ((md_t)metadata->glu->ld_d > DLP_MAX_GEMM_DIM) {
+        dlp_print_msg(" GLU ld_d exceeds the maximum GEMM dimension. "
+                      "Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_INVALID_LEADING_DIMENSION;
     }

@@ -1088,6 +1088,45 @@ TEST(ReorderRefValidation, RejectsNrNotMultipleOfMinNr)
     EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_BLOCK_PARAMS);
 }
 
+// 'W' is a distinct matrix tag from 'B'. The size calculator and the
+// reference reorder reject it. The tuned reorder must do the same, and
+// must not write a packed buffer the size API said was 0 bytes.
+TEST(ReorderTunedValidation, RejectsWMatrix)
+{
+    const md_t         k = 8, n = 8;
+    std::vector<float> src(k * n, 1.0f);
+
+    // Size the packed buffer from the API. The packer pads n to NR, which is
+    // 16 on Zen3 but 64 on Zen4 and Zen5, so a fixed allowance overflows.
+    dlp_metadata_t szmd = fresh_metadata();
+    const msz_t    bytes =
+        aocl_get_reorder_buf_size_f32f32f32of32('r', 'n', 'B', k, n, &szmd);
+    if (szmd.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+        GTEST_SKIP() << "f32 reorder not supported on this processor";
+    }
+    ASSERT_EQ(szmd.error_hndl.error_code, DLP_CLSC_SUCCESS);
+    ASSERT_GT(bytes, (msz_t)0);
+    std::vector<float> dst(bytes / sizeof(float), 0.0f);
+
+    dlp_metadata_t md = fresh_metadata();
+    aocl_reorder_f32f32f32of32('r', 'n', 'B', src.data(), dst.data(), k, n, n,
+                               &md);
+    ASSERT_EQ(md.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+    dst.assign(dst.size(), 0.0f);
+    md = fresh_metadata();
+    aocl_reorder_f32f32f32of32('r', 'n', 'W', src.data(), dst.data(), k, n, n,
+                               &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+    EXPECT_EQ(dst[0], 0.0f);
+
+    md = fresh_metadata();
+    msz_t sz =
+        aocl_get_reorder_buf_size_f32f32f32of32('r', 'n', 'W', k, n, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+    EXPECT_EQ(sz, (msz_t)0);
+}
+
 TEST(ReorderRefValidation, RejectsWMatrix)
 {
     const md_t         k = 32, n = 32;

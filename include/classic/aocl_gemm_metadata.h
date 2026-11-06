@@ -476,6 +476,9 @@ typedef struct
  *   - `n` (columns of B) must equal `2*I`, hence even (`I` itself may be odd).
  *   - `C` is `M x 2I`, so `ldc >= 2I` is required (else
  *     `DLP_CLSC_INVALID_LEADING_DIMENSION`).
+ *   - `ld_d` must be at least I (row-major) or m (column-major), and must
+ *     not exceed the same dimension limit applied to m, n, k, and ldc
+ *     (else `DLP_CLSC_INVALID_LEADING_DIMENSION`).
  */
 typedef struct
 {
@@ -486,7 +489,8 @@ typedef struct
                     in the caller's storage order. */
     md_t ld_d; /**< Leading dimension of `d`: row stride (>= I) for row-major,
                     column stride (>= m) for column-major. May exceed the
-                    minimum for padded/embedded D. */
+                    minimum for padded/embedded D. Rejected when it exceeds
+                    the same dimension limit applied to m, n, k, and ldc. */
     /*
      * Scalar convention: neither current variant takes a runtime scalar.
      * GATED_SWIGLU is SiLU(gate)*up; GATED_SWIGLU_AND_MUL is the gpt-oss
