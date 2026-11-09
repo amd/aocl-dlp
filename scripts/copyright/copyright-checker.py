@@ -72,6 +72,15 @@ COPYRIGHT_HEADER = """
  */
 """
 
+# Clause starts and the disclaimer ending. A header that drops or rewrites one
+# of these fails, whatever its line wrapping.
+REQUIRED_LICENSE_CLAUSES = [
+    "1. Redistributions of source code must retain the above copyright notice",
+    "2. Redistributions in binary form must reproduce the above copyright notice",
+    "3. Neither the name of the copyright holder nor the names of its contributors",
+    "EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE",
+]
+
 def get_file_creation_year(file_path):
     """
     Get the year the file was first committed to git.
@@ -120,6 +129,18 @@ def check_copyright(file_path):
             copyright_text = 'Copyright © Advanced Micro Devices, Inc., or its affiliates.'
             if copyright_text not in content:
                 print(f"File {file_path} is missing the copyright header")
+                return False
+
+            # Layout varies across files, so compare the license clauses in
+            # whitespace-normalized form rather than byte-for-byte.
+            header = " ".join(
+                re.sub(r'^\s*(/\*|\*/|\*|//)?', '', line)
+                for line in content[content.index(copyright_text):].split('\n')[:40]
+            )
+            header = " ".join(header.split())
+            missing = [clause for clause in REQUIRED_LICENSE_CLAUSES if clause not in header]
+            if missing:
+                print(f"File {file_path} has a non-standard license header, missing: {missing}")
                 return False
 
             return True
