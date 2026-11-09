@@ -31,6 +31,9 @@
 
 #include "classic/aocl_bf16_type.h"
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
+
+DLP_BEGIN_EXTERN_C
 
 /**
  * @brief Performs GELU activation (tanh approximation) on a float vector.
@@ -70,5 +73,7 @@ aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx);
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx);
+
+DLP_END_EXTERN_C
 
 #endif // AOCL_DLP_UTIL_INTERFACE_H

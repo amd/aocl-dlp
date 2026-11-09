@@ -49,7 +49,7 @@
  * so n = 1..64 exercises all of them plus their interactions.
  */
 
-#include "aocl_dlp.h"
+#include "classic/aocl_util_interface_apis.h"
 #include <cmath>
 #include <cstddef>
 #include <gtest/gtest.h>

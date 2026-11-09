@@ -59,6 +59,22 @@
 #ifndef DLP_COMPAT_H
 #define DLP_COMPAT_H
 
+#ifdef __cplusplus
+#define DLP_BEGIN_EXTERN_C                                                     \
+    extern "C"                                                                 \
+    {
+#define DLP_END_EXTERN_C }
+#define DLP_BEGIN_EXTERN_CXX                                                   \
+    extern "C++"                                                               \
+    {
+#define DLP_END_EXTERN_CXX }
+#else
+#define DLP_BEGIN_EXTERN_C
+#define DLP_END_EXTERN_C
+#define DLP_BEGIN_EXTERN_CXX
+#define DLP_END_EXTERN_CXX
+#endif
+
 /* ======================================================================
  * 1. NOMINMAX — must come before any Windows header
  * ====================================================================== */
@@ -185,7 +201,9 @@ __builtin_clz(unsigned int x)
 #endif
 
 #ifdef __cplusplus
+DLP_BEGIN_EXTERN_CXX
 #include <limits>
+DLP_END_EXTERN_CXX
 #define DLP_FLOAT_INF (std::numeric_limits<float>::infinity())
 #else
 #define DLP_FLOAT_INF ((float)DLP_INF)
@@ -270,14 +288,9 @@ __builtin_clz(unsigned int x)
  * source interface while mapping VCOMP to its OpenMP 2.0 boolean control.
  * ====================================================================== */
 #if defined(_OPENMP)
-#ifdef __cplusplus
-extern "C++"
-{
-#endif
+DLP_BEGIN_EXTERN_CXX
 #include <omp.h>
-#ifdef __cplusplus
-}
-#endif
+DLP_END_EXTERN_CXX
 #if defined(_MSC_VER)
 #define dlp_omp_set_nesting(levels) omp_set_nested(((levels) > 1) ? 1 : 0)
 #else

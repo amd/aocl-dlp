@@ -31,8 +31,6 @@
 
 #include "classic/dlp_macros.h"
 
-DLP_BEGIN_EXTERN_C
-
 #include "classic/aocl_bf16_type.h"
 #include "classic/aocl_eltwise_ops_interface_apis.h"
 #include "classic/aocl_fp16_type.h"
@@ -42,7 +40,5 @@ DLP_BEGIN_EXTERN_C
 #include "classic/aocl_util_interface_apis.h"
 #include "classic/dlp_base_types.h"
 #include "classic/dlp_defines.h"
-
-DLP_END_EXTERN_C
 
 #endif // DLP_CLASSIC_AOCL_DLP_H

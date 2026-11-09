@@ -40,7 +40,9 @@
  * "a dimension bound regressed", not as test-harness flakiness.
  */
 
-#include "aocl_dlp.h"
+#include "classic/aocl_eltwise_ops_interface_apis.h"
+#include "classic/aocl_gemm_interface_apis.h"
+#include "classic/aocl_util_interface_apis.h"
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>

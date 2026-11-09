@@ -32,6 +32,9 @@
 #include "classic/aocl_bf16_type.h"
 #include "classic/aocl_gemm_metadata.h"
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
+
+DLP_BEGIN_EXTERN_C
 
 /**
  * @brief Elementwise operations for GEMM output.
@@ -129,5 +132,7 @@ aocl_gemm_eltwise_ops_f32ou8(const char      order,
                              uint8_t*        b,
                              const md_t      ldb,
                              dlp_metadata_t* metadata);
+
+DLP_END_EXTERN_C
 
 #endif // AOCL_DLP_ELTWISE_OPS_INTERFACE_H

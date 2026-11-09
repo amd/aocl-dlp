@@ -30,6 +30,9 @@
 #define AOCL_DLP_GEMM_METADATA_H
 
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
+
+DLP_BEGIN_EXTERN_C
 
 #define AOCL_DLP_MAX_POST_OPS 8
 #define AOCL_DLP_MAX_PRE_OPS  2
@@ -614,5 +617,7 @@ typedef struct
     if ((metadata) != NULL) {                                                  \
         ((metadata)->error_hndl).error_code = err_no;                          \
     }
+
+DLP_END_EXTERN_C
 
 #endif // AOCL_DLP_GEMM_METADATA_H

@@ -46,20 +46,19 @@
  * 5. Environment variables / OpenMP / System cores (fallback)
  */
 
+// Keep this header as the first include inside caller-owned C linkage, before
+// GoogleTest can pull in <limits> and mask linkage errors.
+extern "C"
+{
+#include "classic/aocl_lib_interface_apis.h"
+}
+
+#include "threading/dlp_omp_runtime.h"
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <gtest/gtest.h>
-
-// Regression coverage: GCC's omp.h declares C++ templates.  Keeping the DLP
-// C API inside extern "C" verifies dlp_compat.h preserves C++ linkage for
-// that header when OpenMP is enabled.
-extern "C"
-{
-#include "classic/aocl_lib_interface_apis.h"
-}
-#include "threading/dlp_omp_runtime.h"
 
 // ============================================================================
 // TEST HELPERS

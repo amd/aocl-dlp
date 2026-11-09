@@ -30,8 +30,9 @@
 #define DLP_MACROS_H
 
 /*
- * All compiler-specific macros (DLP_ALWAYS_INLINE, DLP_ALIGN_PREFIX,
- * DLP_ALIGN_SUFFIX, DLP_ALIGNED_STRUCT) are defined in dlp_compat.h.
+ * DLP_ALWAYS_INLINE, DLP_ALIGN_PREFIX, DLP_ALIGN_SUFFIX,
+ * DLP_ALIGNED_STRUCT, DLP_BEGIN_EXTERN_C, DLP_END_EXTERN_C,
+ * DLP_BEGIN_EXTERN_CXX, and DLP_END_EXTERN_CXX are defined in dlp_compat.h.
  * This header re-exports them so existing #include "classic/dlp_macros.h"
  * sites continue to work unchanged.
  */
@@ -42,20 +43,6 @@
 #define DLP_ATTRIBUTE_USED [[gnu::used]]
 #else
 #define DLP_ATTRIBUTE_USED
-#endif
-
-#ifdef __cplusplus
-
-#define DLP_BEGIN_EXTERN_C                                                     \
-    extern "C"                                                                 \
-    {
-#define DLP_END_EXTERN_C }
-
-#else
-
-#define DLP_BEGIN_EXTERN_C
-#define DLP_END_EXTERN_C
-
 #endif
 
 #endif // DLP_MACROS_H

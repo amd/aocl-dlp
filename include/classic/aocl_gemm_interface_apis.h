@@ -33,6 +33,9 @@
 #include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_metadata.h"
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
+
+DLP_BEGIN_EXTERN_C
 
 /**
  * @brief Returns the size of the buffer (in bytes) required for the
@@ -2161,5 +2164,7 @@ aocl_batch_gemm_bf16u4f32obf16(const char*      order,
                                const char*      mem_format_a,
                                const char*      mem_format_b,
                                dlp_metadata_t** metadata);
+
+DLP_END_EXTERN_C
 
 #endif // AOCL_DLP_GEMM_INTERFACE_H

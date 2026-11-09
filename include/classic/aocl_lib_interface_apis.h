@@ -30,6 +30,9 @@
 #define AOCL_DLP_LIB_INTERFACE_H
 
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
+
+DLP_BEGIN_EXTERN_C
 
 // Threading runtime setters.
 
@@ -158,5 +161,7 @@ dlp_aocl_enable_instruction_query(void);
  */
 DLP_CLASSIC_EXPORT void
 dlp_version_query(int* major, int* minor, int* patch);
+
+DLP_END_EXTERN_C
 
 #endif // AOCL_DLP_LIB_INTERFACE_H
