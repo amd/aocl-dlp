@@ -535,3 +535,50 @@ TEST(WoqGranularity, BatchU4RejectsZpPerToken)
                     &bad.md);
     EXPECT_EQ(bad.md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
 }
+
+// The reorder must not write beyond the size reported for the reorder buffer,
+// including odd k where k is the contiguous dimension.
+TEST(WoqGranularity, S4ReorderStaysWithinReportedSize)
+{
+    SKIP_IF_NO_ISA_S4();
+    constexpr size_t  kGuardBytes = 64;
+    constexpr uint8_t kSentinel   = 0xA5;
+    const char        orders[]    = { 'R', 'C' };
+    const char        transes[]   = { 'N', 'T' };
+    const md_t        ns[]        = { 1, 15, 16, 17, 70 };
+
+    for (char order : orders) {
+        for (char trans : transes) {
+            for (md_t k = 1; k <= 9; ++k) {
+                for (md_t n : ns) {
+                    const bool kContiguous = (order == 'R') == (trans == 'T');
+                    const md_t ldb         = kContiguous ? k : n;
+
+                    dlp_metadata_t md;
+                    std::memset(&md, 0, sizeof(md));
+                    const msz_t size = aocl_get_reorder_buf_size_bf16s4f32of32(
+                        order, trans, 'B', k, n, &md);
+                    ASSERT_GT(size, 0u);
+
+                    std::vector<int8_t> in(
+                        static_cast<size_t>(k) * static_cast<size_t>(n) + 16);
+                    for (size_t i = 0; i < in.size(); ++i) {
+                        in[i] = static_cast<int8_t>(i * 37 + 11);
+                    }
+                    std::vector<uint8_t> out(size + kGuardBytes, kSentinel);
+
+                    aocl_reorder_bf16s4f32of32(
+                        order, trans, 'B', in.data(),
+                        reinterpret_cast<int8_t*>(out.data()), k, n, ldb, &md);
+
+                    for (size_t i = size; i < out.size(); ++i) {
+                        ASSERT_EQ(out[i], kSentinel)
+                            << "write past reorder size at byte " << i
+                            << " order=" << order << " trans=" << trans
+                            << " k=" << k << " n=" << n;
+                    }
+                }
+            }
+        }
+    }
+}

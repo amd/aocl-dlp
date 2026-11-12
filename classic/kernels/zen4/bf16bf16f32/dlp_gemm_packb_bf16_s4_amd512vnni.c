@@ -2236,10 +2236,7 @@ dlp_packb_nrlt16_bf16s4f32of32_col_major(int8_t*              pack_b_buffer,
 
             // store to pack_b buffer
             _mm256_mask_storeu_epi32(((pack_b_buffer + (((kr + 0) * NR)) / 2)),
-                                     msk0, b_reg[0]);
-            // store remaining elements after 8 elements are stored
-            _mm256_mask_storeu_epi32(
-                ((pack_b_buffer + 8 + (((kr + 0) * NR)) / 2)), msk0, b_reg[1]);
+                                     msk0, a_reg[0]);
         }
     }
 }
