@@ -45,6 +45,12 @@
 #include "optimizer/de_optimizer.hh"
 #include "utils/float16_types.hh"
 
+extern "C"
+{
+    bool dlp_gemm_post_op_list_has_jit_only_op(
+        const dlp_gemm_post_op* post_op_list);
+}
+
 namespace dlp::de {
 
 static const kernel_frame::kernelInfo INVALID_KERNEL_INFO{
@@ -175,9 +181,11 @@ class iQuantDEBackend : public thread_partition::gemmThreadPartitioner
         AOCL_DLP_MEMORY_TAG               mtag_a,
         AOCL_DLP_MEMORY_TAG               mtag_b,
         dlp_gemm_post_op*                 metadata,
-        dlp_group_op*                     group_ops,
+        dlp_quant_op_t*                   a_quant_op,
+        dlp_quant_op_t*                   b_quant_op,
         md_t                              mr_hint,
         md_t                              nr_hint,
+        md_t                              mc_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
         dlp_gemm_thread_info_t*           thread_info) = 0;
@@ -199,11 +207,14 @@ class iQuantDEBackend : public thread_partition::gemmThreadPartitioner
         AOCL_DLP_MEMORY_TAG               mtag_a,
         AOCL_DLP_MEMORY_TAG               mtag_b,
         dlp_gemm_post_op*                 metadata,
-        dlp_group_op*                     group_ops,
+        dlp_quant_op_t*                   a_quant_op,
+        dlp_quant_op_t*                   b_quant_op,
         md_t                              mr_hint,
         md_t                              nr_hint,
+        md_t                              mc_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) = 0;
+        md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info) = 0;
 };
 
 class gemmF32DEBackend final : public iDEBackend
@@ -942,7 +953,7 @@ class gemmBF16DEBackend final : public iDEBackend
             nr       = 64;
             mr       = 1;
             k_unroll = 4;
-            kc       = 4096;
+            kc = 4096; // Tuned M=1 KC; BF16 GEMV does not accept KC tunables.
 
             // A reordered B was packed at whatever width the Reorder resolved
             // from the hints, and the M=1 kernel walks B at its own NR, so it
@@ -1897,7 +1908,8 @@ class quantS8FamilyDEBackendBase : public iQuantDEBackend
     bool gemvDispatchGateHolds(md_t                k,
                                md_t                kc_hint,
                                AOCL_DLP_MEMORY_TAG mtag_b,
-                               dlp_group_op*       group_ops,
+                               dlp_quant_op_t*     a_quant_op,
+                               dlp_quant_op_t*     b_quant_op,
                                md_t                c_downscale) const
     {
         // The sym-quant GEMV kernels dequantize into f32 accumulators and only
@@ -1911,14 +1923,14 @@ class quantS8FamilyDEBackendBase : public iQuantDEBackend
             return false;
         }
 
-        // group_ops points at the caller's metadata, where group_size 0 means
-        // one group spanning the full K. The frame compares against the
+        // a/b_quant_op point at the caller's metadata, where group_size 0
+        // means one group spanning the full K. The frame compares against the
         // already-normalised value, so normalise identically before testing.
         md_t group_size = 0;
-        if (group_ops->a_post_quant_op != nullptr) {
-            group_size = group_ops->a_post_quant_op->group_size;
-        } else if (group_ops->b_post_quant_op != nullptr) {
-            group_size = group_ops->b_post_quant_op->group_size;
+        if (a_quant_op != nullptr) {
+            group_size = a_quant_op->group_size;
+        } else if (b_quant_op != nullptr) {
+            group_size = b_quant_op->group_size;
         }
         if ((group_size == 0) || (group_size > k)) {
             group_size = k;
@@ -1966,14 +1978,17 @@ class gemmQuantS8DEBackend : public quantS8FamilyDEBackendBase
         AOCL_DLP_MEMORY_TAG                      mtag_a,
         AOCL_DLP_MEMORY_TAG                      mtag_b,
         dlp_gemm_post_op*                        metadata,
-        dlp_group_op*                            group_ops,
+        dlp_quant_op_t*                          a_quant_op,
+        dlp_quant_op_t*                          b_quant_op,
         md_t                                     mr_hint,
         md_t                                     nr_hint,
+        [[maybe_unused]] md_t                    mc_hint,
         md_t                                     kc_hint,
         md_t                                     c_downscale,
         [[maybe_unused]] dlp_gemm_thread_info_t* thread_info) override final
     {
-        if (!canGenerateKernelInfo || group_ops == nullptr) {
+        if (!canGenerateKernelInfo || (a_quant_op == nullptr)
+            || (b_quant_op == nullptr)) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
         }
 
@@ -2000,37 +2015,42 @@ class gemmQuantS8DEBackend : public quantS8FamilyDEBackendBase
         return gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
-            *kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, group_ops);
+            *kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, a_quant_op,
+            b_quant_op);
     }
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::quantKernelInfo getGemvQuantKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        md_t                              n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        dlp_group_op*                     group_ops,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        dlp::kernel_frame::kernelDatatype        k_dtype,
+        [[maybe_unused]] md_t                    m,
+        md_t                                     n,
+        md_t                                     k,
+        [[maybe_unused]] md_t                    rs_a,
+        [[maybe_unused]] md_t                    cs_a,
+        [[maybe_unused]] md_t                    rs_b,
+        [[maybe_unused]] md_t                    cs_b,
+        md_t                                     rs_c,
+        md_t                                     cs_c,
+        void*                                    alpha,
+        void*                                    beta,
+        AOCL_DLP_MEMORY_TAG                      mtag_a,
+        AOCL_DLP_MEMORY_TAG                      mtag_b,
+        dlp_gemm_post_op*                        metadata,
+        dlp_quant_op_t*                          a_quant_op,
+        dlp_quant_op_t*                          b_quant_op,
+        md_t                                     mr_hint,
+        md_t                                     nr_hint,
+        [[maybe_unused]] md_t                    mc_hint,
+        md_t                                     kc_hint,
+        md_t                                     c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t* thread_info) override final
     {
-        if (!canGenerateKernelInfo || group_ops == nullptr) {
+        if (!canGenerateKernelInfo || (a_quant_op == nullptr)
+            || (b_quant_op == nullptr)) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
         }
 
-        if (!gemvDispatchGateHolds(k, kc_hint, mtag_b, group_ops,
+        if (!gemvDispatchGateHolds(k, kc_hint, mtag_b, a_quant_op, b_quant_op,
                                    c_downscale)) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
         }
@@ -2075,7 +2095,7 @@ class gemmQuantS8DEBackend : public quantS8FamilyDEBackendBase
         return gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
             mr, nr, 0, k_unroll, kc_hint, 0, alphaScalingType, betaScalingType,
             mtag_a, mtag_b, false, false, false, *kInstPref, c_downscale,
-            k_dtype, rs_c, cs_c, metadata, group_ops);
+            k_dtype, rs_c, cs_c, metadata, a_quant_op, b_quant_op);
     }
 };
 
@@ -2107,14 +2127,17 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
         AOCL_DLP_MEMORY_TAG               mtag_a,
         AOCL_DLP_MEMORY_TAG               mtag_b,
         dlp_gemm_post_op*                 metadata,
-        dlp_group_op*                     group_ops,
+        dlp_quant_op_t*                   a_quant_op,
+        dlp_quant_op_t*                   b_quant_op,
         md_t                              mr_hint,
         md_t                              nr_hint,
+        [[maybe_unused]] md_t             mc_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
         dlp_gemm_thread_info_t*           thread_info) override final
     {
-        if (!canGenerateKernelInfo || group_ops == nullptr) {
+        if (!canGenerateKernelInfo || (a_quant_op == nullptr)
+            || (b_quant_op == nullptr)) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
         }
 
@@ -2147,7 +2170,8 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
         auto qKI = gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
-            *kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, group_ops);
+            *kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, a_quant_op,
+            b_quant_op);
 
         static constexpr dlp_gemm_thread_info_t noThreadInfo{};
         const dlp_gemm_thread_info_t&           threads =
@@ -2187,32 +2211,36 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::quantKernelInfo getGemvQuantKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        md_t                              n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        dlp_group_op*                     group_ops,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        dlp::kernel_frame::kernelDatatype        k_dtype,
+        [[maybe_unused]] md_t                    m,
+        md_t                                     n,
+        md_t                                     k,
+        [[maybe_unused]] md_t                    rs_a,
+        [[maybe_unused]] md_t                    cs_a,
+        [[maybe_unused]] md_t                    rs_b,
+        [[maybe_unused]] md_t                    cs_b,
+        md_t                                     rs_c,
+        md_t                                     cs_c,
+        void*                                    alpha,
+        void*                                    beta,
+        AOCL_DLP_MEMORY_TAG                      mtag_a,
+        AOCL_DLP_MEMORY_TAG                      mtag_b,
+        dlp_gemm_post_op*                        metadata,
+        dlp_quant_op_t*                          a_quant_op,
+        dlp_quant_op_t*                          b_quant_op,
+        md_t                                     mr_hint,
+        md_t                                     nr_hint,
+        [[maybe_unused]] md_t                    mc_hint,
+        md_t                                     kc_hint,
+        md_t                                     c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t* thread_info) override final
     {
-        if (!canGenerateKernelInfo || group_ops == nullptr) {
+        if (!canGenerateKernelInfo || (a_quant_op == nullptr)
+            || (b_quant_op == nullptr)) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
         }
 
-        if (!gemvDispatchGateHolds(k, kc_hint, mtag_b, group_ops,
+        if (!gemvDispatchGateHolds(k, kc_hint, mtag_b, a_quant_op, b_quant_op,
                                    c_downscale)) {
             return INVALID_GEMM_QUANT_KERNEL_INFO;
         }
@@ -2259,7 +2287,356 @@ class gemmQuantS8S4DEBackend final : public quantS8FamilyDEBackendBase
         return gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
             mr, nr, 0, k_unroll, kc_hint, 0, alphaScalingType, betaScalingType,
             mtag_a, mtag_b, false, false, false, *kInstPref, c_downscale,
-            k_dtype, rs_c, cs_c, metadata, group_ops);
+            k_dtype, rs_c, cs_c, metadata, a_quant_op, b_quant_op);
+    }
+};
+
+// Shared WOQ bf16×{s4,u4} quant DE (s8s4-style ownership): chooses widen site,
+// publishes the IC/JC split, and builds qKI without calling gemmBF16DEBackend.
+// Pre-widen GEMM keeps table MR/NR (no skinny-N bump); pre-widen GEMV applies
+// the classic BF16 gemv tiles. Codegen is the bf16s4 quant JIT (BF16 under the
+// hood) registered in the WOQ datatype bucket. Group-aligned kc_hint is always
+// used. MC for the widen-site rule comes in as mc_hint (from the caller's
+// cntx).
+class gemmQuantBf16WoqDEBackend final : public iQuantDEBackend
+{
+    bool                                isAvx512;
+    bool                                isAvx512Bf16;
+    kernel_frame::kernelInstrPreference eKernelInstPref;
+    bool                                canGenerateKernelInfo;
+
+    // Match dlp_gemm_bf16bf16f32of32_get_threading / gemmBF16DEBackend so the
+    // split published here is the one the OpenMP decorator will honour.
+    DLP_ALWAYS_INLINE void adjustWays(md_t  mr,
+                                      md_t  nr,
+                                      md_t  m,
+                                      md_t  n,
+                                      md_t& nThreads,
+                                      md_t& icWays,
+                                      md_t& jcWays) const override final
+    {
+        const md_t mrBlks = (m + mr - 1) / mr;
+
+        if (mrBlks >= icWays) {
+            thread_partition::adjustIcJcWays(mr, nr, m, n, nThreads, icWays,
+                                             jcWays);
+        }
+
+        if (utils::math::isPrime(nThreads)) {
+            thread_partition::adjustForPrimeThreadCount(mr, nr, m, n, nThreads,
+                                                        icWays, jcWays);
+        }
+    }
+
+    DLP_ALWAYS_INLINE
+    std::optional<kernel_frame::kernelInstrPreference> resolveInstrPref() const
+    {
+        if (eKernelInstPref != kernel_frame::kernelInstrPreference::none) {
+            return eKernelInstPref;
+        }
+        if (isAvx512Bf16) {
+            return kernel_frame::kernelInstrPreference::avx512_zmm_bf16_favour;
+        }
+        return std::nullopt;
+    }
+
+    DLP_ALWAYS_INLINE constexpr md_t getPrefetchDistance() const
+    {
+        // Same Zen5-tuned value as gemmBF16DEBackend.
+        constexpr md_t prefetch_c_dist = 40;
+        return prefetch_c_dist;
+    }
+
+    // Classic shape rule + JIT-only force-pre-widen. MC from caller cntx hint.
+    DLP_ALWAYS_INLINE bool choosePreWiden(
+        md_t                    m,
+        md_t                    n,
+        md_t                    k,
+        md_t                    mc,
+        md_t                    icWays,
+        md_t                    jcWays,
+        const dlp_gemm_post_op* metadata) const
+    {
+        if (dlp_gemm_post_op_list_has_jit_only_op(metadata)) {
+            return true;
+        }
+
+        const md_t MC   = mc;
+        const md_t m_ic = m / icWays;
+        const md_t n_jc = n / jcWays;
+
+        if (m_ic < MC) {
+            return false; // UNPACKED / in-kernel
+        }
+
+        constexpr md_t m_ic_panels  = 4;
+        constexpr md_t n_jc_min     = 1024;
+        constexpr md_t n_jc_max_mul = 10;
+        constexpr md_t k_shallow    = 8;
+
+        const bool fits_unpacked =
+            (m_ic <= m_ic_panels * MC) && (n_jc >= n_jc_min)
+            && (n_jc <= n_jc_max_mul * n_jc_min) && (k <= k_shallow);
+
+        return !fits_unpacked; // PACK_KC / pre-widen when not fits_unpacked
+    }
+
+    DLP_ALWAYS_INLINE static void publishWays(
+        dlp_gemm_thread_info_t* thread_info,
+        md_t                    num_threads,
+        md_t                    ic_ways,
+        md_t                    jc_ways)
+    {
+        if (thread_info == nullptr) {
+            return;
+        }
+        thread_info->num_threads = num_threads;
+        thread_info->ic_ways     = ic_ways;
+        thread_info->jc_ways     = jc_ways;
+    }
+
+    DLP_ALWAYS_INLINE kernel_frame::quantKernelInfo makePreWidenQKI(
+        kernel_frame::kernelDatatype        k_dtype,
+        md_t                                mr,
+        md_t                                nr,
+        md_t                                k_unroll,
+        md_t                                kc_hint,
+        md_t                                rs_c,
+        md_t                                cs_c,
+        void*                               alpha,
+        void*                               beta,
+        md_t                                k,
+        AOCL_DLP_MEMORY_TAG                 mtag_a,
+        AOCL_DLP_MEMORY_TAG                 mtag_b,
+        dlp_gemm_post_op*                   metadata,
+        dlp_quant_op_t*                     a_quant_op,
+        dlp_quant_op_t*                     b_quant_op,
+        md_t                                c_downscale,
+        kernel_frame::kernelInstrPreference kInstPref,
+        bool                                aliasMrSplit = false) const
+    {
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
+
+        // Group-aligned kc_hint (pack/reorder layout); never BF16 GEMV's 4096.
+        auto qKI = gemmDEBackendUtils::checkWoqAndCreateQuantKernelInfo(
+            mr, nr, 0, k_unroll, kc_hint, getPrefetchDistance(),
+            alphaScalingType, betaScalingType, mtag_a, mtag_b, false, false,
+            false, kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata,
+            a_quant_op, b_quant_op, /*skinnyN=*/false, aliasMrSplit);
+
+        if ((qKI.base.mr <= 0) || (qKI.base.nr <= 0)) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+        qKI.bQuant.mode = kernel_frame::opQuantMode::ready;
+        return qKI;
+    }
+
+    DLP_ALWAYS_INLINE kernel_frame::quantKernelInfo makeInKernelQKI(
+        kernel_frame::kernelDatatype        k_dtype,
+        md_t                                mr_hint,
+        md_t                                nr_hint,
+        md_t                                kc_hint,
+        md_t                                rs_c,
+        md_t                                cs_c,
+        void*                               alpha,
+        void*                               beta,
+        md_t                                k,
+        AOCL_DLP_MEMORY_TAG                 mtag_a,
+        AOCL_DLP_MEMORY_TAG                 mtag_b,
+        dlp_gemm_post_op*                   metadata,
+        dlp_quant_op_t*                     a_quant_op,
+        dlp_quant_op_t*                     b_quant_op,
+        md_t                                c_downscale,
+        kernel_frame::kernelInstrPreference kInstPref) const
+    {
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
+
+        constexpr md_t k_unroll = 1;
+        auto qKI = gemmDEBackendUtils::checkWoqAndCreateQuantKernelInfo(
+            mr_hint, nr_hint, 0, k_unroll, kc_hint, 0, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, false, kInstPref,
+            c_downscale, k_dtype, rs_c, cs_c, metadata, a_quant_op, b_quant_op);
+
+        if ((qKI.base.mr <= 0) || (qKI.base.nr <= 0)) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+        qKI.bQuant.mode = kernel_frame::opQuantMode::widenDequantInKernel;
+        return qKI;
+    }
+
+  public:
+    gemmQuantBf16WoqDEBackend();
+    ~gemmQuantBf16WoqDEBackend() override                       = default;
+    gemmQuantBf16WoqDEBackend(const gemmQuantBf16WoqDEBackend&) = delete;
+    gemmQuantBf16WoqDEBackend(gemmQuantBf16WoqDEBackend&&)      = delete;
+    gemmQuantBf16WoqDEBackend& operator=(const gemmQuantBf16WoqDEBackend&) =
+        delete;
+    gemmQuantBf16WoqDEBackend& operator=(gemmQuantBf16WoqDEBackend&&) = delete;
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::quantKernelInfo getGemmQuantKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        [[maybe_unused]] md_t             rs_a,
+        [[maybe_unused]] md_t             cs_a,
+        [[maybe_unused]] md_t             rs_b,
+        [[maybe_unused]] md_t             cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        dlp_quant_op_t*                   a_quant_op,
+        dlp_quant_op_t*                   b_quant_op,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              mc_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info) override final
+    {
+        if (!canGenerateKernelInfo || (b_quant_op == nullptr)) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        // No skinny-N MR bump: WOQ GEMM keeps the table tile (NR is also fixed
+        // for REORDERED B without gemm_hints).
+        const md_t mr = mr_hint;
+        const md_t nr = nr_hint;
+
+        static constexpr dlp_gemm_thread_info_t noThreadInfo{};
+        const dlp_gemm_thread_info_t&           threads =
+            (thread_info != nullptr) ? *thread_info : noThreadInfo;
+
+        md_t num_threads = threads.num_threads;
+        md_t ic_ways     = threads.ic_ways;
+        md_t jc_ways     = threads.jc_ways;
+        resolveWays(mr, nr, m, n, num_threads, ic_ways, jc_ways);
+        publishWays(thread_info, num_threads, ic_ways, jc_ways);
+
+        const bool pre_widen =
+            choosePreWiden(m, n, k, mc_hint, ic_ways, jc_ways, metadata);
+
+        auto kInstPref = resolveInstrPref();
+        if (!kInstPref.has_value()) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        if (!pre_widen) {
+            return makeInKernelQKI(k_dtype, mr_hint, nr_hint, kc_hint, rs_c,
+                                   cs_c, alpha, beta, k, mtag_a, mtag_b,
+                                   metadata, a_quant_op, b_quant_op,
+                                   c_downscale, *kInstPref);
+        }
+
+        constexpr md_t k_unroll = 1;
+        return makePreWidenQKI(k_dtype, mr, nr, k_unroll, kc_hint, rs_c, cs_c,
+                               alpha, beta, k, mtag_a, mtag_b, metadata,
+                               a_quant_op, b_quant_op, c_downscale, *kInstPref);
+    }
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::quantKernelInfo getGemvQuantKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        [[maybe_unused]] md_t             cs_a,
+        [[maybe_unused]] md_t             rs_b,
+        [[maybe_unused]] md_t             cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        dlp_quant_op_t*                   a_quant_op,
+        dlp_quant_op_t*                   b_quant_op,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              mc_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info) override final
+    {
+        if (!canGenerateKernelInfo || (b_quant_op == nullptr)) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        // Site choice first with table hints (same as GEMM). GEMV tiles apply
+        // only if pre-widen is selected, matching pre-DE WOQ (no skinny GEMM).
+        static constexpr dlp_gemm_thread_info_t noThreadInfo{};
+        const dlp_gemm_thread_info_t&           threads =
+            (thread_info != nullptr) ? *thread_info : noThreadInfo;
+
+        md_t num_threads = threads.num_threads;
+        md_t ic_ways     = threads.ic_ways;
+        md_t jc_ways     = threads.jc_ways;
+        resolveWays(mr_hint, nr_hint, m, n, num_threads, ic_ways, jc_ways);
+
+        const bool pre_widen =
+            choosePreWiden(m, n, k, mc_hint, ic_ways, jc_ways, metadata);
+
+        auto kInstPref = resolveInstrPref();
+        if (!kInstPref.has_value()) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        if (!pre_widen) {
+            publishWays(thread_info, num_threads, ic_ways, jc_ways);
+            return makeInKernelQKI(k_dtype, mr_hint, nr_hint, kc_hint, rs_c,
+                                   cs_c, alpha, beta, k, mtag_a, mtag_b,
+                                   metadata, a_quant_op, b_quant_op,
+                                   c_downscale, *kInstPref);
+        }
+
+        // Pre-widen GEMV tiles: match plain BF16 gemv (n==1 → 16x1; m==1 →
+        // 1 x panel NR). Keep group-aligned kc_hint; do not take BF16's 4096.
+        md_t mr           = mr_hint;
+        md_t nr           = nr_hint;
+        md_t k_unroll     = 1;
+        bool aliasMrSplit = false;
+
+        if (n == 1) {
+            mr           = 16;
+            nr           = 1;
+            k_unroll     = 1;
+            aliasMrSplit = (mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED)
+                               ? alias_detection::shouldUseMrSplit(
+                                     rs_a, sizeof(uint16_t), mr)
+                               : false;
+        } else if (m == 1) {
+            mr       = 1;
+            nr       = nr_hint; // reordered panel width (typically 64)
+            k_unroll = 4;
+        } else {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        // Re-resolve and publish with the GEMV tile so decorator IC/JC and
+        // blksz.MR (written from qKI) agree with the JIT.
+        num_threads = threads.num_threads;
+        ic_ways     = threads.ic_ways;
+        jc_ways     = threads.jc_ways;
+        resolveWays(mr, nr, m, n, num_threads, ic_ways, jc_ways);
+        publishWays(thread_info, num_threads, ic_ways, jc_ways);
+
+        return makePreWidenQKI(k_dtype, mr, nr, k_unroll, kc_hint, rs_c, cs_c,
+                               alpha, beta, k, mtag_a, mtag_b, metadata,
+                               a_quant_op, b_quant_op, c_downscale, *kInstPref,
+                               aliasMrSplit);
     }
 };
 

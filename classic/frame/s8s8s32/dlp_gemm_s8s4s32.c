@@ -283,7 +283,8 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
                 &(lcntx->dlp_quant_kernel_hndl), mc0, 1, k, (void*)a_use,
                 rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use, 0, 0,
                 (void*)c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
-                post_op_list, post_ops_attr, grp_post_ops_attr);
+                post_op_list, post_ops_attr, (dlp_gemm_pre_op_attr){ 0 },
+                grp_post_ops_attr);
         }
 
         if ((mtag_a == PACK) && (pack_a_buffer != NULL)) {
@@ -396,7 +397,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
                 rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use,
                 n_sub_updated, jc_cur_loop_rem, (void*)c_use, rs_c, cs_c,
                 (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr,
-                grp_post_ops_attr);
+                (dlp_gemm_pre_op_attr){ 0 }, grp_post_ops_attr);
 
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
@@ -977,7 +978,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                         (void*)b_kernel, rs_b_use, cs_b_use, 0, 0,
                         (void*)dlp_offset_or_null_f32(c_use_ic, jr), rs_c_use,
                         1, (void*)&alpha, (void*)&beta0, post_op_list,
-                        post_ops_attr, grp_post_ops_attr);
+                        post_ops_attr, (dlp_gemm_pre_op_attr){ 0 },
+                        grp_post_ops_attr);
 
                     post_ops_attr.b_sum_offset += NR;
                 }

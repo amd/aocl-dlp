@@ -31,7 +31,8 @@
  *
  * B is packed (two s4 nibbles per byte), reordered for the kernel, with scales
  * in metadata.b_quant_op.dequant_scale_factors (per-tensor, per-channel, or
- * per-group on N).
+ * per-group on N). Pass the same b_quant_op.group_size to reorder and GEMM
+ * (and unreorder); the packed buffer has no header for that value.
  */
 
 #include "aocl_dlp.h"
@@ -365,6 +366,18 @@ main()
                                         .dequant_scale_factors = &b_scl_group,
                                         .zero_point            = NULL };
     metadata.b_quant_op             = &b_quant_op_group;
+
+    // Reorder again with the same group_size GEMM/unreorder will use; the
+    // packed buffer has no header for KC alignment.
+    aocl_reorder_bf16s4f32of32('R', 'N', 'B', b_packed, b_reordered, k, n,
+                               ldb_in, &metadata);
+    if (metadata.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+        printf("aocl_reorder_bf16s4f32of32 (group) failed, error_code=%d\n",
+               (int)metadata.error_hndl.error_code);
+        free(b_scale_group);
+        goto cleanup;
+    }
+
     memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
 
     aocl_gemm_bf16s4f32of32('R', 'N', 'N', m, n, k, 1.0f, a, lda, 'N',

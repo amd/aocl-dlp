@@ -298,4 +298,60 @@ dlp_reorder_ref_unreorderb(void*       b,
                            md_t        cs_b,
                            md_t        n_threads);
 
+// Writes one nibble without synchronization. Call this only if a single
+// thread owns both nibbles in every byte it updates.
+DLP_INLINE void
+dlp_reorder_s4_set_nibble_nonatomic(int8_t* bytes, md_t index, int value)
+{
+    unsigned char* byte   = (unsigned char*)bytes + (index >> 1);
+    unsigned char  nibble = (unsigned char)(value & 0x0F);
+    unsigned char  old    = *byte;
+    unsigned char  next;
+
+    if ((index & 1) != 0) {
+        next = (unsigned char)((old & 0x0Fu) | (nibble << 4));
+    } else {
+        next = (unsigned char)((old & 0xF0u) | nibble);
+    }
+    *byte = next;
+}
+
+// Writes one nibble atomically. This preserves the other nibble when two
+// column partitions share an output byte.
+DLP_INLINE void
+dlp_reorder_s4_set_nibble_atomic(int8_t* bytes, md_t index, int value)
+{
+    unsigned char* byte   = (unsigned char*)bytes + (index >> 1);
+    unsigned char  nibble = (unsigned char)(value & 0x0F);
+    unsigned char  old    = dlp_atomic_load_u8_relaxed(byte);
+    unsigned char  next;
+
+    do {
+        if ((index & 1) != 0) {
+            next = (unsigned char)((old & 0x0Fu) | (nibble << 4));
+        } else {
+            next = (unsigned char)((old & 0xF0u) | nibble);
+        }
+    } while (!dlp_atomic_compare_exchange_u8_relaxed(byte, &old, next));
+}
+
+// Same JC/NC x PC/KC walk as dlp_reorder_ref_unreorderb(), in nibbles.
+// k_factor is the only layout choice: 2 is the bf16 pair interleave and 4
+// is the s8 VNNI-4 image after its linear nibble compression. Both use
+// dlp_reorder_elem_offset(). Atomic stores cover only a thread-range edge
+// whose byte is shared. That choice assumes an even NR.
+void
+dlp_reorder_s4_unreorderb(int8_t*       b,
+                          const int8_t* pack_b,
+                          md_t          k_factor,
+                          md_t          n,
+                          md_t          k,
+                          md_t          NR,
+                          md_t          min_NR,
+                          md_t          NC,
+                          md_t          KC,
+                          md_t          rs_b,
+                          md_t          cs_b,
+                          md_t          n_threads);
+
 #endif // DLP_GEMM_REORDER_LAYOUT_H

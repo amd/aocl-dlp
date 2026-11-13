@@ -754,6 +754,45 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
     dlp_unreorderb_nr64_bf16bf16f32of32(&b, &b_reorder, &rntm_g, &lcntx_g);
 }
 
+// Missing metadata or a missing B quant op is one group over K, which is
+// how reorder is called before scales exist. A present op uses the same
+// rule as dlp_gemm_translate_to_pre_ops_list(): dequantize or expand, 0
+// means full K, and a smaller group must be even.
+static dlp_clsc_err_t
+dlp_get_bf16s4_group_size_from_metadata(const dlp_metadata_t* metadata,
+                                        const md_t            k,
+                                        md_t*                 group_size)
+{
+    if (group_size == NULL) {
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    if ((metadata == NULL) || (metadata->b_quant_op == NULL)) {
+        *group_size = k;
+        return DLP_CLSC_SUCCESS;
+    }
+
+    const dlp_quant_op_t* op = metadata->b_quant_op;
+    if ((op->quant_op_kind != DLP_QUANT_OP_DEQUANTIZE)
+        && (op->quant_op_kind != DLP_QUANT_OP_EXPAND)) {
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    md_t gs = op->group_size;
+    if (gs == 0) {
+        gs = k;
+    }
+    if ((gs <= 0) || (gs > k)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+    if ((gs != k) && ((gs % 2) != 0)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    *group_size = gs;
+    return DLP_CLSC_SUCCESS;
+}
+
 msz_t
 aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
                                         const char      trans,
@@ -789,9 +828,10 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    // Only B is supported (same contract as s8s8 sym-quant / unreorder).
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return 0; // A reorder not supported.
+        return 0;
     }
 
     md_t n_reorder;
@@ -873,9 +913,10 @@ aocl_reorder_bf16s4f32of32(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    // Only B is supported (same contract as s8s8 sym-quant / unreorder).
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return; // A reorder not supported.
+        return;
     }
 
     // Initialize a local runtime with global settings if necessary. Note
@@ -883,13 +924,23 @@ aocl_reorder_bf16s4f32of32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(BF16S4F32OF32, &lcntx_g, metadata);
+    // Block sizes, SUP thresholds and GEMM hints are ignored. GEMM walks
+    // the table blocks, so applying them here would pack panels
+    // GEMM cannot read back. group_size selects KC alignment and must match
+    // the GEMM/unreorder metadata; the packed buffer has no header.
+    md_t group_size = 0;
+    err_no = dlp_get_bf16s4_group_size_from_metadata(metadata, k, &group_size);
     if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
+        dlp_print_msg(" Invalid group size for bf16s4f32of32 reorder.",
+                      __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
+    }
+
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
+    if (group_size != k) {
+        lcntx_g.blksz.KC =
+            dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
     }
 
     // Create dummy b_reorder obj.
@@ -906,4 +957,73 @@ aocl_reorder_bf16s4f32of32(const char      order,
     b.mat_type               = input_mat_type;
 
     dlp_reorderb_nr64_bf16s4f32of32(&b, &b_reorder, &rntm_g, &lcntx_g);
+}
+
+void
+aocl_unreorder_bf16s4f32of32(const char      order,
+                             const char      trans,
+                             const char      mat_type,
+                             const int8_t*   reorder_buf_addr,
+                             int8_t*         output_buf_addr,
+                             const md_t      k,
+                             const md_t      n,
+                             const md_t      ldb,
+                             dlp_metadata_t* metadata)
+{
+    DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
+
+    dlp_init_global_cntx();
+
+    dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
+    AOCL_DLP_UNREORDER_CHECK("bf16s4f32of32", order, trans, mat_type,
+                             reorder_buf_addr, output_buf_addr, k, n, ldb,
+                             err_no);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    dlp_trans_t dlp_trans;
+    dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
+
+    md_t rs_b = 0, cs_b = 0;
+    dlp_reorder_plain_strides(order, dlp_trans, ldb, &rs_b, &cs_b);
+
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
+    dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
+    if (input_mat_type != B_MATRIX) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        return;
+    }
+
+    // Must match the group_size used for reorder / GEMM; no packed header.
+    md_t group_size = 0;
+    err_no = dlp_get_bf16s4_group_size_from_metadata(metadata, k, &group_size);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Invalid group size for bf16s4f32of32 unreorder.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
+    // The s4 packer cuts a panel into 64-wide chunks, then a 48/32/16 fringe
+    // and a 16-wide tail. That is min_NR 16. Metadata block sizes are not
+    // applied, matching reorder.
+    const md_t min_NR = 16;
+    md_t       KC     = lcntx_g.blksz.KC;
+    if (group_size != k) {
+        KC = dlp_gemm_align_kc_to_group(KC, group_size);
+    }
+    if (!dlp_reorder_ref_blocks_legal(lcntx_g.blksz.NR, min_NR, KC, 2)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
+
+    dlp_rntm_t rntm_g;
+    dlp_rntm_init_from_global(&rntm_g);
+
+    dlp_reorder_s4_unreorderb(output_buf_addr, reorder_buf_addr, 2, n, k,
+                              lcntx_g.blksz.NR, min_NR, lcntx_g.blksz.NC, KC,
+                              rs_b, cs_b, rntm_g.num_threads);
 }

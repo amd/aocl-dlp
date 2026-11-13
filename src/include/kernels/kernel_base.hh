@@ -108,6 +108,9 @@ struct gemmParams : public kernelParams
     dlp_gemm_post_op*         kernelOpsList;
     dlp_gemm_post_op_attr     kernelOpsAttr;
     dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+    // WOQ / in-kernel nibble widen: scale+ZP tile state. Plain GEMM leaves
+    // this zeroed; future in-kernel JIT reads it like classic packsclb.
+    dlp_gemm_pre_op_attr preKernelOpsAttr;
 
     gemmParams(void*                     A,
                void*                     B,
@@ -127,7 +130,8 @@ struct gemmParams : public kernelParams
                void*                     beta_acc,
                dlp_gemm_post_op*         kernelOpsList,
                dlp_gemm_post_op_attr     kernelOpsAttr,
-               dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {})
+               dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {},
+               dlp_gemm_pre_op_attr      preKernelOpsAttr = {})
         : a(A)
         , b(B)
         , c(C_acc)
@@ -164,6 +168,7 @@ struct gemmParams : public kernelParams
         , kernelOpsList(kernelOpsList)
         , kernelOpsAttr(kernelOpsAttr)
         , grpKernelOpsAttr(grpKernelOpsAttr)
+        , preKernelOpsAttr(preKernelOpsAttr)
     {
     }
 
@@ -201,6 +206,7 @@ struct gemmParams : public kernelParams
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
         , grpKernelOpsAttr(other.grpKernelOpsAttr)
+        , preKernelOpsAttr(other.preKernelOpsAttr)
     {
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
@@ -246,6 +252,7 @@ struct gemmParams : public kernelParams
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
         , grpKernelOpsAttr(other.grpKernelOpsAttr)
+        , preKernelOpsAttr(other.preKernelOpsAttr)
     {
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
@@ -295,6 +302,7 @@ struct gemmParams : public kernelParams
         kernelOpsList    = other.kernelOpsList;
         kernelOpsAttr    = other.kernelOpsAttr;
         grpKernelOpsAttr = other.grpKernelOpsAttr;
+        preKernelOpsAttr = other.preKernelOpsAttr;
         return *this;
     }
 
@@ -541,6 +549,8 @@ struct gemvN1Params : public kernelParams
     md_t                      num_groups;  // K-groups covered by this call
     md_t                      group_start; // index of the first K-group
     dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+    // WOQ / in-kernel nibble widen pre-op state (see gemmParams).
+    dlp_gemm_pre_op_attr preKernelOpsAttr;
 
     // Constructor
     gemvN1Params(void*                     A,
@@ -558,7 +568,8 @@ struct gemvN1Params : public kernelParams
                  void*                     beta_acc,
                  dlp_gemm_post_op*         kernelOps        = nullptr,
                  dlp_gemm_post_op_attr     kernelOpsAttr    = {},
-                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {})
+                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {},
+                 dlp_gemm_pre_op_attr      preKernelOpsAttr = {})
         : a(A)
         , x(X)
         , y(Y)
@@ -590,6 +601,7 @@ struct gemvN1Params : public kernelParams
         , num_groups(0)
         , group_start(0)
         , grpKernelOpsAttr(grpKernelOpsAttr)
+        , preKernelOpsAttr(preKernelOpsAttr)
     {
     }
 
@@ -626,6 +638,7 @@ struct gemvN1Params : public kernelParams
         , num_groups(other.num_groups)
         , group_start(other.group_start)
         , grpKernelOpsAttr(other.grpKernelOpsAttr)
+        , preKernelOpsAttr(other.preKernelOpsAttr)
     {
     }
 
@@ -662,6 +675,7 @@ struct gemvN1Params : public kernelParams
         , num_groups(other.num_groups)
         , group_start(other.group_start)
         , grpKernelOpsAttr(other.grpKernelOpsAttr)
+        , preKernelOpsAttr(other.preKernelOpsAttr)
     {
     }
 
@@ -699,6 +713,7 @@ struct gemvN1Params : public kernelParams
         num_groups        = other.num_groups;
         group_start       = other.group_start;
         grpKernelOpsAttr  = other.grpKernelOpsAttr;
+        preKernelOpsAttr  = other.preKernelOpsAttr;
         return *this;
     }
 
@@ -791,6 +806,8 @@ struct gemvM1Params : public kernelParams
     md_t groups_per_panel;  // K-groups in a full KC panel
     md_t groups_last_panel; // K-groups in the trailing partial KC panel
     dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+    // WOQ / in-kernel nibble widen pre-op state (see gemmParams).
+    dlp_gemm_pre_op_attr preKernelOpsAttr;
 
     // Constructor
     gemvM1Params(void*                     X,
@@ -810,7 +827,8 @@ struct gemvM1Params : public kernelParams
                  void*                     beta_acc,
                  dlp_gemm_post_op*         kernelOps        = nullptr,
                  dlp_gemm_post_op_attr     kernelOpsAttr    = {},
-                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {})
+                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {},
+                 dlp_gemm_pre_op_attr      preKernelOpsAttr = {})
         : x(X)
         , b(B)
         , y(Y)
@@ -851,6 +869,7 @@ struct gemvM1Params : public kernelParams
         , groups_per_panel(0)
         , groups_last_panel(0)
         , grpKernelOpsAttr(grpKernelOpsAttr)
+        , preKernelOpsAttr(preKernelOpsAttr)
     {
     }
 
@@ -896,6 +915,7 @@ struct gemvM1Params : public kernelParams
         , groups_per_panel(other.groups_per_panel)
         , groups_last_panel(other.groups_last_panel)
         , grpKernelOpsAttr(other.grpKernelOpsAttr)
+        , preKernelOpsAttr(other.preKernelOpsAttr)
     {
     }
 
@@ -941,6 +961,7 @@ struct gemvM1Params : public kernelParams
         , groups_per_panel(other.groups_per_panel)
         , groups_last_panel(other.groups_last_panel)
         , grpKernelOpsAttr(other.grpKernelOpsAttr)
+        , preKernelOpsAttr(other.preKernelOpsAttr)
     {
     }
 
@@ -987,6 +1008,7 @@ struct gemvM1Params : public kernelParams
         groups_per_panel  = other.groups_per_panel;
         groups_last_panel = other.groups_last_panel;
         grpKernelOpsAttr  = other.grpKernelOpsAttr;
+        preKernelOpsAttr  = other.preKernelOpsAttr;
         return *this;
     }
 

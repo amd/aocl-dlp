@@ -161,10 +161,8 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
         }
 
         // Reject post-ops whose op_code exceeds DLP_CLASSIC_MAX_POST_OP_CODE.
-        // The 5-loop on this batch path always falls through to the classic
-        // bf16bf16 kern_fun_ptr, whose post_ops_labels[] dispatch table only
-        // covers op codes <= DLP_CLASSIC_MAX_POST_OP_CODE; codes above that
-        // (e.g. MISH = 15) read off the end of the table.
+        // Batch forces in-kernel widen (classic UNPACKED); that path's
+        // post_ops_labels[] only covers codes <= DLP_CLASSIC_MAX_POST_OP_CODE.
         if (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true) {
             dlp_print_msg(" Requested post-op is not supported in the "
                           "classic kernel.",
@@ -258,7 +256,15 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
 
         dlp_gemm_cntx_t lcntx_g =
             *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
-
+        // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for 'R' B.
+        if (pre_op_list->group_size != (uint64_t)k_local) {
+            lcntx_g.blksz.KC = dlp_gemm_align_kc_to_group(
+                lcntx_g.blksz.KC, pre_op_list->group_size);
+        }
+        // No quant DE on batch yet: force in-kernel widen so the 5-loop takes
+        // the classic UNPACKED path (packed BF16 JIT is single-GEMM only).
+        lcntx_g.dlp_quant_kernel_hndl.nibble_widen_site =
+            DLP_NIBBLE_WIDEN_IN_KERNEL;
         dlp_gemm_ops_bundle_t ops =
             DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
 
@@ -411,10 +417,8 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
         }
 
         // Reject post-ops whose op_code exceeds DLP_CLASSIC_MAX_POST_OP_CODE.
-        // The 5-loop on this batch path always falls through to the classic
-        // bf16bf16 kern_fun_ptr, whose post_ops_labels[] dispatch table only
-        // covers op codes <= DLP_CLASSIC_MAX_POST_OP_CODE; codes above that
-        // (e.g. MISH = 15) read off the end of the table.
+        // Batch forces in-kernel widen (classic UNPACKED); that path's
+        // post_ops_labels[] only covers codes <= DLP_CLASSIC_MAX_POST_OP_CODE.
         if (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true) {
             dlp_print_msg(" Requested post-op is not supported in the "
                           "classic kernel.",
@@ -504,7 +508,15 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
 
         dlp_gemm_cntx_t lcntx_g =
             *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
-
+        // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for 'R' B.
+        if (pre_op_list->group_size != (uint64_t)k_local) {
+            lcntx_g.blksz.KC = dlp_gemm_align_kc_to_group(
+                lcntx_g.blksz.KC, pre_op_list->group_size);
+        }
+        // No quant DE on batch yet: force in-kernel widen so the 5-loop takes
+        // the classic UNPACKED path (packed BF16 JIT is single-GEMM only).
+        lcntx_g.dlp_quant_kernel_hndl.nibble_widen_site =
+            DLP_NIBBLE_WIDEN_IN_KERNEL;
         dlp_gemm_ops_bundle_t ops =
             DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
 

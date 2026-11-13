@@ -102,6 +102,9 @@
 #endif
 
 #include <stdint.h>
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
 
 /* ======================================================================
  * 3. Force-inline
@@ -224,6 +227,48 @@ DLP_END_EXTERN_CXX
 /* ======================================================================
  * 10. Atomic operations
  * ====================================================================== */
+/*
+ * Relaxed byte load and compare-exchange. The s4 reference unreorder uses
+ * these to update one nibble without losing a concurrent update to the other
+ * nibble in the same byte.
+ */
+#if defined(_MSC_VER)
+static inline uint8_t
+dlp_atomic_load_u8_relaxed(const uint8_t* ptr)
+{
+    return (uint8_t)_InterlockedCompareExchange8((volatile char*)ptr, 0, 0);
+}
+
+static inline bool
+dlp_atomic_compare_exchange_u8_relaxed(uint8_t* ptr,
+                                       uint8_t* expected,
+                                       uint8_t  desired)
+{
+    uint8_t observed = (uint8_t)_InterlockedCompareExchange8(
+        (volatile char*)ptr, (char)desired, (char)*expected);
+    if (observed == *expected) {
+        return true;
+    }
+    *expected = observed;
+    return false;
+}
+#else
+static inline uint8_t
+dlp_atomic_load_u8_relaxed(const uint8_t* ptr)
+{
+    return __atomic_load_n(ptr, __ATOMIC_RELAXED);
+}
+
+static inline bool
+dlp_atomic_compare_exchange_u8_relaxed(uint8_t* ptr,
+                                       uint8_t* expected,
+                                       uint8_t  desired)
+{
+    return __atomic_compare_exchange_n(ptr, expected, desired, 0,
+                                       __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+}
+#endif
+
 #if defined(_MSC_VER)
 
 #define DLP_ATOMIC_LOAD_I64(ptr)                                               \

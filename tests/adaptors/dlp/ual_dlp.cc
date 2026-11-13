@@ -160,7 +160,8 @@ UalDlp::reorder(const Matrix&          in,
                 MatrixType             B_type,
                 MatrixType             C_type,
                 MatrixType             accType,
-                const GroupScaleParam* group_scale)
+                const GroupScaleParam* group_scale,
+                const WOQParam*        woq)
 {
     m_last_error_code = DLP_CLSC_SUCCESS;
 
@@ -219,6 +220,26 @@ UalDlp::reorder(const Matrix&          in,
         b_quant_op.src_type      = DLP_S4;
         b_quant_op.dst_type      = DLP_S8;
         b_quant_op.group_size    = group_scale->getGroupSize();
+        meta.b_quant_op          = &b_quant_op;
+    }
+
+    // bf16s4 and bf16u4 WOQ share the bf16s4 reorder layout. Its KC must
+    // match the partial quantization group that GEMM later puts in its local
+    // context, so pass the group to both the size query and reorder. No scale
+    // data is needed to pack nibbles; the API only consumes the op kind and
+    // group size here.
+    const bool woq_s4 =
+        (woq != nullptr)
+        && ((in.getMatrixType() == MatrixType::s4)
+            || (in.getMatrixType() == MatrixType::u4))
+        && (A_type == MatrixType::bf16) && (accType == MatrixType::f32)
+        && (C_type == MatrixType::f32 || C_type == MatrixType::bf16);
+
+    if (woq_s4) {
+        b_quant_op.quant_op_kind = DLP_QUANT_OP_DEQUANTIZE;
+        b_quant_op.src_type      = DLP_BF16;
+        b_quant_op.dst_type      = DLP_BF16;
+        b_quant_op.group_size    = woq->getGroupSize();
         meta.b_quant_op          = &b_quant_op;
     }
 

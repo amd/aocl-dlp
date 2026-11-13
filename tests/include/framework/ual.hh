@@ -251,6 +251,8 @@ class IUal
      * @param accType Accumulation type
      * @param group_scale Optional symmetric-quantization group-scale
      * parameters; when non-null selects the sym_quant reorder path
+     * @param woq Optional weight-only-quantization parameters. Its group size
+     * is required when reordering bf16s4/bf16u4 B for a grouped WOQ GEMM.
      * @return UALError Error code indicating success or failure
      */
     virtual UALError reorder(const Matrix&          in,
@@ -259,7 +261,8 @@ class IUal
                              MatrixType             B_type,
                              MatrixType             C_type,
                              MatrixType             accType,
-                             const GroupScaleParam* group_scale = nullptr) = 0;
+                             const GroupScaleParam* group_scale = nullptr,
+                             const WOQParam*        woq         = nullptr) = 0;
 
     /**
      * @brief Create a backend-specific execution plan

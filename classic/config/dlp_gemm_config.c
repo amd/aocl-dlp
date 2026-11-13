@@ -201,13 +201,14 @@ _dlp_gemm_cntx_init_func_map()
         DLP_GEMM_UNPACKB_FUNC_MAP_AVX512_VNNI_BF16
         DLP_GEMM_PACKSCLB_FUNC_MAP_AVX512_VNNI_BF16
 
-        // The BF16S4 packers execute vpmultishiftqb. That is the VBMI half
-        // of nibble widening, and it is not implied by AVX512-BF16. The
-        // GEMM entry points also require GFNI via
-        // dlp_cpuid_is_nibble_widen_supported().
+        // BF16S4/U4 packers execute vpmultishiftqb (VBMI), not implied by
+        // AVX512-BF16. s4 GEMM also requires GFNI via
+        // dlp_cpuid_is_nibble_widen_supported(); u4 is VBMI-only.
         if (dlp_cpuid_is_avx512vbmi_supported() == FALSE) {
             global_cntx_t_list[BF16S4F32OF32].packb_fun_ptr    = NULL;
             global_cntx_t_list[BF16S4F32OF32].packsclb_fun_ptr = NULL;
+            global_cntx_t_list[BF16U4F32OF32].packb_fun_ptr    = NULL;
+            global_cntx_t_list[BF16U4F32OF32].packsclb_fun_ptr = NULL;
         }
 
         // If arch is updated at runtime, it is expeceted to be honoured.

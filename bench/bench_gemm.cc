@@ -169,9 +169,9 @@ class OptimizedGemmBenchmark : public ConcreteUAL
         // Apply memory tag for B (reorder and pack are mutually exclusive)
         if (config.reorderB) {
             Matrix   B_reordered;
-            UALError rstat =
-                this->reorder(B_, B_reordered, a_type_, b_type_, c_type_,
-                              acc_type_, config.group_scale_param.get());
+            UALError rstat = this->reorder(
+                B_, B_reordered, a_type_, b_type_, c_type_, acc_type_,
+                config.group_scale_param.get(), config.woq_param.get());
             if (rstat != UALError::UAL_SUCCESS) {
                 // Kernel REJECTED this configuration during reorder (e.g. an
                 // unsupported tuning-knob combination). Mark the fixture as

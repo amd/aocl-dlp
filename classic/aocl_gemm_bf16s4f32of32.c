@@ -35,6 +35,9 @@
  *   before the micro-kernel.
  * - Zero-point (asymmetric WOQ) is not supported, only scale factor is
  * required.
+ * - metadata->b_quant_op->group_size must match aocl_reorder_bf16s4f32of32 /
+ *   aocl_unreorder_bf16s4f32of32; the packed buffer has no header, so a
+ *   mismatch silently uses the wrong KC.
  * - Two output variants: aocl_gemm_bf16s4f32of32 (float C),
  *   aocl_gemm_bf16s4f32obf16 (bfloat16 C).
  */
@@ -209,21 +212,45 @@ aocl_gemm_bf16s4f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
+    // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for mem_format_b 'R'.
+    if (pre_op_list->group_size != (uint64_t)k) {
+        lcntx_l.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC,
+                                                      pre_op_list->group_size);
+    }
 
-    lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
-    // Use BF16BF16F32OF32 kernel : S4->BF16 dequantization is done
-    // in the framework (dlp_gemm_bf16s4.c) via pre-ops before the micro-kernel.
-    dlp_init_and_get_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, order, mtag_a,
-                                 mtag_b, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c,
-                                 cs_c, (void*)&alpha, (void*)&beta,
-                                 post_op_list, &lcntx_l, DLP_F32);
+    // Seed ways for the DE; it publishes the resolved IC/JC split back into
+    // thread_info (same contract as plain BF16 / s8s4).
+    lcntx_l.thread_info.num_threads = rntm_g.num_threads;
+    lcntx_l.thread_info.ic_ways     = rntm_g.ic_ways;
+    lcntx_l.thread_info.jc_ways     = rntm_g.jc_ways;
+
+    // DE chooses pre-widen (BF16 JIT after packsclb) vs in-kernel widen.
+    lcntx_l.dlp_quant_kernel_hndl.kernel_base = NULL;
+    dlp_init_and_get_gemm_quant_kernel_hndl(
+        DLP_KERNEL_BF16S4F32OF32, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list, NULL,
+        metadata->b_quant_op, &lcntx_l, DLP_F32);
+
+    // Honour the DE split: decorator's get_threading takes pinned ways.
+    rntm_g.ic_ways = lcntx_l.thread_info.ic_ways;
+    rntm_g.jc_ways = lcntx_l.thread_info.jc_ways;
+
+    // Pre-widen generates via the bf16s4 quant JIT. A null handle here means
+    // generation failed — same hard fail as aocl_gemm_bf16bf16f32of32. In-
+    // kernel widen may leave kernel_base null and fall back to classic.
+    if ((lcntx_l.dlp_quant_kernel_hndl.kernel_base == NULL)
+        && (lcntx_l.dlp_quant_kernel_hndl.nibble_widen_site
+            != DLP_NIBBLE_WIDEN_IN_KERNEL)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
 
     // Defense-in-depth: if JIT init failed AND the post-op list contains an
     // op_code unsupported by the classic kernel, the 5-loop's classic
     // fallback would crash on goto *post_ops_labels[op_code]. Reject cleanly
     // in that combination; classic-supported post-ops can still proceed via
-    // the existing fallback.
-    if ((lcntx_l.dlp_kernel_hndl.kernel_base == NULL)
+    // the existing fallback. In-kernel + JIT-only is also refused by the DE.
+    if ((lcntx_l.dlp_quant_kernel_hndl.kernel_base == NULL)
         && (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true)) {
         dlp_print_msg(" Requested post-op is not supported in the "
                       "classic kernel.",
@@ -412,22 +439,45 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
+    // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for mem_format_b 'R'.
+    if (pre_op_list->group_size != (uint64_t)k) {
+        lcntx_l.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC,
+                                                      pre_op_list->group_size);
+    }
 
-    lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
-    // Use BF16BF16F32OBF16 kernel : S4->BF16 dequantization is done
-    // in the framework (dlp_gemm_bf16s4.c) via pre-ops before
-    // the micro-kernel.
-    dlp_init_and_get_kernel_hndl(DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a,
-                                 mtag_b, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c,
-                                 cs_c, (void*)&alpha, (void*)&beta,
-                                 post_op_list, &lcntx_l, DLP_BF16);
+    // Seed ways for the DE; it publishes the resolved IC/JC split back into
+    // thread_info (same contract as plain BF16 / s8s4).
+    lcntx_l.thread_info.num_threads = rntm_g.num_threads;
+    lcntx_l.thread_info.ic_ways     = rntm_g.ic_ways;
+    lcntx_l.thread_info.jc_ways     = rntm_g.jc_ways;
+
+    // DE chooses pre-widen (BF16 JIT after packsclb) vs in-kernel widen.
+    lcntx_l.dlp_quant_kernel_hndl.kernel_base = NULL;
+    dlp_init_and_get_gemm_quant_kernel_hndl(
+        DLP_KERNEL_BF16S4F32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list, NULL,
+        metadata->b_quant_op, &lcntx_l, DLP_BF16);
+
+    // Honour the DE split: decorator's get_threading takes pinned ways.
+    rntm_g.ic_ways = lcntx_l.thread_info.ic_ways;
+    rntm_g.jc_ways = lcntx_l.thread_info.jc_ways;
+
+    // Pre-widen generates via the bf16s4 quant JIT. A null handle here means
+    // generation failed — same hard fail as aocl_gemm_bf16bf16f32of32. In-
+    // kernel widen may leave kernel_base null and fall back to classic.
+    if ((lcntx_l.dlp_quant_kernel_hndl.kernel_base == NULL)
+        && (lcntx_l.dlp_quant_kernel_hndl.nibble_widen_site
+            != DLP_NIBBLE_WIDEN_IN_KERNEL)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
 
     // Defense-in-depth: if JIT init failed AND the post-op list contains an
     // op_code unsupported by the classic kernel, the 5-loop's classic
     // fallback would crash on goto *post_ops_labels[op_code]. Reject cleanly
     // in that combination; classic-supported post-ops can still proceed via
-    // the existing fallback.
-    if ((lcntx_l.dlp_kernel_hndl.kernel_base == NULL)
+    // the existing fallback. In-kernel + JIT-only is also refused by the DE.
+    if ((lcntx_l.dlp_quant_kernel_hndl.kernel_base == NULL)
         && (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true)) {
         dlp_print_msg(" Requested post-op is not supported in the "
                       "classic kernel.",

@@ -37,63 +37,6 @@
 #include "threading/dlp_gemm_thread_decor_openmp.h"
 #include "threading/dlp_gemm_thread_utils.h"
 
-/*
- * Shape- and capability-aware mtag_b selector for BF16S4/BF16U4 MP GEMM.
- * UNPACKED when: m_ic in [MC, 4*MC], n_jc in [1024, 10240], k <= 8.
- * Outside this region packing B recovers enough reuse to offset the overhead.
- *
- * Capability override: even when shape says UNPACKED, force PACK_KC if any
- * post-op has op_code > DLP_CLASSIC_MAX_POST_OP_CODE. The classic UNPACKED
- * kernel's post_ops_labels[] dispatch table has no entry for those codes,
- * whereas the JIT micro-kernel already supports them; PACK_KC steers the
- * 5-loop onto the JIT path.
- *
- * Workaround until the JIT kernels are completely supported and the
- * classic kernel dependency is removed.
- */
-DLP_INLINE AOCL_DLP_MEMORY_TAG
-dlp_mtag_b_pick(md_t                    m,
-                md_t                    n,
-                md_t                    k,
-                md_t                    ic_ways,
-                md_t                    jc_ways,
-                AOCL_DLP_OPERATION_TYPE mc_op_type,
-                const dlp_gemm_post_op* post_op_list)
-{
-    // NOTE: mc_op_type in this case is not the one corresponding to the API.
-    // Need to add a mechanism to ensure this wont result in undefined states.
-    md_t MC = dlp_gemm_get_block_size_MC_global_cntx(mc_op_type);
-
-    md_t m_ic = m / ic_ways;
-    md_t n_jc = n / jc_ways;
-
-    AOCL_DLP_MEMORY_TAG mtag;
-    if (m_ic < MC) {
-        mtag = UNPACKED;
-    } else {
-        // Thresholds
-        const md_t m_ic_panels  = 4;    // max MC-multiples for medium-M
-        const md_t n_jc_min     = 1024; // minimum n_jc: ~1 NC
-        const md_t n_jc_max_mul = 10;   // maximum n_jc: ~10 NC
-        const md_t k_shallow    = 8;    // shallow K: too little compute
-                                        // to justify packing
-
-        bool fits_unpacked =
-            (m_ic <= m_ic_panels * MC && n_jc >= n_jc_min
-             && n_jc <= n_jc_max_mul * n_jc_min && k <= k_shallow);
-
-        mtag = fits_unpacked ? UNPACKED : PACK_KC;
-    }
-
-    /* Capability override */
-    if ((mtag == UNPACKED)
-        && (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true)) {
-        mtag = PACK_KC;
-    }
-
-    return mtag;
-}
-
 #define DLP_GEN_RECONCILE_PACKAB(THREADING_SFX)                                \
     DLP_INLINE void dlp_gemm_##THREADING_SFX##_reconcile_packab(               \
         md_t m, md_t n, md_t k, md_t ic_ways, md_t jc_ways,                    \
@@ -117,12 +60,13 @@ DLP_GEN_RECONCILE_PACKAB(bf16bf16f32of32)
 DLP_GEN_RECONCILE_PACKAB(s8s8s32o32)
 DLP_GEN_RECONCILE_PACKAB(f16f16f16of16)
 DLP_GEN_RECONCILE_PACKAB(f32f16f32of32)
-DLP_GEN_RECONCILE_PACKAB(bf16s4f32of32)
-DLP_GEN_RECONCILE_PACKAB(bf16u4f32of32)
 DLP_GEN_RECONCILE_PACKAB(s8s8s32o32_sym_quant)
 DLP_GEN_RECONCILE_PACKAB(s8s4s32o32)
 DLP_GEN_RECONCILE_PACKAB(bf16s8s32os32)
 DLP_GEN_RECONCILE_PACKAB(f32s8s32os32)
+// bf16s4/u4: mtag_b is derived from nibble_widen_site inside the 5-loop.
+DLP_GEN_RECONCILE_PACKAB(bf16s4f32of32)
+DLP_GEN_RECONCILE_PACKAB(bf16u4f32of32)
 
 DLP_INLINE void
 dlp_gemm_f32f32f32of32_reconcile_packab(md_t                 m,
@@ -1208,12 +1152,9 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
  * bf16s4f32of32)
  * @param THREADING_SFX   Suffix for threading function (may differ from
  * DLP_GEMM_SFX)
- * @param HAS_MC_LOGIC    1 to enable MC-based mtag_b decision (MP variant), 0
- * otherwise
  */
 #define GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(                                 \
-    A_type, B_type, C_type, C_type_actual, DLP_GEMM_SFX, THREADING_SFX,        \
-    HAS_MC_LOGIC, MC_OP_TYPE)                                                  \
+    A_type, B_type, C_type, C_type_actual, DLP_GEMM_SFX, THREADING_SFX)        \
                                                                                \
     void dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(                    \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
@@ -1239,15 +1180,6 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
         /* Reconcile rntm->pack<a|b> and mtag_<a|b>*/                          \
         dlp_gemm_##THREADING_SFX##_reconcile_packab(                           \
             m, n, k, ic_ways, jc_ways, &mtag_a, &mtag_b, rntm_g, lcntx);       \
-                                                                               \
-        /* MP-specific: Decide mtag_b based on MC threshold */                 \
-        if (HAS_MC_LOGIC) {                                                    \
-            /* The cntx queried here is not the one corresponding to the API   \
-             but rather that of the underlying kernel used. Hence any updates  \
-             to the API cntx via metadata will be nullified here. */           \
-            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE,    \
-                                     ops ? ops->post_op_list : NULL);          \
-        }                                                                      \
                                                                                \
         /* Communication structure setup */                                    \
         dlp_task_comm_t  static_dlp_gemm_comms[DLP_NUM_STATIC_COMMS];          \
@@ -1297,57 +1229,46 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
 
 // BASE variants (standard post-ops only)
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    uint8_t, int8_t, int32_t, int32_t, u8s8s32o32, u8s8s32o32, 0, 0)
+    uint8_t, int8_t, int32_t, int32_t, u8s8s32o32, u8s8s32o32)
 
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    bfloat16, bfloat16, float, float, bf16bf16f32of32, bf16bf16f32of32, 0, 0)
+    bfloat16, bfloat16, float, float, bf16bf16f32of32, bf16bf16f32of32)
 
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float, float, float, float, f32f32f32of32, f32f32f32of32, 0, 0)
+    float, float, float, float, f32f32f32of32, f32f32f32of32)
 
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    int8_t, int8_t, int32_t, int32_t, s8s8s32o32, s8s8s32o32, 0, 0)
+    int8_t, int8_t, int32_t, int32_t, s8s8s32o32, s8s8s32o32)
 
 // FP16 variant
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float16, float16, float16, float16, f16f16f16of16, f16f16f16of16, 0, 0)
+    float16, float16, float16, float16, f16f16f16of16, f16f16f16of16)
 
 // F32×FP16→F32 mixed-precision variant
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float, float16, float, float, f32f16f32of32, f32f16f32of32, 0, 0)
+    float, float16, float, float, f32f16f32of32, f32f16f32of32)
 
-// MP variant (pre-ops + post-ops, mutable mtag_b, MC logic)
-GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
-                                      int8_t,
-                                      float,
-                                      float,
-                                      bf16s4f32of32,
-                                      bf16bf16f32of32,
-                                      1,
-                                      BF16BF16F32OF32)
-GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
-                                      uint8_t,
-                                      float,
-                                      float,
-                                      bf16u4f32of32,
-                                      bf16bf16f32of32,
-                                      1,
-                                      BF16BF16F32OF32)
+// MP bf16s4/u4: reuse BF16 threading/reconcile; 5-loop owns mtag_b from
+// nibble_widen_site.
+GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, int8_t, float, float, bf16s4f32of32, bf16bf16f32of32)
+GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, uint8_t, float, float, bf16u4f32of32, bf16bf16f32of32)
 
 // GRP variant (grouped post-ops, mutable mtag_b, C forced to float)
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, s8s8s32o32, 0, 0)
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, s8s8s32o32)
 
 // GRP s8s4 variant (grouped post-ops, reordered s4 B, C forced to float)
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    int8_t, int8_t, int32_t, float, s8s4s32o32, s8s8s32o32, 0, 0)
+    int8_t, int8_t, int32_t, float, s8s4s32o32, s8s8s32o32)
 
 // Q variants (quantization, mutable mtag_b)
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, s8s8s32o32, 0, 0)
+    bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, s8s8s32o32)
 
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float, int8_t, int32_t, int32_t, f32s8s32os32, s8s8s32o32, 0, 0)
+    float, int8_t, int32_t, int32_t, f32s8s32os32, s8s8s32o32)
 
 /**
  * @brief Unified batch GEMM OpenMP decorator macro.
@@ -1360,12 +1281,9 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
  * @param DLP_GEMM_SFX       Suffix for function name
  * @param THREADING_SFX    Suffix for threading function (may differ from
  * DLP_GEMM_SFX)
- * @param HAS_MC_LOGIC     1 to enable MC-based mtag_b decision (MP variant), 0
- * otherwise
  */
 #define GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(                           \
-    A_type, B_type, C_type, DLP_GEMM_SFX, THREADING_SFX, HAS_MC_LOGIC,         \
-    MC_OP_TYPE)                                                                \
+    A_type, B_type, C_type, DLP_GEMM_SFX, THREADING_SFX)                       \
     void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
@@ -1401,18 +1319,6 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
             dlp_task_comm_init(ic_ways, &cur_dlp_gemm_comms[i]);               \
         }                                                                      \
                                                                                \
-        /* m/n/k are scalar pointers shared across all batch GEMMs;            \
-         * compute mtag_b once before the parallel region. */                  \
-        AOCL_DLP_MEMORY_TAG mtag_b_mp = UNPACKED;                              \
-        if (HAS_MC_LOGIC) {                                                    \
-            /* The cntx queried here is not the one corresponding to the API   \
-             but rather that of the underlying kernel used. Hence any updates  \
-             to the API cntx via metadata will be nullified here. */           \
-            mtag_b_mp =                                                        \
-                dlp_mtag_b_pick(*m, *n, *k, ic_ways, jc_ways, MC_OP_TYPE,      \
-                                ops ? ops->post_op_list : NULL);               \
-        }                                                                      \
-                                                                               \
         _Pragma("omp parallel num_threads(n_threads)")                         \
         {                                                                      \
             /* Create a thread-local copy of the master thread's dlp_rntm_t.   \
@@ -1438,10 +1344,6 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
                                   &gemm_end);                                  \
                                                                                \
             for (iter_t i = gemm_start; i < gemm_end; i++) {                   \
-                if (HAS_MC_LOGIC) {                                            \
-                    mtag_b[i] = mtag_b_mp;                                     \
-                }                                                              \
-                                                                               \
                 dlp_gemm_rowvar_##DLP_GEMM_SFX(                                \
                     *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b,      \
                     *cs_b, *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, &rntm_l,  \
@@ -1455,44 +1357,38 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
 
 // Standard batch GEMM variants
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    bfloat16, bfloat16, float, bf16bf16f32of32, bf16bf16f32of32, 0, 0)
+    bfloat16, bfloat16, float, bf16bf16f32of32, bf16bf16f32of32)
 
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float, float, float, f32f32f32of32, f32f32f32of32, 0, 0)
+    float, float, float, f32f32f32of32, f32f32f32of32)
 
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    uint8_t, int8_t, int32_t, u8s8s32o32, u8s8s32o32, 0, 0)
+    uint8_t, int8_t, int32_t, u8s8s32o32, u8s8s32o32)
 
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    int8_t, int8_t, int32_t, s8s8s32o32, s8s8s32o32, 0, 0)
+    int8_t, int8_t, int32_t, s8s8s32o32, s8s8s32o32)
 
-// MP batch GEMM variant
+// MP batch bf16s4/u4: reuse BF16 batch threading.
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    bfloat16, int8_t, float, bf16s4f32of32, bf16bf16f32of32, 1, BF16BF16F32OF32)
+    bfloat16, int8_t, float, bf16s4f32of32, bf16bf16f32of32)
+
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, uint8_t, float, bf16u4f32of32, bf16bf16f32of32)
 
 // FP16 batch GEMM variant (reuse bf16bf16 threading)
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float16, float16, float16, f16f16f16of16, bf16bf16f32of32, 0, 0)
+    float16, float16, float16, f16f16f16of16, bf16bf16f32of32)
 
 // F32×FP16→F32 batch GEMM variant (reuse f32f32 threading)
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float, float16, float, f32f16f32of32, f32f32f32of32, 0, 0)
-
-// MP batch GEMM variant (bf16u4, reuse bf16bf16 threading with MC logic)
-GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
-                                            uint8_t,
-                                            float,
-                                            bf16u4f32of32,
-                                            bf16bf16f32of32,
-                                            1,
-                                            BF16BF16F32OF32)
+    float, float16, float, f32f16f32of32, f32f32f32of32)
 
 // Q batch GEMM variants
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    bfloat16, int8_t, int32_t, bf16s8s32os32, u8s8s32o32, 0, 0)
+    bfloat16, int8_t, int32_t, bf16s8s32os32, u8s8s32o32)
 
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
-    float, int8_t, int32_t, f32s8s32os32, u8s8s32o32, 0, 0)
+    float, int8_t, int32_t, f32s8s32os32, u8s8s32o32)
 
 /**
  * @brief GRP batch GEMM OpenMP decorator macro (C_type != C_type_actual).
@@ -1723,10 +1619,9 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
  * @param C_type          Type used for alpha/beta scalars
  * @param C_type_actual   Actual type of C matrix
  * @param DLP_GEMM_SFX      Suffix for function names
- * @param HAS_MC_LOGIC    1 to enable MC-based mtag_b decision, 0 otherwise
  */
 #define GEN_DLP_GEMM_DECORATOR_UNIFIED(A_type, B_type, C_type, C_type_actual,  \
-                                       DLP_GEMM_SFX, HAS_MC_LOGIC, MC_OP_TYPE) \
+                                       DLP_GEMM_SFX)                           \
                                                                                \
     DLP_ALIGN_FUNC(64)                                                         \
     void dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                           \
@@ -1746,15 +1641,6 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
         /* Reconcile rntm->pack<a|b> and mtag_<a|b>*/                          \
         dlp_gemm_##DLP_GEMM_SFX##_reconcile_packab(                            \
             m, n, k, ic_ways, jc_ways, &mtag_a, &mtag_b, rntm_g, lcntx);       \
-                                                                               \
-        /* MP-specific: Decide mtag_b based on MC threshold */                 \
-        if (HAS_MC_LOGIC) {                                                    \
-            /* The cntx queried here is not the one corresponding to the API   \
-             but rather that of the underlying kernel used. Hence any updates  \
-             to the API cntx via metadata will be nullified here. */           \
-            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE,    \
-                                     ops ? ops->post_op_list : NULL);          \
-        }                                                                      \
                                                                                \
         /* Single comm structure for single thread */                          \
         dlp_task_comm_t  static_dlp_gemm_comm;                                 \
@@ -1777,45 +1663,39 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
     }
 
 // BASE variants
-GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    uint8_t, int8_t, int32_t, int32_t, u8s8s32o32, 0, 0)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32)
 
 GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    bfloat16, bfloat16, float, float, bf16bf16f32of32, 0, 0)
+    bfloat16, bfloat16, float, float, bf16bf16f32of32)
 
-GEN_DLP_GEMM_DECORATOR_UNIFIED(float, float, float, float, f32f32f32of32, 0, 0)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(float, float, float, float, f32f32f32of32)
 
-GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    int8_t, int8_t, int32_t, int32_t, s8s8s32o32, 0, 0)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
 
 // FP16 variant
 GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    float16, float16, float16, float16, f16f16f16of16, 0, 0)
+    float16, float16, float16, float16, f16f16f16of16)
 
 // F32×FP16→F32 mixed-precision variant
-GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    float, float16, float, float, f32f16f32of32, 0, 0)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(float, float16, float, float, f32f16f32of32)
 
-// MP variant (pre-ops + post-ops, mutable mtag_b, MC logic)
-GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    bfloat16, int8_t, float, float, bf16s4f32of32, 1, BF16BF16F32OF32)
+// MP variant (pre-ops + post-ops; 5-loop owns mtag_b from nibble_widen_site)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32)
 
-GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    bfloat16, uint8_t, float, float, bf16u4f32of32, 1, BF16BF16F32OF32)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32)
 
 // GRP variant (grouped post-ops, mutable mtag_b, C forced to float)
 GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, 0, 0)
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
 
 // GRP s8s4 variant (grouped post-ops, reordered s4 B, C forced to float)
-GEN_DLP_GEMM_DECORATOR_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, 0, 0)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32)
 
 // Q variants (quantization, mutable mtag_b)
 GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, 0, 0)
+    bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32)
 
-GEN_DLP_GEMM_DECORATOR_UNIFIED(
-    float, int8_t, int32_t, int32_t, f32s8s32os32, 0, 0)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32)
 
 /**
  * @brief Unified non-OpenMP batch GEMM decorator macro.

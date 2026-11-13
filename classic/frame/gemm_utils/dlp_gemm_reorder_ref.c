@@ -278,3 +278,145 @@ dlp_reorder_ref_unreorderb(void*       b,
     dlp_reorder_ref_walk(b, (void*)pack_b, 0, elem_sz, k_factor, n, k, NR,
                          min_NR, NC, KC, rs_b, cs_b, n_threads);
 }
+
+static int
+dlp_s4_get_nibble(const int8_t* bytes, md_t index)
+{
+    unsigned char byte = (unsigned char)bytes[index >> 1];
+    if ((index & 1) != 0) {
+        return (int)((byte >> 4) & 0x0Fu);
+    }
+    return (int)(byte & 0x0Fu);
+}
+
+// A jc partition can share a byte only with the preceding or following
+// partition. The destination-index parity identifies which side of that byte
+// this nibble owns. When rs_b == n, the first/last logical columns also meet
+// at an unpadded row boundary.
+static bool
+dlp_s4_nibble_shares_byte_with_other_thread(
+    md_t dst, md_t col, md_t jc_start, md_t jc_end, md_t n, md_t rs_b)
+{
+    const bool shares_left =
+        (col == jc_start) && ((jc_start > 0) || (rs_b == n));
+    const bool shares_right =
+        ((col + 1) == jc_end) && ((jc_end < n) || (rs_b == n));
+
+    return (shares_left && ((dst & 1) != 0))
+           || (shares_right && ((dst & 1) == 0));
+}
+
+static void
+dlp_reorder_s4_decode_panel(const int8_t* packed,
+                            int8_t*       unpacked,
+                            md_t          nibble_origin,
+                            md_t          nc0,
+                            md_t          kc0,
+                            md_t          NR,
+                            md_t          min_NR,
+                            md_t          k_factor,
+                            md_t          rs_b,
+                            md_t          cs_b,
+                            bool          atomic_thread_edges,
+                            md_t          panel_jc,
+                            md_t          jc_start,
+                            md_t          jc_end,
+                            md_t          n)
+{
+    const md_t          kc0_padded = dlp_reorder_round_up(kc0, k_factor);
+    dlp_reorder_chunk_t chunk;
+
+    dlp_reorder_chunk_first(&chunk);
+    while (dlp_reorder_chunk_next(&chunk, nc0, NR, min_NR, kc0_padded)) {
+        for (iter_t kr = 0; kr < kc0; kr++) {
+            for (iter_t i = 0; i < chunk.cols; i++) {
+                md_t src =
+                    chunk.offset
+                    + dlp_reorder_elem_offset(kr, i, chunk.slot, k_factor);
+                md_t dst = nibble_origin + (kr * rs_b)
+                           + ((chunk.col_start + i) * cs_b);
+                const md_t col = panel_jc + chunk.col_start + i;
+                if (atomic_thread_edges
+                    && dlp_s4_nibble_shares_byte_with_other_thread(
+                        dst, col, jc_start, jc_end, n, rs_b)) {
+                    dlp_reorder_s4_set_nibble_atomic(
+                        unpacked, dst, dlp_s4_get_nibble(packed, src));
+                } else {
+                    dlp_reorder_s4_set_nibble_nonatomic(
+                        unpacked, dst, dlp_s4_get_nibble(packed, src));
+                }
+            }
+        }
+    }
+}
+
+void
+dlp_reorder_s4_unreorderb(int8_t*       b,
+                          const int8_t* pack_b,
+                          md_t          k_factor,
+                          md_t          n,
+                          md_t          k,
+                          md_t          NR,
+                          md_t          min_NR,
+                          md_t          NC,
+                          md_t          KC,
+                          md_t          rs_b,
+                          md_t          cs_b,
+                          md_t          n_threads)
+{
+    const md_t k_padded = dlp_reorder_round_up(k, k_factor);
+
+    n_threads = (n_threads > 0) ? n_threads : 1;
+
+#ifdef DLP_ENABLE_OPENMP
+    _Pragma("omp parallel num_threads(n_threads)")
+    {
+        dlp_task_id_t thread_jc;
+        thread_jc.n_way   = dlp_omp_get_num_threads();
+        thread_jc.work_id = dlp_omp_get_thread_num();
+#else
+    {
+        dlp_task_id_t thread_jc;
+        thread_jc.n_way   = 1;
+        thread_jc.work_id = 0;
+#endif
+
+        // dlp_thread_task_range() splits jc on NR boundaries. This assumes NR
+        // is even, so every boundary starts on an even column and a shared
+        // byte can occur only at a thread-range edge when cs_b == 1 and the
+        // odd rs_b flips nibble parity between rows. This logic will break if
+        // NR becomes odd: an odd boundary can split a byte on any column.
+        const bool atomic_thread_edges = (thread_jc.n_way > 1) && (n > NR)
+                                         && (k > 1) && (cs_b == 1)
+                                         && ((rs_b & 1) != 0);
+
+        md_t jc_start, jc_end;
+        dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
+
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
+            md_t nc0 = dlp_min((jc_end - jc), NC);
+
+            md_t jc_cur_loop     = jc;
+            md_t jc_cur_loop_rem = 0;
+            md_t n_sub_updated;
+
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
+                jc, n, NC, min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
+                &n_sub_updated);
+
+            for (iter_t pc = 0; pc < k; pc += KC) {
+                const md_t kc0        = dlp_min((k - pc), KC);
+                const md_t kc0_padded = dlp_reorder_round_up(kc0, k_factor);
+                const md_t off = (jc_cur_loop * k_padded) + (n_sub_updated * pc)
+                                 + (jc_cur_loop_rem * kc0_padded);
+
+                dlp_reorder_s4_decode_panel(
+                    pack_b + (off / 2), b, (rs_b * pc) + (jc * cs_b), nc0, kc0,
+                    NR, min_NR, k_factor, rs_b, cs_b, atomic_thread_edges, jc,
+                    jc_start, jc_end, n);
+            }
+
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+        }
+    }
+}

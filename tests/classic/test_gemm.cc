@@ -1323,7 +1323,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             dlp_reorder_status = ual_test_->reorder(
                 B, B_reordered, config_.a_type, config_.b_type, config_.c_type,
-                config_.acc_type, config_.group_scale_param.get());
+                config_.acc_type, config_.group_scale_param.get(),
+                config_.woq_param.get());
             const auto* dlp_ual = dynamic_cast<const UalDlp*>(ual_test_.get());
             const dlp_clsc_err_t dlp_reorder_error =
                 dlp_ual ? dlp_ual->lastErrorCode() : DLP_CLSC_FAILURE;
@@ -1355,7 +1356,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                 ref_reorder_status = ual_ref_->reorder(
                     B_ref, B_ref_reordered, config_.a_type, config_.b_type,
                     config_.c_type, config_.acc_type,
-                    config_.group_scale_param.get());
+                    config_.group_scale_param.get(), config_.woq_param.get());
 
                 if (ref_reorder_status == UALError::UAL_SUCCESS) {
                     // For bf16×s4 and bf16×u4, the reference uses row-major B

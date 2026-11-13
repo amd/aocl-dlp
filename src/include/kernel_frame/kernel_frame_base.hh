@@ -81,6 +81,12 @@ enum class kernelDatatype : uint8_t
     s8s8s32obf16_sym_quant,
     s8s4s32of32_sym_quant,
     s8s4s32obf16_sym_quant,
+    // WOQ bf16×{s4,u4}: frame dequants nibble→BF16; microkernel is BF16 JIT
+    // under a dedicated quant bucket so reorder KC/NR stay owned by this path.
+    bf16s4f32of32,
+    bf16s4f32obf16,
+    bf16u4f32of32,
+    bf16u4f32obf16,
     max_kernel_datatypes
 };
 

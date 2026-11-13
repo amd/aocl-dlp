@@ -183,6 +183,22 @@ class decisionEngine
             new gemmQuantS8S4DEBackend;
         quantBackends[quantTypeIdx][s8s4SymBf16DtIdx] =
             new gemmQuantS8S4DEBackend;
+
+        // WOQ bf16×{s4,u4}: shared DE class; MC comes in as mc_hint per call.
+        // Separate dtype buckets; one backend instance can serve all four.
+        auto bf16s4F32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::bf16s4f32of32);
+        auto bf16s4Bf16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::bf16s4f32obf16);
+        auto bf16u4F32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::bf16u4f32of32);
+        auto bf16u4Bf16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::bf16u4f32obf16);
+        auto* woqBackend = new gemmQuantBf16WoqDEBackend;
+        quantBackends[quantTypeIdx][bf16s4F32DtIdx]  = woqBackend;
+        quantBackends[quantTypeIdx][bf16s4Bf16DtIdx] = woqBackend;
+        quantBackends[quantTypeIdx][bf16u4F32DtIdx]  = woqBackend;
+        quantBackends[quantTypeIdx][bf16u4Bf16DtIdx] = woqBackend;
     }
 
     decisionEngine()
@@ -433,9 +449,11 @@ class decisionEngine
                                                              AOCL_DLP_MEMORY_TAG     mtag_a,
                                                              AOCL_DLP_MEMORY_TAG     mtag_b,
                                                              dlp_gemm_post_op*       metadata,
-                                                             dlp_group_op*           group_ops,
+                                                             dlp_quant_op_t*         a_quant_op,
+                                                             dlp_quant_op_t*         b_quant_op,
                                                              md_t                    mr_hint,
                                                              md_t                    nr_hint,
+                                                             md_t                    mc_hint,
                                                              md_t                    kc_hint,
                                                              md_t                    c_downscale,
                                                              dlp_gemm_thread_info_t* thread_info,
@@ -452,8 +470,9 @@ class decisionEngine
                 auto gemvKI =
                     backend->T::getGemvQuantKernelInfoForInputFastPath(
                         dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
-                        beta, mtag_a, mtag_b, metadata, group_ops, mr_hint,
-                        nr_hint, kc_hint, c_downscale);
+                        beta, mtag_a, mtag_b, metadata, a_quant_op, b_quant_op,
+                        mr_hint, nr_hint, mc_hint, kc_hint, c_downscale,
+                        thread_info);
 
                 // GEMV kernel has certain preconditions as below:
                 // 1. mtag_b == REORDERED
@@ -474,8 +493,8 @@ class decisionEngine
 
             return backend->T::getGemmQuantKernelInfoForInputFastPath(
                 dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
-                mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
-                c_downscale, thread_info);
+                mtag_a, mtag_b, metadata, a_quant_op, b_quant_op, mr_hint,
+                nr_hint, mc_hint, kc_hint, c_downscale, thread_info);
         }
 
         return INVALID_GEMM_QUANT_KERNEL_INFO;

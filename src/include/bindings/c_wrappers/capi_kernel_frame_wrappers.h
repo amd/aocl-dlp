@@ -168,8 +168,10 @@ typedef struct dlp_gemm_grp_post_op_attr_t
     DLP_TYPE zp_stor_type;
 } dlp_gemm_grp_post_op_attr;
 
-// Runtime B-side WOQ (bf16s4) scale / zp tile state, consumed by the
-// quant execute path. s8 group-quant callers pass a zeroed struct.
+// Runtime B-side WOQ scale / zp tile state for the quant execute path.
+// bf16×{s4,u4} frames fill this today (packsclb / classic in-kernel); a future
+// in-kernel JIT widen will consume the same struct. s8 group-quant callers
+// pass a zeroed value.
 typedef struct dlp_gemm_pre_op_attr_t
 {
     void*              scale_factor;
@@ -214,6 +216,12 @@ typedef enum
     DLP_KERNEL_S8S8S32OBF16_SYM_QUANT,
     DLP_KERNEL_S8S4S32OF32_SYM_QUANT,
     DLP_KERNEL_S8S4S32OBF16_SYM_QUANT,
+    // WOQ bf16×{s4,u4} quant-bucket keys (BF16 microkernel, frame-side
+    // dequant).
+    DLP_KERNEL_BF16S4F32OF32,
+    DLP_KERNEL_BF16S4F32OBF16,
+    DLP_KERNEL_BF16U4F32OF32,
+    DLP_KERNEL_BF16U4F32OBF16,
     DLP_KERNEL_DATATYPE_MAX
 } kernel_datatype_t;
 
@@ -416,9 +424,13 @@ dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
 void
 dlp_upd_pack_strides(kernel_datatype_t k_dtype, dlp_gemm_cntx_t* cntx);
 
-// Single entry point for every sym-quant path. k_dtype selects both the quant
-// DE frontend and the kernel cache bucket: DLP_KERNEL_S8S8S32O*_SYM_QUANT for
-// s8xs8, DLP_KERNEL_S8S4S32O*_SYM_QUANT for s8xs4.
+// Single entry point for every quant path. k_dtype selects both the quant DE
+// frontend and the kernel cache bucket: DLP_KERNEL_S8S8S32O*_SYM_QUANT for
+// s8xs8, DLP_KERNEL_S8S4S32O*_SYM_QUANT for s8xs4, DLP_KERNEL_BF16{S,U}4F32O*
+// for WOQ bf16×{s4,u4}.
+// a_quant_op / b_quant_op are the A- and B-side scale (and optional ZP)
+// descriptors for the kernel's operand order. WOQ bf16 paths pass a_quant_op
+// as NULL and b_quant_op as the weight scales; int8 sym-quant passes both.
 void
 dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t   k_dtype,
                                         char                storage_format,
@@ -436,7 +448,8 @@ dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t   k_dtype,
                                         void*               alpha,
                                         void*               beta,
                                         dlp_gemm_post_op*   metadata,
-                                        dlp_group_op*       group_ops,
+                                        dlp_quant_op_t*     a_quant_op,
+                                        dlp_quant_op_t*     b_quant_op,
                                         dlp_gemm_cntx_t*    cntx,
                                         md_t                c_downscale);
 
@@ -461,6 +474,7 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                               void*                         beta,
                               dlp_gemm_post_op*             post_ops_list,
                               dlp_gemm_post_op_attr         post_ops_attr,
+                              dlp_gemm_pre_op_attr          pre_ops_attr,
                               dlp_gemm_grp_post_op_attr     grp_post_ops_attr);
 
 // S8-generated INT8 kernels require col_sum and accumulate

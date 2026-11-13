@@ -45,6 +45,7 @@ using dlp::testing::framework::ParamDim;
 using dlp::testing::framework::PreparedBatchGemmArgs;
 using dlp::testing::framework::UALError;
 using dlp::testing::framework::UALType;
+using dlp::testing::framework::WOQParam;
 
 /**
  * @class UalRef
@@ -125,7 +126,8 @@ class UalRef : public IUal
                      MatrixType             B_type,
                      MatrixType             C_type,
                      MatrixType             accType,
-                     const GroupScaleParam* group_scale = nullptr) override;
+                     const GroupScaleParam* group_scale = nullptr,
+                     const WOQParam*        woq         = nullptr) override;
 
     UALError batch_gemm(std::vector<BatchGroup>& groups,
                         MatrixType               accType) override;

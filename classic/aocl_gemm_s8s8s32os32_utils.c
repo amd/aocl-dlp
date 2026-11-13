@@ -38,53 +38,6 @@
 #include "kernels/s8s8s32/dlp_gemm_packb_s8.h"
 #include "s8s8s32/dlp_gemm_reorder_s8.h"
 
-static dlp_clsc_err_t
-dlp_get_sym_quant_group_size_from_metadata(const dlp_metadata_t* metadata,
-                                           const md_t            k,
-                                           md_t*                 group_size)
-{
-    if ((metadata == NULL) || (group_size == NULL)) {
-        return DLP_CLSC_NULL_POINTER;
-    }
-
-    if (((metadata->a_quant_op != NULL)
-         && (metadata->a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE))
-        || ((metadata->b_quant_op != NULL)
-            && (metadata->b_quant_op->quant_op_kind
-                != DLP_QUANT_OP_QUANTIZE))) {
-        return DLP_CLSC_NOT_SUPPORTED;
-    }
-
-    md_t a_group_size =
-        (metadata->a_quant_op != NULL) ? metadata->a_quant_op->group_size : 0;
-    md_t b_group_size =
-        (metadata->b_quant_op != NULL) ? metadata->b_quant_op->group_size : 0;
-
-    if (a_group_size == 0) {
-        a_group_size = k;
-    }
-    if (b_group_size == 0) {
-        b_group_size = k;
-    }
-
-    if ((metadata->a_quant_op != NULL) && (metadata->b_quant_op != NULL)
-        && (a_group_size != b_group_size)) {
-        return DLP_CLSC_INVALID_GROUP_DIMENSION;
-    }
-
-    md_t gs = (metadata->b_quant_op != NULL) ? b_group_size : a_group_size;
-
-    if ((gs <= 0) || (gs > k)) {
-        return DLP_CLSC_INVALID_GROUP_DIMENSION;
-    }
-    if ((gs != k) && ((gs & 3) != 0)) {
-        return DLP_CLSC_INVALID_GROUP_DIMENSION;
-    }
-
-    *group_size = gs;
-    return DLP_CLSC_SUCCESS;
-}
-
 msz_t
 aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
                                       const char      trans,
@@ -201,9 +154,9 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return 0; // A reorder not supported.
+        return 0; // Only B is supported.
     }
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
@@ -580,9 +533,9 @@ aocl_reorder_s8s8s32os32_sym_quant(const char      order,
     AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
-    if (input_mat_type == A_MATRIX) {
+    if (input_mat_type != B_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return; // A reorder not supported.
+        return; // Only B is supported.
     }
 
     // Initialize a local runtime with global settings if necessary. Note
@@ -739,4 +692,99 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
         output_buf_addr, reorder_buf_addr, sizeof(int8_t), 4, n, k,
         lcntx_g.blksz.NR, dlp_get_packb_s8s8s32o32_min_NR(), lcntx_g.blksz.NC,
         lcntx_g.blksz.KC, rs_b, cs_b, rntm_g.num_threads);
+}
+
+void
+aocl_unreorder_s8s8s32os32_sym_quant(const char      order,
+                                     const char      trans,
+                                     const char      mat_type,
+                                     const int8_t*   reorder_buf_addr,
+                                     int8_t*         output_buf_addr,
+                                     const md_t      k,
+                                     const md_t      n,
+                                     const md_t      ldb,
+                                     dlp_metadata_t* metadata)
+{
+    DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
+
+    dlp_init_global_cntx();
+
+    // Validate dimensions before group_size so a non-positive k is reported
+    // as a bad shape rather than an invalid group (matches bf16s4 unreorder).
+    dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
+    AOCL_DLP_UNREORDER_CHECK("s8s8s32os32_sym_quant", order, trans, mat_type,
+                             reorder_buf_addr, output_buf_addr, k, n, ldb,
+                             err_no);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    md_t group_size;
+    err_no =
+        dlp_get_sym_quant_group_size_from_metadata(metadata, k, &group_size);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(
+            " Invalid group size for s8s8s32os32_sym_quant unreorder.",
+            __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
+    dlp_trans_t dlp_trans;
+    dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
+
+    md_t rs_b = 0, cs_b = 0;
+    dlp_reorder_plain_strides(order, dlp_trans, ldb, &rs_b, &cs_b);
+
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
+    dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
+
+    if (input_mat_type != B_MATRIX) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        return;
+    }
+
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+
+#ifdef DLP_KERNELS_ZEN4
+    // The sym-quant n == 1 fast path stores a tight K-element column followed
+    // by one int32 sum per group. The weight region itself needs no unpacking.
+    md_t KC_gemv = dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
+    if ((n == 1) && ((k % group_size) == 0) && ((KC_gemv % group_size) == 0)) {
+        if (rs_b == 1) {
+            memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(int8_t)));
+        } else {
+            for (iter_t k0 = 0; k0 < k; k0++) {
+                output_buf_addr[k0 * rs_b] = reorder_buf_addr[k0];
+            }
+        }
+        return;
+    }
+#endif
+
+    // Symmetric-quant reorder uses the fixed-width intrinsic packer, not the
+    // JIT pack-B selection used by plain s8. Mirror its panel geometry: a
+    // full-K group retains table KC; other group sizes align KC to a group
+    // boundary. Do not apply metadata block parameters or GEMM hints here,
+    // since the matching reorder path does not consume them.
+    md_t KC = (group_size == k)
+                  ? lcntx_g.blksz.KC
+                  : dlp_gemm_align_kc_to_group(lcntx_g.blksz.KC, group_size);
+
+    if (!dlp_reorder_ref_blocks_legal(
+            lcntx_g.blksz.NR, dlp_get_packb_s8s8s32o32_min_NR(), KC, 4)) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_BLOCK_PARAMS);
+        return;
+    }
+
+    dlp_rntm_t rntm_g;
+    dlp_rntm_init_from_global(&rntm_g);
+
+    // The trailing per-group column sums lie after the packed weight image.
+    // dlp_reorder_ref_unreorderb walks only the image, so they are ignored.
+    dlp_reorder_ref_unreorderb(
+        output_buf_addr, reorder_buf_addr, sizeof(int8_t), 4, n, k,
+        lcntx_g.blksz.NR, dlp_get_packb_s8s8s32o32_min_NR(), lcntx_g.blksz.NC,
+        KC, rs_b, cs_b, rntm_g.num_threads);
 }

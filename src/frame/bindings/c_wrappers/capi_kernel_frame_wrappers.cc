@@ -104,6 +104,14 @@ get_quant_kernel_family_name(kernelDatatype kDtype)
             return "dlp_s8s4s32of32_sym_quant_jit_kernel";
         case kernelDatatype::s8s4s32obf16_sym_quant:
             return "dlp_s8s4s32obf16_sym_quant_jit_kernel";
+        case kernelDatatype::bf16s4f32of32:
+            return "dlp_bf16s4f32of32_jit_kernel";
+        case kernelDatatype::bf16s4f32obf16:
+            return "dlp_bf16s4f32obf16_jit_kernel";
+        case kernelDatatype::bf16u4f32of32:
+            return "dlp_bf16u4f32of32_jit_kernel";
+        case kernelDatatype::bf16u4f32obf16:
+            return "dlp_bf16u4f32obf16_jit_kernel";
         default:
             return "dlp_unknown_quant_jit_kernel";
     }
@@ -732,9 +740,11 @@ dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype          kDType,
                                        AOCL_DLP_MEMORY_TAG     mtag_a,
                                        AOCL_DLP_MEMORY_TAG     mtag_b,
                                        dlp_gemm_post_op*       metadata,
-                                       dlp_group_op*           group_ops,
+                                       dlp_quant_op_t*         a_quant_op,
+                                       dlp_quant_op_t*         b_quant_op,
                                        md_t                    mr_hint,
                                        md_t                    nr_hint,
+                                       md_t                    mc_hint,
                                        md_t                    kc_hint,
                                        md_t                    c_downscale,
                                        dlp_gemm_thread_info_t* thread_info)
@@ -745,16 +755,26 @@ dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype          kDType,
             .getGemmQuantKernelInfoForInputFastPath<
                 dlp::de::gemmQuantS8DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
-                mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
-                c_downscale, thread_info, kDType);
+                mtag_a, mtag_b, metadata, a_quant_op, b_quant_op, mr_hint,
+                nr_hint, mc_hint, kc_hint, c_downscale, thread_info, kDType);
     } else if ((kDType == kernelDatatype::s8s4s32of32_sym_quant)
                || (kDType == kernelDatatype::s8s4s32obf16_sym_quant)) {
         return dlp::de::decisionEngineInstance()
             .getGemmQuantKernelInfoForInputFastPath<
                 dlp::de::gemmQuantS8S4DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
-                mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
-                c_downscale, thread_info, kDType);
+                mtag_a, mtag_b, metadata, a_quant_op, b_quant_op, mr_hint,
+                nr_hint, mc_hint, kc_hint, c_downscale, thread_info, kDType);
+    } else if ((kDType == kernelDatatype::bf16s4f32of32)
+               || (kDType == kernelDatatype::bf16s4f32obf16)
+               || (kDType == kernelDatatype::bf16u4f32of32)
+               || (kDType == kernelDatatype::bf16u4f32obf16)) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmQuantKernelInfoForInputFastPath<
+                dlp::de::gemmQuantBf16WoqDEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, a_quant_op, b_quant_op, mr_hint,
+                nr_hint, mc_hint, kc_hint, c_downscale, thread_info, kDType);
     } else {
         return dlp::kernel_frame::quantKernelInfo();
     }
@@ -823,7 +843,8 @@ dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t     k_dtype,
                                         void*                 alpha,
                                         void*                 beta,
                                         dlp_gemm_post_op*     metadata,
-                                        dlp_group_op*         group_ops,
+                                        dlp_quant_op_t*       a_quant_op,
+                                        dlp_quant_op_t*       b_quant_op,
                                         dlp_gemm_cntx_t*      cntx,
                                         md_t                  c_downscale)
 {
@@ -839,10 +860,54 @@ dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t     k_dtype,
     dlp::kernel_frame::quantKernelInfo qKI =
         dlp_get_gemm_quant_kernelInfo_by_dtype(
             kDType, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
-            mtag_a, mtag_b, metadata, group_ops, cntx->blksz.MR, cntx->blksz.NR,
-            cntx->blksz.KC, c_downscale, &cntx->thread_info);
+            mtag_a, mtag_b, metadata, a_quant_op, b_quant_op, cntx->blksz.MR,
+            cntx->blksz.NR, cntx->blksz.MC, cntx->blksz.KC, c_downscale,
+            &cntx->thread_info);
 
     if ((qKI.base.mr <= 0) || (qKI.base.nr <= 0)) {
+        cntx->dlp_quant_kernel_hndl.kernel_base = nullptr;
+        return;
+    }
+
+    cntx->dlp_quant_kernel_hndl.mr     = qKI.base.mr;
+    cntx->dlp_quant_kernel_hndl.nr     = qKI.base.nr;
+    cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
+
+    // Expose the DE-selected B representation to the C frame. The mode is
+    // already part of qKI and therefore of the kernel-cache identity.
+    cntx->dlp_quant_kernel_hndl.nibble_widen_site =
+        (qKI.bQuant.mode == opQuantMode::widenDequantInKernel)
+            ? DLP_NIBBLE_WIDEN_IN_KERNEL
+            : DLP_NIBBLE_WIDEN_PRE_KERNEL;
+
+    // Publish the DE tile into the frame blksz (same contract as plain BF16
+    // init). Pre-widen GEMV n==1 uses MR=16, NR=1 while the table is 6x64;
+    // without this copy IC/JC walks and get_threading disagree with the JIT.
+    // GEMM keeps the table tile (no skinny-N bump). Reordered WOQ GEMM NR
+    // stays the packed panel width. No JIT pack-B init here (intrinsic
+    // packsclb / packa), so blksz_set_mask is left alone.
+    cntx->blksz.MR = qKI.base.mr;
+    cntx->blksz.NR = qKI.base.nr;
+
+    cntx->blksz.KC                     = qKI.base.kc;
+    cntx->blksz.MC                     = ((cntx->blksz.MC % qKI.base.mr) == 0)
+                                             ? cntx->blksz.MC
+                                             : (((cntx->blksz.MC + qKI.base.mr - 1) / qKI.base.mr)
+                            * qKI.base.mr);
+    cntx->blksz.NC                     = ((cntx->blksz.NC % qKI.base.nr) == 0)
+                                             ? cntx->blksz.NC
+                                             : (((cntx->blksz.NC + qKI.base.nr - 1) / qKI.base.nr)
+                            * qKI.base.nr);
+    cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
+
+    // WOQ bf16×{s4,u4} in-kernel widen has no JIT microkernel yet: publish the
+    // site and leave kernel_base null so the frame can take the classic
+    // intrinsic path.
+    if ((qKI.bQuant.mode == opQuantMode::widenDequantInKernel)
+        && ((kDType == kernelDatatype::bf16s4f32of32)
+            || (kDType == kernelDatatype::bf16s4f32obf16)
+            || (kDType == kernelDatatype::bf16u4f32of32)
+            || (kDType == kernelDatatype::bf16u4f32obf16))) {
         cntx->dlp_quant_kernel_hndl.kernel_base = nullptr;
         return;
     }
@@ -856,28 +921,6 @@ dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t     k_dtype,
         (kernPtr.isValid() && kernPtr.getPtr()->isValid)
             ? static_cast<void*>(kernPtr.getPtr())
             : nullptr;
-
-    cntx->dlp_quant_kernel_hndl.mr     = qKI.base.mr;
-    cntx->dlp_quant_kernel_hndl.nr     = qKI.base.nr;
-    cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
-
-    // Expose the DE-selected B representation to the C frame. The mode is
-    // already part of qKI and therefore of the kernel-cache identity.
-    cntx->dlp_quant_kernel_hndl.nibble_widen_site =
-        (qKI.bQuant.mode == opQuantMode::widenDequantInKernel)
-            ? DLP_NIBBLE_WIDEN_IN_KERNEL
-            : DLP_NIBBLE_WIDEN_PRE_KERNEL;
-
-    cntx->blksz.KC                     = qKI.base.kc;
-    cntx->blksz.MC                     = ((cntx->blksz.MC % qKI.base.mr) == 0)
-                                             ? cntx->blksz.MC
-                                             : (((cntx->blksz.MC + qKI.base.mr - 1) / qKI.base.mr)
-                            * qKI.base.mr);
-    cntx->blksz.NC                     = ((cntx->blksz.NC % qKI.base.nr) == 0)
-                                             ? cntx->blksz.NC
-                                             : (((cntx->blksz.NC + qKI.base.nr - 1) / qKI.base.nr)
-                            * qKI.base.nr);
-    cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
 }
 
 void
@@ -901,6 +944,7 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                               void*                         beta,
                               dlp_gemm_post_op*             post_ops_list,
                               dlp_gemm_post_op_attr         post_ops_attr,
+                              dlp_gemm_pre_op_attr          pre_ops_attr,
                               dlp_gemm_grp_post_op_attr     grp_post_ops_attr)
 {
     if (!kernel_hndl || !kernel_hndl->kernel_base) {
@@ -931,7 +975,8 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                                      beta,
                                      post_ops_list,
                                      post_ops_attr,
-                                     grp_post_ops_attr };
+                                     grp_post_ops_attr,
+                                     pre_ops_attr };
         kB->operator()(std::addressof(gemvM1ParamsIn));
     } else if ((kernel_hndl->nr == 1) && (n == 1)) {
         gemvN1Params gemvN1ParamsIn{ A,
@@ -949,7 +994,8 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                                      beta,
                                      post_ops_list,
                                      post_ops_attr,
-                                     grp_post_ops_attr };
+                                     grp_post_ops_attr,
+                                     pre_ops_attr };
         kB->operator()(std::addressof(gemvN1ParamsIn));
     } else {
         // The quant GEMM generator never reads psB, and the sole GEMM caller
@@ -974,7 +1020,8 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                                  beta,
                                  post_ops_list,
                                  post_ops_attr,
-                                 grp_post_ops_attr };
+                                 grp_post_ops_attr,
+                                 pre_ops_attr };
         kB->operator()(std::addressof(gemmParamsIn));
     }
 

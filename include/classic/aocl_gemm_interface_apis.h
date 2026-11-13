@@ -91,7 +91,17 @@ aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
                                       const md_t      k,
                                       const md_t      n,
                                       dlp_metadata_t* metadata);
-/// @brief Returns buffer size (in bytes) for matrix reordering.
+/**
+ * @brief Returns buffer size (in bytes) for bf16s4/u4 WOQ B reordering.
+ *
+ * Only mat_type 'B' is supported. Pass the same
+ * @c metadata->b_quant_op->group_size that will be used for
+ * @ref aocl_reorder_bf16s4f32of32, the matching GEMM with mem_format_b == 'R',
+ * and @ref aocl_unreorder_bf16s4f32of32. The packed buffer has no header, so a
+ * different group size across those calls silently uses the wrong KC (see the
+ * @ref unreorder group). Byte size itself does not depend on group_size;
+ * bf16u4 reuses this same size API.
+ */
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
                                         const char      trans,
@@ -120,8 +130,7 @@ aocl_get_reorder_buf_size_f32f16f32of32(const char      order,
  * reordered matrix with symmetric quantization.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
- * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
- * matrix B).
+ * @param[in] mat_type Type of the matrix. Only 'B' is supported.
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
  * @param[in,out] metadata Metadata containing B quantization group size.
@@ -247,7 +256,18 @@ aocl_reorder_u8s4s32os32(const char      order,
                          const md_t      n,
                          const md_t      ldb,
                          dlp_metadata_t* metadata);
-/// @brief Reorders the input matrix into an optimized layout.
+/**
+ * @brief Reorders a nibble-packed s4/u4 B matrix for bf16 WOQ GEMM.
+ *
+ * Only mat_type 'B' is supported (bf16u4 reuses this same API). KC is taken
+ * from the architecture table and, when
+ * @c metadata->b_quant_op->group_size is set and smaller than K, aligned to
+ * that group — the same rule as the bf16s4/u4 GEMM five-loop and
+ * @ref aocl_unreorder_bf16s4f32of32. Pass that same group_size on every GEMM
+ * that consumes this buffer with mem_format_b == 'R' and on unreorder; the
+ * packed buffer has no header, so a mismatch silently yields wrong results.
+ * Block parameters, SUP thresholds and GEMM hints are ignored.
+ */
 DLP_CLASSIC_EXPORT void
 aocl_reorder_bf16s4f32of32(const char      order,
                            const char      trans,
@@ -297,8 +317,7 @@ aocl_reorder_f32f16f32of32(const char      order,
  * quantization. Expanded from AOCL_DLP_GEMM_REORDER_SYM_QUANT macro.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
- * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
- * matrix B).
+ * @param[in] mat_type Type of the matrix. Only 'B' is supported.
  * @param[in] input_buf_addr Pointer to the input matrix buffer.
  * @param[out] reorder_buf_addr Pointer to the reordered matrix buffer.
  * @param[in] k Number of rows in the matrix.
@@ -358,6 +377,29 @@ aocl_reorder_s8s4s32os32(const char      order,
                          const md_t      n,
                          const md_t      ldb,
                          dlp_metadata_t* metadata);
+
+/**
+ * @brief Inverse of aocl_reorder_s8s4s32os32(), in portable C.
+ *
+ * Recovers the nibble-packed signed s4 B weight matrix from the compact
+ * s8-VNNI-4 weight region. The trailing per-group int32 column sums are
+ * auxiliary data and are ignored. Only mat_type 'B' is supported and
+ * @p metadata is required to provide the same symmetric-quant group size as
+ * reorder. When reorder used the expanded-s8 n == 1 layout, that column is
+ * packed back to nibbles. That layout is emitted only by the Zen4 reorder
+ * when the group divides both K and the aligned KC; every other n == 1
+ * buffer is the compact VNNI-4 image.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_unreorder_s8s4s32os32(const char      order,
+                           const char      trans,
+                           const char      mat_type,
+                           const int8_t*   reorder_buf_addr,
+                           int8_t*         output_buf_addr,
+                           const md_t      k,
+                           const md_t      n,
+                           const md_t      ldb,
+                           dlp_metadata_t* metadata);
 
 /**
  * @brief Performs reordering of the input matrix for mixed precision
@@ -424,6 +466,12 @@ aocl_reorder_f32obf16(const char      order,
  * need not match the reorder call. Passing a different order, k, n or
  * blocking silently decodes the buffer with the wrong layout.
  *
+ * For bf16s4/u4 WOQ the same rule applies to
+ * @c metadata->b_quant_op->group_size: reorder, GEMM with mem_format_b == 'R',
+ * and unreorder must all see the same group size (0 or omitted means one
+ * group spanning K). A mismatched group size silently walks the panels with
+ * the wrong KC and yields incorrect results.
+ *
  * Functions carrying the @c _reference suffix are plain C implementations.
  * They run on any processor regardless of the ISA the reorder used, and are
  * the correctness oracle for the tuned variants. Size them with the matching
@@ -471,6 +519,32 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
                                const md_t      n,
                                const md_t      ldb,
                                dlp_metadata_t* metadata);
+/**
+ * @brief Inverse of aocl_reorder_bf16s4f32of32(), in portable C.
+ *
+ * Recovers raw s4/u4 nibbles (bf16u4 uses this same API, as with reorder).
+ * Only mat_type 'B' is supported ('A' and 'W' are rejected). A missing B
+ * quant op, or group_size 0, is one group over K and keeps the table KC.
+ * Otherwise the op must be dequantize or expand, group_size must be <= k,
+ * and a smaller group must be even. KC is then aligned to that group,
+ * matching reorder and the bf16s4/u4 GEMM five-loop.
+ *
+ * @p metadata->b_quant_op->group_size must match the value used to produce
+ * @p reorder_buf_addr and the GEMMs that consumed it with mem_format_b == 'R'.
+ * The packed buffer carries no header for group size; a mismatch silently
+ * decodes with the wrong KC. Block parameters, SUP thresholds and GEMM hints
+ * are ignored.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_unreorder_bf16s4f32of32(const char      order,
+                             const char      trans,
+                             const char      mat_type,
+                             const int8_t*   reorder_buf_addr,
+                             int8_t*         output_buf_addr,
+                             const md_t      k,
+                             const md_t      n,
+                             const md_t      ldb,
+                             dlp_metadata_t* metadata);
 /// @brief Inverse of aocl_reorder_bf16bf16f32of32(), in portable C.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_bf16bf16f32of32_reference(const char      order,
@@ -496,6 +570,25 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
 /// @brief Inverse of aocl_reorder_s8s8s32os32(), in portable C.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_s8s8s32os32_reference(const char      order,
+                                     const char      trans,
+                                     const char      mat_type,
+                                     const int8_t*   reorder_buf_addr,
+                                     int8_t*         output_buf_addr,
+                                     const md_t      k,
+                                     const md_t      n,
+                                     const md_t      ldb,
+                                     dlp_metadata_t* metadata);
+/**
+ * @brief Inverse of aocl_reorder_s8s8s32os32_sym_quant(), in portable C.
+ *
+ * Recovers the reordered B weight region only; the trailing per-group int32
+ * column sums are quantization auxiliary data and are not copied to
+ * @p output_buf_addr. Only mat_type 'B' is supported. @p metadata is required
+ * and must describe the same symmetric-quantization group size that was used
+ * for reorder.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_unreorder_s8s8s32os32_sym_quant(const char      order,
                                      const char      trans,
                                      const char      mat_type,
                                      const int8_t*   reorder_buf_addr,
@@ -993,7 +1086,18 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
                            const md_t      ldc,
                            dlp_metadata_t* metadata);
 
-/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+/**
+ * @brief Weight-only quantized GEMM: bf16 A, signed 4-bit B, f32 C.
+ *
+ * @p metadata->b_quant_op is required and must supply dequant scales. When
+ * mem_format_b == 'R', B must come from @ref aocl_reorder_bf16s4f32of32 and
+ * @c metadata->b_quant_op->group_size must match the value used for that
+ * reorder (and for any later @ref aocl_unreorder_bf16s4f32of32). The reordered
+ * buffer has no header; a mismatched group size silently walks KC panels
+ * wrong and produces incorrect results. group_size 0 means one group over K.
+ * Refer to @ref aocl_gemm_bf16bf16f32of32 for the remaining parameter
+ * semantics.
+ */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16s4f32of32(const char      order,
                         const char      transa,
@@ -1013,7 +1117,7 @@ aocl_gemm_bf16s4f32of32(const char      order,
                         const md_t      ldc,
                         dlp_metadata_t* metadata);
 
-/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+/// Refer to @ref aocl_gemm_bf16s4f32of32; B is unsigned 4-bit (u4).
 DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16u4f32of32(const char      order,
                         const char      transa,
@@ -1033,7 +1137,7 @@ aocl_gemm_bf16u4f32of32(const char      order,
                         const md_t      ldc,
                         dlp_metadata_t* metadata);
 
-/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+/// Refer to @ref aocl_gemm_bf16s4f32of32; B is u4 and C is bf16.
 DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16u4f32obf16(const char      order,
                          const char      transa,
@@ -1053,7 +1157,7 @@ aocl_gemm_bf16u4f32obf16(const char      order,
                          const md_t      ldc,
                          dlp_metadata_t* metadata);
 
-/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+/// Refer to @ref aocl_gemm_bf16s4f32of32; C is bf16.
 DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16s4f32obf16(const char      order,
                          const char      transa,
@@ -1485,7 +1589,8 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
                                  const char*      mem_format_b,
                                  dlp_metadata_t** metadata);
 
-/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 and
+/// @ref aocl_gemm_bf16s4f32of32 (same b_quant_op->group_size as reorder).
 DLP_CLASSIC_EXPORT void
 aocl_batch_gemm_bf16s4f32of32(const char*      order,
                               const char*      transa,
@@ -1507,7 +1612,7 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
                               const char*      mem_format_b,
                               dlp_metadata_t** metadata);
 
-/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
+/// Refer to @ref aocl_batch_gemm_bf16s4f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
 aocl_batch_gemm_bf16s4f32obf16(const char*      order,
                                const char*      transa,
@@ -2121,7 +2226,8 @@ aocl_batch_gemm_f32f16f32of32(const char*      order,
                               const char*      mem_format_b,
                               dlp_metadata_t** metadata);
 
-/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 and
+/// @ref aocl_gemm_bf16s4f32of32 (u4 B; same b_quant_op->group_size as reorder).
 DLP_CLASSIC_EXPORT void
 aocl_batch_gemm_bf16u4f32of32(const char*      order,
                               const char*      transa,
@@ -2143,7 +2249,7 @@ aocl_batch_gemm_bf16u4f32of32(const char*      order,
                               const char*      mem_format_b,
                               dlp_metadata_t** metadata);
 
-/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
+/// Refer to @ref aocl_batch_gemm_bf16u4f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
 aocl_batch_gemm_bf16u4f32obf16(const char*      order,
                                const char*      transa,

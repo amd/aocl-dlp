@@ -266,7 +266,8 @@ UalRef::reorder(const Matrix& in,
                 MatrixType    B_type,
                 MatrixType    C_type,
                 MatrixType    accType,
-                const GroupScaleParam* /*group_scale*/)
+                const GroupScaleParam* /*group_scale*/,
+                const WOQParam* /*woq*/)
 {
     /*
         Reordering operation in reference is

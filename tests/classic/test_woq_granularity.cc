@@ -178,12 +178,23 @@ isaSupportedU4()
 
 // PER_CHANNEL + group_size < K + len == n: kernels must index by column, not
 // group*n + col. kK=32, group_size=16 => two K-groups; scale buffer is n long.
+// group_size must match the value later passed to GEMM (packed buffer has no
+// header for KC alignment).
 bool
-reorderPackedB(std::vector<int8_t>& packed, std::vector<int8_t>& reordered)
+reorderPackedB(std::vector<int8_t>& packed,
+               std::vector<int8_t>& reordered,
+               md_t                 group_size)
 {
     packed.assign(static_cast<size_t>(kK) * ((kN + 1) / 2), 1);
     dlp_metadata_t md;
+    dlp_quant_op_t b_quant;
     std::memset(&md, 0, sizeof(md));
+    std::memset(&b_quant, 0, sizeof(b_quant));
+    b_quant.quant_op_kind = DLP_QUANT_OP_DEQUANTIZE;
+    b_quant.src_type      = DLP_S4;
+    b_quant.dst_type      = DLP_BF16;
+    b_quant.group_size    = group_size;
+    md.b_quant_op         = &b_quant;
     msz_t nbytes =
         aocl_get_reorder_buf_size_bf16s4f32of32('R', 'N', 'B', kK, kN, &md);
     if (nbytes == 0 || isIsaSkip(md.error_hndl.error_code)) {
@@ -457,8 +468,9 @@ TEST(WoqGranularity, U4Obf16RejectsMissingZp)
 TEST(WoqGranularity, S4PerChannelWithGroupSizeSucceeds)
 {
     SKIP_IF_NO_ISA_S4();
+    constexpr md_t      group_size = 16;
     std::vector<int8_t> packed, reordered;
-    if (!reorderPackedB(packed, reordered)) {
+    if (!reorderPackedB(packed, reordered, group_size)) {
         GTEST_SKIP() << "bf16s4 reorder not supported on this processor";
     }
 
@@ -466,7 +478,7 @@ TEST(WoqGranularity, S4PerChannelWithGroupSizeSucceeds)
     std::vector<float>    C(static_cast<size_t>(kM) * kN, 0.0f);
 
     WoqSetup setup(DLP_PARAM_DIM_PER_CHANNEL, kN, false);
-    setup.b_quant.group_size = 16;
+    setup.b_quant.group_size = group_size;
     callS4Of32('R', 'N', 'r', A.data(), reordered.data(), C.data(), &setup.md);
     EXPECT_EQ(setup.md.error_hndl.error_code, DLP_CLSC_SUCCESS);
 }
@@ -474,8 +486,9 @@ TEST(WoqGranularity, S4PerChannelWithGroupSizeSucceeds)
 TEST(WoqGranularity, U4PerChannelWithGroupSizeSucceeds)
 {
     SKIP_IF_NO_ISA_U4();
+    constexpr md_t      group_size = 16;
     std::vector<int8_t> packed, reordered;
-    if (!reorderPackedB(packed, reordered)) {
+    if (!reorderPackedB(packed, reordered, group_size)) {
         GTEST_SKIP() << "bf16u4 reorder not supported on this processor";
     }
 
@@ -484,7 +497,7 @@ TEST(WoqGranularity, U4PerChannelWithGroupSizeSucceeds)
 
     WoqSetup setup(DLP_PARAM_DIM_PER_CHANNEL, kN, true,
                    DLP_PARAM_DIM_PER_CHANNEL, kN, DLP_S8);
-    setup.b_quant.group_size = 16;
+    setup.b_quant.group_size = group_size;
     callU4Of32('R', 'N', 'r', A.data(),
                reinterpret_cast<const uint8_t*>(reordered.data()), C.data(),
                &setup.md);

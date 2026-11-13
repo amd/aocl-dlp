@@ -413,7 +413,8 @@ class gemmDEBackendUtils
         [[maybe_unused]] md_t               rs_c,
         [[maybe_unused]] md_t               cs_c,
         dlp_gemm_post_op*                   metadata,
-        dlp_group_op*                       group_ops,
+        dlp_quant_op_t*                     a_quant_op,
+        dlp_quant_op_t*                     b_quant_op,
         bool                                skinnyN      = false,
         bool                                aliasMrSplit = false)
     {
@@ -428,10 +429,9 @@ class gemmDEBackendUtils
             allLtFringeKernels, invokeRD, anyKOpsOrder, kInstPref, c_downscale,
             k_dtype, rs_c, cs_c, metadata, skinnyN, aliasMrSplit);
 
-        // Handle group ops.
         // Fill the aQuant field.
         kernel_frame::opQuantInfo* aQuant = &qKI.aQuant;
-        dlp_quant_op_t*            a_pqo  = group_ops->a_post_quant_op;
+        dlp_quant_op_t*            a_pqo  = a_quant_op;
         aQuant->src_type = (kernel_frame::DataType)a_pqo->src_type;
         aQuant->dst_type = (kernel_frame::DataType)a_pqo->dst_type;
         // Hardcoded to dequantInKernel for group quantized kernels.
@@ -454,7 +454,7 @@ class gemmDEBackendUtils
 
         // Fill the bQuant field.
         kernel_frame::opQuantInfo* bQuant = &qKI.bQuant;
-        dlp_quant_op_t*            b_pqo  = group_ops->b_post_quant_op;
+        dlp_quant_op_t*            b_pqo  = b_quant_op;
         bQuant->src_type = (kernel_frame::DataType)b_pqo->src_type;
         bQuant->dst_type = (kernel_frame::DataType)b_pqo->dst_type;
         // Hardcoded to dequantInKernel for group quantized kernels.
@@ -467,6 +467,73 @@ class gemmDEBackendUtils
         bQuant->scale.perGroupK =
             isTiledAlongK(b_pqo->dequant_scale_factors->outer_dim, true);
         // Leave zeroPoint at its default(null) for symmetric quantization
+        if (b_pqo->zero_point != nullptr) {
+            bQuant->zeroPoint.storeDt =
+                (kernel_frame::DataType)b_pqo->zero_point->stor_type;
+            bQuant->zeroPoint.outerDim =
+                mapParamDim(b_pqo->zero_point->outer_dim);
+            bQuant->zeroPoint.perGroupK =
+                isTiledAlongK(b_pqo->zero_point->outer_dim, true);
+        }
+
+        return qKI;
+    }
+
+    // WOQ bf16×{s4,u4}: A is bf16 (no aQuant), B is nibble with pack-time
+    // dequant into bf16. Fills base from the shared post-op helper and keys the
+    // cache on bQuant scale/ZP layout; aQuant stays default. Mode is ready
+    // because the microkernel sees already-dequanted bf16 B.
+    DLP_ALWAYS_INLINE
+    static kernel_frame::quantKernelInfo checkWoqAndCreateQuantKernelInfo(
+        md_t                                mr,
+        md_t                                nr,
+        md_t                                term_fringe_nr,
+        md_t                                k_unroll,
+        md_t                                kc,
+        md_t                                prefetch_c_dist,
+        kernel_frame::scalingType           alphaScalingType,
+        kernel_frame::scalingType           betaScalingType,
+        AOCL_DLP_MEMORY_TAG                 mtag_a,
+        AOCL_DLP_MEMORY_TAG                 mtag_b,
+        bool                                allLtFringeKernels,
+        bool                                invokeRD,
+        bool                                anyKOpsOrder,
+        kernel_frame::kernelInstrPreference kInstPref,
+        md_t                                c_downscale,
+        dlp::kernel_frame::kernelDatatype   k_dtype,
+        md_t                                rs_c,
+        md_t                                cs_c,
+        dlp_gemm_post_op*                   metadata,
+        dlp_quant_op_t*                     a_quant_op,
+        dlp_quant_op_t*                     b_quant_op,
+        bool                                skinnyN      = false,
+        bool                                aliasMrSplit = false)
+    {
+        kernel_frame::quantKernelInfo qKI;
+        (void)a_quant_op;
+
+        if ((b_quant_op == nullptr)
+            || (b_quant_op->dequant_scale_factors == nullptr)) {
+            return qKI;
+        }
+
+        qKI.base = gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, term_fringe_nr, k_unroll, kc, prefetch_c_dist,
+            alphaScalingType, betaScalingType, mtag_a, mtag_b,
+            allLtFringeKernels, invokeRD, anyKOpsOrder, kInstPref, c_downscale,
+            k_dtype, rs_c, cs_c, metadata, skinnyN, aliasMrSplit);
+
+        dlp_quant_op_t*            b_pqo  = b_quant_op;
+        kernel_frame::opQuantInfo* bQuant = &qKI.bQuant;
+        bQuant->src_type = (kernel_frame::DataType)b_pqo->src_type;
+        bQuant->dst_type = (kernel_frame::DataType)b_pqo->dst_type;
+        bQuant->mode     = kernel_frame::opQuantMode::ready;
+        bQuant->scale.storeDt =
+            (kernel_frame::DataType)b_pqo->dequant_scale_factors->stor_type;
+        bQuant->scale.outerDim =
+            mapParamDim(b_pqo->dequant_scale_factors->outer_dim);
+        bQuant->scale.perGroupK =
+            isTiledAlongK(b_pqo->dequant_scale_factors->outer_dim, true);
         if (b_pqo->zero_point != nullptr) {
             bQuant->zeroPoint.storeDt =
                 (kernel_frame::DataType)b_pqo->zero_point->stor_type;

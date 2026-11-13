@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 #include "runtime/dlp_runtime.h"
 
@@ -159,6 +160,57 @@ dlp_gemm_align_kc_to_group(md_t kc, md_t group_size)
     }
 
     return kc;
+}
+
+// Symmetric-quant group size shared by s8s8 and s8s4. Metadata is required.
+// A present op must be QUANTIZE. group_size 0 is one group over K. When both
+// A and B ops are present their groups must agree. A group smaller than K
+// must be a multiple of 4; K itself need not be.
+DLP_INLINE dlp_clsc_err_t
+dlp_get_sym_quant_group_size_from_metadata(const dlp_metadata_t* metadata,
+                                           const md_t            k,
+                                           md_t*                 group_size)
+{
+    if ((metadata == NULL) || (group_size == NULL)) {
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    if (((metadata->a_quant_op != NULL)
+         && (metadata->a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE))
+        || ((metadata->b_quant_op != NULL)
+            && (metadata->b_quant_op->quant_op_kind
+                != DLP_QUANT_OP_QUANTIZE))) {
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    md_t a_group_size =
+        (metadata->a_quant_op != NULL) ? metadata->a_quant_op->group_size : 0;
+    md_t b_group_size =
+        (metadata->b_quant_op != NULL) ? metadata->b_quant_op->group_size : 0;
+
+    if (a_group_size == 0) {
+        a_group_size = k;
+    }
+    if (b_group_size == 0) {
+        b_group_size = k;
+    }
+
+    if ((metadata->a_quant_op != NULL) && (metadata->b_quant_op != NULL)
+        && (a_group_size != b_group_size)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    md_t gs = (metadata->b_quant_op != NULL) ? b_group_size : a_group_size;
+
+    if ((gs <= 0) || (gs > k)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+    if ((gs != k) && ((gs & 3) != 0)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    *group_size = gs;
+    return DLP_CLSC_SUCCESS;
 }
 
 // How many int32 column-sum vectors the reorder buffer holds.

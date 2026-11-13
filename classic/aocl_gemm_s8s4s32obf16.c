@@ -258,12 +258,6 @@ aocl_gemm_s8s4s32obf16(const char      order,
 
     // Column major is not supported: it would require swapping A and B, which
     // an s8 A and an s4 B cannot be. The scale dims are used as given.
-    dlp_group_op group_ops;
-    err = dlp_gemm_translate_to_group_op_list(metadata, &group_ops, m, n, k);
-    if (err != DLP_CLSC_SUCCESS) {
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
 
     // n==1 GEMV keeps the old align, so KC stays divisible by the group.
     // The wide path keeps the table KC for a single group.
@@ -279,7 +273,7 @@ aocl_gemm_s8s4s32obf16(const char      order,
     dlp_init_and_get_gemm_quant_kernel_hndl(
         DLP_KERNEL_S8S4S32OBF16_SYM_QUANT, order, mtag_a, mtag_b, m, n, k, rs_a,
         cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        &group_ops, &lcntx_g, DLP_BF16);
+        metadata->a_quant_op, metadata->b_quant_op, &lcntx_g, DLP_BF16);
 
     // There is no fallback kernel on this path, so a failed JIT generation
     // leaves nothing to run and the call returns an error.

@@ -48,6 +48,7 @@ using dlp::testing::framework::MatrixType;
 using dlp::testing::framework::PreparedBatchGemmArgs;
 using dlp::testing::framework::UALError;
 using dlp::testing::framework::UALType;
+using dlp::testing::framework::WOQParam;
 
 /**
  * @class UalDlp
@@ -121,6 +122,7 @@ class UalDlp : public IUal
      * @param accType Accumulation type
      * @param group_scale Optional symmetric-quantization group-scale
      * parameters; when non-null selects the sym_quant reorder path
+     * @param woq Optional weight-only-quantization parameters
      * @return UALError Error code indicating success or failure
      */
     UALError reorder(const Matrix&          in,
@@ -129,7 +131,8 @@ class UalDlp : public IUal
                      MatrixType             B_type,
                      MatrixType             C_type,
                      MatrixType             accType,
-                     const GroupScaleParam* group_scale = nullptr) override;
+                     const GroupScaleParam* group_scale = nullptr,
+                     const WOQParam*        woq         = nullptr) override;
 
     // Tuning knobs applied to the reorder path (set-before-reorder use case).
     // Stored here and attached to the local metadata inside reorder() so the

@@ -380,24 +380,40 @@ round_trip(SizeFn                     size_fn,
            UnreorderFn                unreorder_fn,
            char                       order,
            const Shape&               s,
-           const dlp_gemm_blocking_t* bp         = nullptr,
-           char                       trans_in   = 'n',
-           char                       trans_out  = 'n',
-           md_t                       extra_ldb  = 0,
-           const dlp_gemm_hints_t*    gemm_hints = nullptr)
+           const dlp_gemm_blocking_t* bp              = nullptr,
+           char                       trans_in        = 'n',
+           char                       trans_out       = 'n',
+           md_t                       extra_ldb       = 0,
+           const dlp_gemm_hints_t*    gemm_hints      = nullptr,
+           const md_t*                sym_quant_group = nullptr)
 {
     const md_t   ldb_in  = plain_ldb(order, trans_in, s.k, s.n) + extra_ldb;
     const md_t   ldb_out = plain_ldb(order, trans_out, s.k, s.n) + extra_ldb;
     const size_t in_n    = plain_elems(order, trans_in, s.k, s.n, ldb_in);
     const size_t out_n   = plain_elems(order, trans_out, s.k, s.n, ldb_out);
 
+    // Symmetric-quant reorder reads only the B quantization group size. A
+    // value of zero means one group spanning K. The object has to outlive
+    // every metadata copy handed to the size, reorder and unreorder calls.
+    dlp_quant_op_t quant_op;
+    std::memset(&quant_op, 0, sizeof(quant_op));
+    if (sym_quant_group != nullptr) {
+        quant_op.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+        quant_op.src_type      = DLP_S8;
+        quant_op.dst_type      = DLP_S8;
+        quant_op.group_size    = *sym_quant_group;
+    }
+
     // The reorder buffer does not record its blocking or hint-derived NR.
     // Every operation which interprets it therefore needs the same metadata
     // configuration the reorder used.
-    auto with_metadata = [bp, gemm_hints]() {
+    auto with_metadata = [&]() {
         dlp_metadata_t m = fresh_metadata();
         m.block_params   = const_cast<dlp_gemm_blocking_t*>(bp);
         m.gemm_hints     = const_cast<dlp_gemm_hints_t*>(gemm_hints);
+        if (sym_quant_group != nullptr) {
+            m.b_quant_op = &quant_op;
+        }
         return m;
     };
 
@@ -497,6 +513,104 @@ round_trip_all_shapes(const char* label,
                         supported++;
                     }
                 }
+            }
+        }
+    }
+    if (supported == 0) {
+        GTEST_SKIP() << label << " is not supported on this processor";
+    }
+}
+
+// group_size 0 is one group over K. Otherwise it must be positive, no larger
+// than K, and a multiple of align unless it already spans K. align is 4 for
+// symmetric quant s8 and s8s4 and 2 for bf16s4.
+bool
+quant_group_legal(md_t k, md_t group_size, md_t align)
+{
+    if (group_size == 0) {
+        return true;
+    }
+    if ((group_size <= 0) || (group_size > k) || (align <= 0)) {
+        return false;
+    }
+    return (group_size == k) || ((group_size % align) == 0);
+}
+
+// Same shape, layout and thread sweep as the plain round trip, once per
+// quantization group. A group that is illegal for a particular K is skipped;
+// the API rejects it rather than packing a layout the unreorder could invert.
+template<typename T, typename ReorderFn, typename UnreorderFn>
+void
+round_trip_sym_quant_groups(const char*               label,
+                            SizeFn                    size_fn,
+                            ReorderFn                 reorder_fn,
+                            UnreorderFn               unreorder_fn,
+                            const std::vector<Shape>& cases,
+                            const std::vector<md_t>&  group_sizes,
+                            bool                      vary_transpose,
+                            bool                      include_shape_k)
+{
+    int supported = 0;
+    for (md_t group_size : group_sizes) {
+        for (md_t threads : { (md_t)1, (md_t)-1 }) {
+            PinnedThreadCount pin(threads);
+            for (char order : { 'r', 'c' }) {
+                const char trans_values[] = { 'n', 't' };
+                const int  trans_n        = vary_transpose ? 2 : 1;
+                for (int trans_i = 0; trans_i < trans_n; trans_i++) {
+                    for (int trans_o = 0; trans_o < trans_n; trans_o++) {
+                        const char trans_in  = trans_values[trans_i];
+                        const char trans_out = trans_values[trans_o];
+                        for (const Shape& s : cases) {
+                            if (!quant_group_legal(s.k, group_size, 4)) {
+                                continue;
+                            }
+                            const std::string desc =
+                                std::string(label) + " threads="
+                                + (threads < 0 ? std::string("default")
+                                               : std::to_string(threads))
+                                + " group=" + std::to_string(group_size)
+                                + " order=" + order + " trans_in=" + trans_in
+                                + " trans_out=" + trans_out
+                                + " k=" + std::to_string(s.k)
+                                + " n=" + std::to_string(s.n);
+                            SCOPED_TRACE(desc);
+                            set_current_case(desc);
+                            if (round_trip<T>(size_fn, reorder_fn, unreorder_fn,
+                                              order, s, nullptr, trans_in,
+                                              trans_out, 0, nullptr,
+                                              &group_size)) {
+                                supported++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (include_shape_k) {
+        for (const Shape& s : cases) {
+            if (!quant_group_legal(s.k, s.k, 4)) {
+                continue;
+            }
+            bool listed = false;
+            for (md_t group_size : group_sizes) {
+                if (group_size == s.k) {
+                    listed = true;
+                }
+            }
+            if (listed) {
+                continue;
+            }
+            PinnedThreadCount pin((md_t)1);
+            const std::string desc = std::string(label)
+                                     + " group=k=" + std::to_string(s.k)
+                                     + " order=r n=" + std::to_string(s.n);
+            SCOPED_TRACE(desc);
+            set_current_case(desc);
+            if (round_trip<T>(size_fn, reorder_fn, unreorder_fn, 'r', s,
+                              nullptr, 'n', 'n', 0, nullptr, &s.k)) {
+                supported++;
             }
         }
     }
@@ -842,6 +956,265 @@ TEST(UnreorderRoundTrip, S8S8S32OS32Reference)
     round_trip_all_shapes<int8_t>(
         "s8s8s32os32", aocl_get_reorder_buf_size_s8s8s32os32,
         aocl_reorder_s8s8s32os32, aocl_unreorder_s8s8s32os32_reference);
+}
+
+// Symmetric-quant reorder uses the same weight-panel nesting as plain s8,
+// with KC aligned to the quantization group. group_size 0 is one group over
+// K. Groups that do not divide K stay on the wide packer, including n == 1.
+TEST(UnreorderRoundTrip, S8S8S32OS32SymQuantReference)
+{
+    std::vector<Shape>        cases = shapes();
+    const std::vector<Shape>& wide  = large_shapes();
+    cases.insert(cases.end(), wide.begin(), wide.end());
+
+    round_trip_sym_quant_groups<int8_t>(
+        "s8s8s32os32_sym_quant",
+        aocl_get_reorder_buf_size_s8s8s32os32_sym_quant,
+        aocl_reorder_s8s8s32os32_sym_quant,
+        aocl_unreorder_s8s8s32os32_sym_quant, cases,
+        { (md_t)0, (md_t)4, (md_t)16, (md_t)64 },
+        /*vary_transpose=*/false, /*include_shape_k=*/false);
+}
+
+// Table KC for s8 is 2048 (Zen through Zen5) or 4096 (Zen6), and the groups
+// above all divide both, so they never change it. A group of 12 divides
+// neither, so KC shrinks; both shapes pass that boundary. A group of 6144 is
+// larger than either table KC, so KC grows. 6144 is legal only for K = 8195;
+// the K = 4101 pair is skipped because the group is larger than K.
+TEST(UnreorderRoundTrip, S8S8S32OS32SymQuantKcAlign)
+{
+    const std::vector<Shape> cases = {
+        { 4101, 32 },
+        { 8195, 32 },
+    };
+
+    round_trip_sym_quant_groups<int8_t>(
+        "s8s8s32os32_sym_quant_kc_align",
+        aocl_get_reorder_buf_size_s8s8s32os32_sym_quant,
+        aocl_reorder_s8s8s32os32_sym_quant,
+        aocl_unreorder_s8s8s32os32_sym_quant, cases, { (md_t)12, (md_t)6144 },
+        /*vary_transpose=*/false, /*include_shape_k=*/false);
+}
+
+// The main sweep keeps transpose fixed. These n > 1 shapes cover every
+// input/output transpose pair on the wide packer.
+TEST(UnreorderRoundTrip, S8S8S32OS32SymQuantTranspose)
+{
+    const std::vector<Shape> cases = {
+        { 5, 7 },
+        { 17, 33 },
+        { 64, 80 },
+    };
+
+    round_trip_sym_quant_groups<int8_t>(
+        "s8s8s32os32_sym_quant_transpose",
+        aocl_get_reorder_buf_size_s8s8s32os32_sym_quant,
+        aocl_reorder_s8s8s32os32_sym_quant,
+        aocl_unreorder_s8s8s32os32_sym_quant, cases,
+        { (md_t)0, (md_t)4, (md_t)16 },
+        /*vary_transpose=*/true, /*include_shape_k=*/false);
+}
+
+// n == 1 is a tight column when the group divides K, and the normal padded
+// packer otherwise. group == K covers odd lengths that cannot use a smaller
+// group, and the transpose pairs exercise the strided copy.
+TEST(UnreorderRoundTrip, S8S8S32OS32SymQuantN1)
+{
+    const std::vector<Shape> cases = {
+        { 1, 1 },  { 3, 1 },  { 4, 1 },   { 5, 1 },   { 7, 1 },   { 8, 1 },
+        { 12, 1 }, { 15, 1 }, { 16, 1 },  { 17, 1 },  { 31, 1 },  { 32, 1 },
+        { 63, 1 }, { 64, 1 }, { 100, 1 }, { 128, 1 }, { 1024, 1 }
+    };
+
+    round_trip_sym_quant_groups<int8_t>(
+        "s8s8s32os32_sym_quant_n1",
+        aocl_get_reorder_buf_size_s8s8s32os32_sym_quant,
+        aocl_reorder_s8s8s32os32_sym_quant,
+        aocl_unreorder_s8s8s32os32_sym_quant, cases,
+        { (md_t)0, (md_t)4, (md_t)8, (md_t)16, (md_t)32, (md_t)64 },
+        /*vary_transpose=*/true, /*include_shape_k=*/true);
+}
+
+TEST(UnreorderSymQuantValidation, RejectsIllegalGroupSize)
+{
+    const md_t          k = 16;
+    const md_t          n = 16;
+    std::vector<int8_t> packed(k * n * 8, 0);
+    std::vector<int8_t> out(k * n, 0);
+
+    auto reject = [&](md_t group_size) {
+        dlp_quant_op_t quant;
+        std::memset(&quant, 0, sizeof(quant));
+        quant.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+        quant.src_type      = DLP_S8;
+        quant.dst_type      = DLP_S8;
+        quant.group_size    = group_size;
+
+        dlp_metadata_t md = fresh_metadata();
+        md.b_quant_op     = &quant;
+        aocl_unreorder_s8s8s32os32_sym_quant('r', 'n', 'B', packed.data(),
+                                             out.data(), k, n, n, &md);
+        EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_GROUP_DIMENSION)
+            << "group_size=" << group_size;
+    };
+
+    reject(6);        // Not a multiple of 4 and not full K.
+    reject(32);       // Larger than K.
+    reject((md_t)-4); // Negative, so not the full-K spelling of zero.
+}
+
+// The reference unreorder has no AVX-512 VNNI gate, so it always reports the
+// group or matrix-type error. Size and reorder do have that gate and return
+// DLP_CLSC_NOT_SUPPORTED first when VNNI is absent, so their specific error is
+// checked only when a legal call is supported. A null metadata pointer cannot
+// store an error code.
+TEST(UnreorderSymQuantValidation, RejectsBadMetadataAndMatrixType)
+{
+    const md_t          k = 16;
+    const md_t          n = 16;
+    std::vector<int8_t> in(k * n, 7);
+    std::vector<int8_t> packed(k * n * 8, 3);
+    std::vector<int8_t> out(k * n, 9);
+
+    auto make_quant = [](dlp_quant_op_t* op, md_t group_size) {
+        std::memset(op, 0, sizeof(*op));
+        op->quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+        op->src_type      = DLP_S8;
+        op->dst_type      = DLP_S8;
+        op->group_size    = group_size;
+    };
+
+    dlp_quant_op_t probe_op;
+    make_quant(&probe_op, 4);
+    dlp_metadata_t probe_md = fresh_metadata();
+    probe_md.b_quant_op     = &probe_op;
+    const bool supported    = aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
+                               'r', 'n', 'B', k, n, &probe_md)
+                           != 0;
+
+    auto expect_all = [&](const char* what, dlp_metadata_t* md, char mat_type,
+                          dlp_clsc_err_t want) {
+        const bool check_early_api = supported
+                                     || (want == DLP_CLSC_NOT_SUPPORTED);
+        dlp_metadata_t size_md = fresh_metadata();
+        if (md != nullptr) {
+            size_md = *md;
+        }
+        dlp_metadata_t* size_arg = (md == nullptr) ? nullptr : &size_md;
+        msz_t           sz = aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
+            'r', 'n', mat_type, k, n, size_arg);
+        if ((size_arg != nullptr) && check_early_api) {
+            EXPECT_EQ(size_arg->error_hndl.error_code, want) << what << " size";
+        }
+        EXPECT_EQ(sz, (msz_t)0) << what << " size";
+
+        dlp_metadata_t reorder_md = fresh_metadata();
+        if (md != nullptr) {
+            reorder_md = *md;
+        }
+        const std::vector<int8_t> packed_before = packed;
+        aocl_reorder_s8s8s32os32_sym_quant(
+            'r', 'n', mat_type, in.data(), packed.data(), k, n, n,
+            (md == nullptr) ? nullptr : &reorder_md);
+        if ((md != nullptr) && check_early_api) {
+            EXPECT_EQ(reorder_md.error_hndl.error_code, want)
+                << what << " reorder";
+        }
+        EXPECT_EQ(packed, packed_before) << what << " reorder wrote output";
+
+        dlp_metadata_t unreorder_md = fresh_metadata();
+        if (md != nullptr) {
+            unreorder_md = *md;
+        }
+        const std::vector<int8_t> out_before = out;
+        aocl_unreorder_s8s8s32os32_sym_quant(
+            'r', 'n', mat_type, packed.data(), out.data(), k, n, n,
+            (md == nullptr) ? nullptr : &unreorder_md);
+        if (md != nullptr) {
+            EXPECT_EQ(unreorder_md.error_hndl.error_code, want)
+                << what << " unreorder";
+        }
+        EXPECT_EQ(out, out_before) << what << " unreorder wrote output";
+    };
+
+    {
+        dlp_quant_op_t b_op;
+        make_quant(&b_op, 4);
+        b_op.quant_op_kind = DLP_QUANT_OP_DEQUANTIZE;
+        dlp_metadata_t md  = fresh_metadata();
+        md.b_quant_op      = &b_op;
+        expect_all("dequantize op", &md, 'B', DLP_CLSC_NOT_SUPPORTED);
+    }
+
+    {
+        dlp_quant_op_t a_op;
+        dlp_quant_op_t b_op;
+        make_quant(&a_op, 4);
+        make_quant(&b_op, 8);
+        dlp_metadata_t md = fresh_metadata();
+        md.a_quant_op     = &a_op;
+        md.b_quant_op     = &b_op;
+        expect_all("mismatched groups", &md, 'B',
+                   DLP_CLSC_INVALID_GROUP_DIMENSION);
+    }
+
+    expect_all("null metadata", nullptr, 'B', DLP_CLSC_NULL_POINTER);
+
+    {
+        dlp_quant_op_t b_op;
+        make_quant(&b_op, 4);
+        dlp_metadata_t md = fresh_metadata();
+        md.b_quant_op     = &b_op;
+        expect_all("A matrix", &md, 'A', DLP_CLSC_NOT_SUPPORTED);
+        expect_all("W matrix", &md, 'W', DLP_CLSC_NOT_SUPPORTED);
+    }
+}
+
+// No quantization op means one group over K. An A op alone supplies the group
+// when B's op is absent. Both must still round-trip.
+TEST(UnreorderSymQuantValidation, MissingQuantOpUsesFullKOrAGroup)
+{
+    const Shape s{ 16, 16 };
+    if (!round_trip<int8_t>(aocl_get_reorder_buf_size_s8s8s32os32_sym_quant,
+                            aocl_reorder_s8s8s32os32_sym_quant,
+                            aocl_unreorder_s8s8s32os32_sym_quant, 'r', s)) {
+        GTEST_SKIP() << "s8s8s32os32_sym_quant is not supported";
+    }
+
+    dlp_quant_op_t a_op;
+    std::memset(&a_op, 0, sizeof(a_op));
+    a_op.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+    a_op.src_type      = DLP_S8;
+    a_op.dst_type      = DLP_S8;
+    a_op.group_size    = 4;
+
+    const md_t          k     = s.k;
+    const md_t          n     = s.n;
+    const size_t        elems = (size_t)k * (size_t)n;
+    std::vector<int8_t> input(elems);
+    fill_pattern(input.data(), elems);
+
+    dlp_metadata_t md = fresh_metadata();
+    md.a_quant_op     = &a_op;
+    msz_t buf_sz      = aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
+        'r', 'n', 'B', k, n, &md);
+    ASSERT_NE(buf_sz, (msz_t)0);
+    ASSERT_EQ(md.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+    std::vector<int8_t> packed((size_t)buf_sz, 0);
+    std::vector<int8_t> output(elems, 0);
+    md            = fresh_metadata();
+    md.a_quant_op = &a_op;
+    aocl_reorder_s8s8s32os32_sym_quant('r', 'n', 'B', input.data(),
+                                       packed.data(), k, n, n, &md);
+    ASSERT_EQ(md.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+    md            = fresh_metadata();
+    md.a_quant_op = &a_op;
+    aocl_unreorder_s8s8s32os32_sym_quant('r', 'n', 'B', packed.data(),
+                                         output.data(), k, n, n, &md);
+    ASSERT_EQ(md.error_hndl.error_code, DLP_CLSC_SUCCESS);
+    EXPECT_EQ(input, output);
 }
 
 TEST(UnreorderRoundTrip, U8S8S32OS32Reference)
@@ -2035,6 +2408,888 @@ TEST(UnreorderRoundTrip, TransFlagMatchesLogicalInput)
     }
     if (supported == 0) {
         GTEST_SKIP() << "f32f32f32of32 is not supported on this processor";
+    }
+}
+
+int
+s4_get_nibble(const uint8_t* bytes, size_t index)
+{
+    uint8_t byte = bytes[index >> 1];
+    if ((index & 1u) != 0u) {
+        return (int)((byte >> 4) & 0x0Fu);
+    }
+    return (int)(byte & 0x0Fu);
+}
+
+void
+s4_set_nibble(uint8_t* bytes, size_t index, int value)
+{
+    uint8_t* byte   = bytes + (index >> 1);
+    uint8_t  nibble = (uint8_t)(value & 0x0F);
+    if ((index & 1u) != 0u) {
+        *byte = (uint8_t)((*byte & 0x0Fu) | (nibble << 4));
+    } else {
+        *byte = (uint8_t)((*byte & 0xF0u) | nibble);
+    }
+}
+
+// Nibble round trip shared by the s4 reorder APIs. group NULL leaves
+// b_quant_op unset. Returns false when the ISA cannot reorder. The input
+// allocation has 128 extra nibbles because the packers vector-read past a
+// short row or an odd-length column.
+template<typename SizeFn, typename ReorderFn, typename UnreorderFn>
+bool
+s4_round_trip(SizeFn                     size_fn,
+              ReorderFn                  reorder_fn,
+              UnreorderFn                unreorder_fn,
+              char                       order,
+              const Shape&               s,
+              char                       mat_type,
+              const md_t*                group,
+              char                       trans_in  = 'n',
+              char                       trans_out = 'n',
+              md_t                       extra_ldb = 0,
+              const dlp_gemm_blocking_t* bp        = nullptr,
+              DLP_QUANT_OP_KIND          kind      = DLP_QUANT_OP_DEQUANTIZE)
+{
+    const md_t   ldb_in  = plain_ldb(order, trans_in, s.k, s.n) + extra_ldb;
+    const md_t   ldb_out = plain_ldb(order, trans_out, s.k, s.n) + extra_ldb;
+    const size_t in_n    = plain_elems(order, trans_in, s.k, s.n, ldb_in);
+    const size_t out_n   = plain_elems(order, trans_out, s.k, s.n, ldb_out);
+
+    dlp_quant_op_t quant_op;
+    std::memset(&quant_op, 0, sizeof(quant_op));
+    if (group != nullptr) {
+        quant_op.quant_op_kind = kind;
+        quant_op.group_size    = *group;
+    }
+
+    auto with_metadata = [&]() {
+        dlp_metadata_t m = fresh_metadata();
+        m.block_params   = const_cast<dlp_gemm_blocking_t*>(bp);
+        if (group != nullptr) {
+            m.b_quant_op = &quant_op;
+        }
+        return m;
+    };
+
+    dlp_metadata_t md     = with_metadata();
+    msz_t          buf_sz = size_fn(order, trans_in, mat_type, s.k, s.n, &md);
+    if (buf_sz == 0) {
+        return false;
+    }
+
+    GuardedBuffer<uint8_t> input((in_n + 128u + 1u) / 2u);
+    GuardedBuffer<uint8_t> output((out_n + 1u) / 2u);
+    GuardedBuffer<uint8_t> packed((size_t)buf_sz);
+    if (!input.valid() || !output.valid() || !packed.valid()) {
+        ADD_FAILURE() << "guarded allocation failed";
+        return true;
+    }
+    std::memset(input.data(), 0, input.size());
+    std::memset(output.data(), 0, output.size());
+    std::memset(packed.data(), 0, packed.size());
+
+    for (md_t kr = 0; kr < s.k; kr++) {
+        for (md_t jc = 0; jc < s.n; jc++) {
+            s4_set_nibble(input.data(),
+                          plain_idx(order, trans_in, kr, jc, ldb_in),
+                          (int)(((kr * 3) + (jc * 5) + 1) & 0xF));
+        }
+    }
+
+    md = with_metadata();
+    reorder_fn(order, trans_in, mat_type, (const int8_t*)input.data(),
+               (int8_t*)packed.data(), s.k, s.n, ldb_in, &md);
+    if (md.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+        return false;
+    }
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_SUCCESS)
+        << "s4 reorder failed k=" << s.k << " n=" << s.n;
+    if (md.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+        return true;
+    }
+
+    md = with_metadata();
+    unreorder_fn(order, trans_out, mat_type, (const int8_t*)packed.data(),
+                 (int8_t*)output.data(), s.k, s.n, ldb_out, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_SUCCESS)
+        << "s4 unreorder failed k=" << s.k << " n=" << s.n;
+    if (md.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+        return true;
+    }
+
+    for (md_t kr = 0; kr < s.k; kr++) {
+        for (md_t jc = 0; jc < s.n; jc++) {
+            const int expect = (int)(((kr * 3) + (jc * 5) + 1) & 0xF);
+            const int got    = s4_get_nibble(
+                output.data(), plain_idx(order, trans_out, kr, jc, ldb_out));
+            EXPECT_EQ(got, expect)
+                << "s4 round trip k=" << s.k << " n=" << s.n
+                << " mat=" << mat_type << " at (" << kr << "," << jc << ")";
+            if (got != expect) {
+                return true;
+            }
+        }
+    }
+    return true;
+}
+
+TEST(UnreorderRoundTrip, S8s4Reference)
+{
+    const std::vector<Shape> cases = {
+        { 5, 7 }, { 17, 33 }, { 64, 1 }, { 64, 80 }, { 4099, 1091 },
+    };
+    int supported = 0;
+    for (md_t threads : { (md_t)1, (md_t)-1 }) {
+        PinnedThreadCount pin(threads);
+        for (char order : { 'r', 'c' }) {
+            for (const Shape& s : cases) {
+                for (md_t group : { (md_t)0, (md_t)4, (md_t)12, s.k }) {
+                    if (!quant_group_legal(s.k, group, 4)) {
+                        continue;
+                    }
+                    const std::string desc =
+                        std::string("s8s4 threads=")
+                        + (threads < 0 ? std::string("default")
+                                       : std::to_string(threads))
+                        + " order=" + order + " group=" + std::to_string(group)
+                        + " k=" + std::to_string(s.k)
+                        + " n=" + std::to_string(s.n);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_s8s4s32os32,
+                                      aocl_reorder_s8s4s32os32,
+                                      aocl_unreorder_s8s4s32os32, order, s, 'B',
+                                      &group, 'n', 'n', 0, nullptr,
+                                      DLP_QUANT_OP_QUANTIZE)) {
+                        supported++;
+                    }
+                }
+            }
+        }
+    }
+    if (supported == 0) {
+        GTEST_SKIP() << "s8s4s32os32 is not supported on this processor";
+    }
+}
+
+TEST(UnreorderRoundTrip, S8s4ReferenceTranspose)
+{
+    int               supported = 0;
+    PinnedThreadCount pin((md_t)1);
+    for (char order : { 'r', 'c' }) {
+        for (char trans_in : { 'n', 't' }) {
+            for (char trans_out : { 'n', 't' }) {
+                const Shape       s{ 17, 33 };
+                const md_t        group = 4;
+                const std::string desc  = std::string("s8s4 trans order=")
+                                         + order + " in=" + trans_in
+                                         + " out=" + trans_out;
+                SCOPED_TRACE(desc);
+                set_current_case(desc);
+                if (s4_round_trip(
+                        aocl_get_reorder_buf_size_s8s4s32os32,
+                        aocl_reorder_s8s4s32os32, aocl_unreorder_s8s4s32os32,
+                        order, s, 'B', &group, trans_in, trans_out,
+                        /*extra_ldb=*/1, nullptr, DLP_QUANT_OP_QUANTIZE)) {
+                    supported++;
+                }
+            }
+        }
+    }
+    if (supported == 0) {
+        GTEST_SKIP() << "s8s4s32os32 is not supported on this processor";
+    }
+}
+
+// n == 1 is a tight expanded-s8 column when the group divides K, and the
+// compact VNNI image otherwise. Odd K with group == K stays on the tight
+// path; a group of 4 that does not divide K uses the padded packer.
+TEST(UnreorderRoundTrip, S8s4N1)
+{
+    const std::vector<Shape> cases          = { { 1, 1 },  { 3, 1 },  { 4, 1 },
+                                                { 5, 1 },  { 7, 1 },  { 15, 1 },
+                                                { 16, 1 }, { 17, 1 }, { 63, 1 },
+                                                { 64, 1 }, { 100, 1 } };
+    const Shape              trans_shapes[] = { { 16, 1 }, { 17, 1 } };
+    int                      supported      = 0;
+
+    for (md_t threads : { (md_t)1, (md_t)-1 }) {
+        PinnedThreadCount pin(threads);
+        for (char order : { 'r', 'c' }) {
+            for (const Shape& s : cases) {
+                for (md_t group : { (md_t)0, (md_t)4, s.k }) {
+                    if (!quant_group_legal(s.k, group, 4)) {
+                        continue;
+                    }
+                    const std::string desc =
+                        std::string("s8s4 n1 threads=")
+                        + (threads < 0 ? std::string("default")
+                                       : std::to_string(threads))
+                        + " order=" + order + " group=" + std::to_string(group)
+                        + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_s8s4s32os32,
+                                      aocl_reorder_s8s4s32os32,
+                                      aocl_unreorder_s8s4s32os32, order, s, 'B',
+                                      &group, 'n', 'n', 0, nullptr,
+                                      DLP_QUANT_OP_QUANTIZE)) {
+                        supported++;
+                    }
+                }
+            }
+        }
+    }
+
+    PinnedThreadCount pin((md_t)1);
+    for (char order : { 'r', 'c' }) {
+        for (char trans_in : { 'n', 't' }) {
+            for (char trans_out : { 'n', 't' }) {
+                for (const Shape& s : trans_shapes) {
+                    const md_t        group = s.k;
+                    const std::string desc = std::string("s8s4 n1 trans order=")
+                                             + order + " in=" + trans_in
+                                             + " out=" + trans_out
+                                             + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_s8s4s32os32,
+                                      aocl_reorder_s8s4s32os32,
+                                      aocl_unreorder_s8s4s32os32, order, s, 'B',
+                                      &group, trans_in, trans_out,
+                                      /*extra_ldb=*/1, nullptr,
+                                      DLP_QUANT_OP_QUANTIZE)) {
+                        supported++;
+                    }
+                }
+            }
+        }
+    }
+
+    if (supported == 0) {
+        GTEST_SKIP() << "s8s4s32os32 is not supported on this processor";
+    }
+}
+
+TEST(UnreorderS8s4Validation, RejectsBadMetadataAndMatrixType)
+{
+    const Shape         s{ 16, 16 };
+    std::vector<int8_t> packed(256, 0);
+    std::vector<int8_t> output(256, 0x5A);
+
+    auto expect_reject = [&](const char* what, dlp_metadata_t* md,
+                             char mat_type, dlp_clsc_err_t want) {
+        const std::vector<int8_t> before = output;
+        aocl_unreorder_s8s4s32os32('r', 'n', mat_type, packed.data(),
+                                   output.data(), s.k, s.n, s.n, md);
+        if (md != nullptr) {
+            EXPECT_EQ(md->error_hndl.error_code, want) << what;
+        }
+        EXPECT_EQ(output, before) << what << " wrote output";
+    };
+
+    auto make_quant = [](dlp_quant_op_t* op, md_t group_size) {
+        std::memset(op, 0, sizeof(*op));
+        op->quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+        op->group_size    = group_size;
+    };
+
+    for (md_t group : { (md_t)5, (md_t)7, (md_t)32, (md_t)-4 }) {
+        dlp_quant_op_t op;
+        make_quant(&op, group);
+        dlp_metadata_t md = fresh_metadata();
+        md.b_quant_op     = &op;
+        expect_reject("illegal group", &md, 'B',
+                      DLP_CLSC_INVALID_GROUP_DIMENSION);
+    }
+
+    {
+        dlp_quant_op_t op;
+        make_quant(&op, 4);
+        op.quant_op_kind  = DLP_QUANT_OP_DEQUANTIZE;
+        dlp_metadata_t md = fresh_metadata();
+        md.b_quant_op     = &op;
+        expect_reject("dequantize op", &md, 'B', DLP_CLSC_NOT_SUPPORTED);
+    }
+
+    {
+        dlp_quant_op_t op;
+        make_quant(&op, 4);
+        dlp_metadata_t md = fresh_metadata();
+        md.b_quant_op     = &op;
+        expect_reject("A matrix", &md, 'A', DLP_CLSC_NOT_SUPPORTED);
+        expect_reject("W matrix", &md, 'W', DLP_CLSC_NOT_SUPPORTED);
+    }
+
+    expect_reject("null metadata", nullptr, 'B', DLP_CLSC_NULL_POINTER);
+
+    {
+        dlp_quant_op_t a_op;
+        dlp_quant_op_t b_op;
+        make_quant(&a_op, 4);
+        make_quant(&b_op, 8);
+        dlp_metadata_t md = fresh_metadata();
+        md.a_quant_op     = &a_op;
+        md.b_quant_op     = &b_op;
+        expect_reject("mismatched groups", &md, 'B',
+                      DLP_CLSC_INVALID_GROUP_DIMENSION);
+
+        dlp_metadata_t size_md = md;
+        msz_t sz = aocl_get_reorder_buf_size_s8s4s32os32('r', 'n', 'B', s.k,
+                                                         s.n, &size_md);
+        // VNNI is checked before the group, so a machine without it reports
+        // NOT_SUPPORTED and a zero size instead.
+        if (size_md.error_hndl.error_code != DLP_CLSC_NOT_SUPPORTED) {
+            EXPECT_EQ(size_md.error_hndl.error_code,
+                      DLP_CLSC_INVALID_GROUP_DIMENSION);
+        }
+        EXPECT_EQ(sz, (msz_t)0);
+
+        std::vector<int8_t> packed_before = packed;
+        dlp_metadata_t      reorder_md    = md;
+        aocl_reorder_s8s4s32os32('r', 'n', 'B', (const int8_t*)output.data(),
+                                 packed.data(), s.k, s.n, s.n, &reorder_md);
+        if (reorder_md.error_hndl.error_code != DLP_CLSC_NOT_SUPPORTED) {
+            EXPECT_EQ(reorder_md.error_hndl.error_code,
+                      DLP_CLSC_INVALID_GROUP_DIMENSION);
+        }
+        EXPECT_EQ(packed, packed_before);
+    }
+}
+
+// 12 does not divide the table KC (2048 or 4096), so KC shrinks. 6144 is
+// larger than either table KC, so KC grows. 6144 is legal only when K is at
+// least that large.
+TEST(UnreorderRoundTrip, S8s4KcAlign)
+{
+    const Shape cases[]   = { { 4101, 32 }, { 8195, 32 } };
+    const md_t  groups[]  = { 12, 6144 };
+    int         supported = 0;
+    for (md_t threads : { (md_t)1, (md_t)-1 }) {
+        PinnedThreadCount pin(threads);
+        for (char order : { 'r', 'c' }) {
+            for (const Shape& s : cases) {
+                for (md_t group : groups) {
+                    if (!quant_group_legal(s.k, group, 4)) {
+                        continue;
+                    }
+                    const std::string desc =
+                        std::string("s8s4 kc-align order=") + order + " group="
+                        + std::to_string(group) + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_s8s4s32os32,
+                                      aocl_reorder_s8s4s32os32,
+                                      aocl_unreorder_s8s4s32os32, order, s, 'B',
+                                      &group, 'n', 'n', 0, nullptr,
+                                      DLP_QUANT_OP_QUANTIZE)) {
+                        supported++;
+                    }
+                }
+            }
+        }
+    }
+    if (supported == 0) {
+        GTEST_SKIP() << "s8s4s32os32 is not supported on this processor";
+    }
+}
+
+// No quant op is one group over K. An A op alone supplies the group, and that
+// packed image matches a B op with the same group.
+TEST(UnreorderRoundTrip, S8s4MissingQuantOp)
+{
+    const Shape       s{ 32, 16 };
+    PinnedThreadCount pin((md_t)1);
+    int               supported = 0;
+    for (char order : { 'r', 'c' }) {
+        const std::string desc = std::string("s8s4 no-quant-op order=") + order;
+        SCOPED_TRACE(desc);
+        set_current_case(desc);
+        if (s4_round_trip(aocl_get_reorder_buf_size_s8s4s32os32,
+                          aocl_reorder_s8s4s32os32, aocl_unreorder_s8s4s32os32,
+                          order, s, 'B', nullptr, 'n', 'n', 0, nullptr,
+                          DLP_QUANT_OP_QUANTIZE)) {
+            supported++;
+        }
+    }
+    if (supported == 0) {
+        GTEST_SKIP() << "s8s4s32os32 is not supported on this processor";
+    }
+
+    const md_t     group   = 4;
+    const md_t     ldb     = s.n;
+    const size_t   nibbles = (size_t)s.k * (size_t)ldb;
+    dlp_quant_op_t b_op;
+    std::memset(&b_op, 0, sizeof(b_op));
+    b_op.quant_op_kind     = DLP_QUANT_OP_QUANTIZE;
+    b_op.group_size        = group;
+    dlp_metadata_t size_md = fresh_metadata();
+    size_md.b_quant_op     = &b_op;
+    msz_t nbytes = aocl_get_reorder_buf_size_s8s4s32os32('r', 'n', 'B', s.k,
+                                                         s.n, &size_md);
+    ASSERT_NE(nbytes, (msz_t)0);
+
+    GuardedBuffer<uint8_t> input((nibbles + 128u + 1u) / 2u);
+    GuardedBuffer<uint8_t> packed_a((size_t)nbytes);
+    GuardedBuffer<uint8_t> packed_b((size_t)nbytes);
+    GuardedBuffer<uint8_t> output((nibbles + 1u) / 2u);
+    ASSERT_TRUE(input.valid() && packed_a.valid() && packed_b.valid()
+                && output.valid());
+    std::memset(input.data(), 0, input.size());
+    for (size_t i = 0; i < nibbles; i++) {
+        s4_set_nibble(input.data(), i, (int)((i * 3 + 1) & 0xF));
+    }
+
+    dlp_quant_op_t a_op = b_op;
+    dlp_metadata_t md_a = fresh_metadata();
+    md_a.a_quant_op     = &a_op;
+    aocl_reorder_s8s4s32os32('r', 'n', 'B', (const int8_t*)input.data(),
+                             (int8_t*)packed_a.data(), s.k, s.n, ldb, &md_a);
+    ASSERT_EQ(md_a.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+    dlp_metadata_t md_b = fresh_metadata();
+    md_b.b_quant_op     = &b_op;
+    aocl_reorder_s8s4s32os32('r', 'n', 'B', (const int8_t*)input.data(),
+                             (int8_t*)packed_b.data(), s.k, s.n, ldb, &md_b);
+    ASSERT_EQ(md_b.error_hndl.error_code, DLP_CLSC_SUCCESS);
+    EXPECT_EQ(std::memcmp(packed_a.data(), packed_b.data(), (size_t)nbytes), 0);
+
+    md_a            = fresh_metadata();
+    md_a.a_quant_op = &a_op;
+    aocl_unreorder_s8s4s32os32('r', 'n', 'B', (const int8_t*)packed_a.data(),
+                               (int8_t*)output.data(), s.k, s.n, ldb, &md_a);
+    ASSERT_EQ(md_a.error_hndl.error_code, DLP_CLSC_SUCCESS);
+    for (size_t i = 0; i < nibbles; i++) {
+        EXPECT_EQ(s4_get_nibble(output.data(), i), (int)((i * 3 + 1) & 0xF))
+            << "nibble " << i;
+    }
+}
+
+TEST(UnreorderRoundTrip, Bf16s4Reference)
+{
+    const md_t groups[]  = { 0, 4, 12 };
+    int        supported = 0;
+    for (md_t threads : { (md_t)1, (md_t)-1 }) {
+        PinnedThreadCount pin(threads);
+        for (char order : { 'r', 'c' }) {
+            for (char mat : { 'B' }) {
+                for (const Shape& s : shapes()) {
+                    for (md_t group : groups) {
+                        if (!quant_group_legal(s.k, group, 2)) {
+                            continue;
+                        }
+                        const std::string desc =
+                            std::string("bf16s4 threads=")
+                            + (threads < 0 ? std::string("default")
+                                           : std::to_string(threads))
+                            + " order=" + order + " mat=" + mat
+                            + " group=" + std::to_string(group) + " k="
+                            + std::to_string(s.k) + " n=" + std::to_string(s.n);
+                        SCOPED_TRACE(desc);
+                        set_current_case(desc);
+                        if (s4_round_trip(
+                                aocl_get_reorder_buf_size_bf16s4f32of32,
+                                aocl_reorder_bf16s4f32of32,
+                                aocl_unreorder_bf16s4f32of32, order, s, mat,
+                                &group)) {
+                            supported++;
+                        }
+                    }
+                    // group == K is full K, same KC as a missing quant op.
+                    const std::string desc = std::string("bf16s4 full-K order=")
+                                             + order + " mat=" + mat
+                                             + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    md_t shape_k = s.k;
+                    if (s4_round_trip(aocl_get_reorder_buf_size_bf16s4f32of32,
+                                      aocl_reorder_bf16s4f32of32,
+                                      aocl_unreorder_bf16s4f32of32, order, s,
+                                      mat, &shape_k)) {
+                        supported++;
+                    }
+                    // No b_quant_op at all, rather than a present op whose
+                    // group_size is 0 or K.
+                    const std::string missing =
+                        std::string("bf16s4 no-quant-op order=") + order
+                        + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(missing);
+                    set_current_case(missing);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_bf16s4f32of32,
+                                      aocl_reorder_bf16s4f32of32,
+                                      aocl_unreorder_bf16s4f32of32, order, s,
+                                      mat, nullptr)) {
+                        supported++;
+                    }
+                }
+            }
+        }
+    }
+    if (supported == 0) {
+        GTEST_SKIP() << "bf16s4f32of32 is not supported on this processor";
+    }
+}
+
+TEST(UnreorderRoundTrip, Bf16s4MissingQuantOpMatchesFullK)
+{
+    // 4104 does not divide the table KC, so a real group changes the packed
+    // panel boundaries. A missing quant op must keep the same image as a
+    // full-K group.
+    const Shape       s = { 4104, 128 };
+    PinnedThreadCount pin((md_t)1);
+    dlp_metadata_t    probe = fresh_metadata();
+    msz_t nbytes = aocl_get_reorder_buf_size_bf16s4f32of32('r', 'n', 'B', s.k,
+                                                           s.n, &probe);
+    if (nbytes == 0) {
+        GTEST_SKIP() << "bf16s4f32of32 is not supported on this processor";
+    }
+
+    for (char order : { 'r', 'c' }) {
+        const md_t             ldb     = plain_ldb(order, 'n', s.k, s.n);
+        const size_t           nibbles = plain_elems(order, 'n', s.k, s.n, ldb);
+        GuardedBuffer<uint8_t> input((nibbles + 128u + 1u) / 2u);
+        GuardedBuffer<uint8_t> packed_missing((size_t)nbytes);
+        GuardedBuffer<uint8_t> packed_zero((size_t)nbytes);
+        GuardedBuffer<uint8_t> packed_k((size_t)nbytes);
+        GuardedBuffer<uint8_t> packed_null_md((size_t)nbytes);
+        ASSERT_TRUE(input.valid() && packed_missing.valid()
+                    && packed_zero.valid() && packed_k.valid()
+                    && packed_null_md.valid());
+        std::memset(input.data(), 0, input.size());
+        for (md_t kr = 0; kr < s.k; kr++) {
+            for (md_t jc = 0; jc < s.n; jc++) {
+                s4_set_nibble(input.data(), plain_idx(order, 'n', kr, jc, ldb),
+                              (int)(((kr * 3) + (jc * 5) + 1) & 0xF));
+            }
+        }
+
+        dlp_metadata_t missing = fresh_metadata();
+        aocl_reorder_bf16s4f32of32(order, 'n', 'B', (const int8_t*)input.data(),
+                                   (int8_t*)packed_missing.data(), s.k, s.n,
+                                   ldb, &missing);
+        ASSERT_EQ(missing.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+        dlp_quant_op_t op;
+        std::memset(&op, 0, sizeof(op));
+        op.quant_op_kind    = DLP_QUANT_OP_DEQUANTIZE;
+        op.group_size       = 0;
+        dlp_metadata_t zero = fresh_metadata();
+        zero.b_quant_op     = &op;
+        aocl_reorder_bf16s4f32of32(order, 'n', 'B', (const int8_t*)input.data(),
+                                   (int8_t*)packed_zero.data(), s.k, s.n, ldb,
+                                   &zero);
+        ASSERT_EQ(zero.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+        op.group_size         = s.k;
+        dlp_metadata_t full_k = fresh_metadata();
+        full_k.b_quant_op     = &op;
+        aocl_reorder_bf16s4f32of32(order, 'n', 'B', (const int8_t*)input.data(),
+                                   (int8_t*)packed_k.data(), s.k, s.n, ldb,
+                                   &full_k);
+        ASSERT_EQ(full_k.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+        aocl_reorder_bf16s4f32of32(order, 'n', 'B', (const int8_t*)input.data(),
+                                   (int8_t*)packed_null_md.data(), s.k, s.n,
+                                   ldb, nullptr);
+
+        EXPECT_EQ(std::memcmp(packed_missing.data(), packed_zero.data(),
+                              (size_t)nbytes),
+                  0)
+            << "order=" << order;
+        EXPECT_EQ(
+            std::memcmp(packed_missing.data(), packed_k.data(), (size_t)nbytes),
+            0)
+            << "order=" << order;
+        EXPECT_EQ(std::memcmp(packed_missing.data(), packed_null_md.data(),
+                              (size_t)nbytes),
+                  0)
+            << "order=" << order;
+    }
+}
+
+TEST(UnreorderRoundTrip, Bf16s4KcAlignAndTranspose)
+{
+    // 12 does not divide the table KC (4096 or 2048), so KC shrinks.
+    // 6144 is larger than either table KC, so KC grows to the group.
+    const Shape grow       = { 8195, 32 };
+    const md_t  grow_group = 6144;
+    // 4104 x 128 keeps group 12 across a KC boundary.
+    const Shape panels[] = { { 4099, 1091 }, { 8195, 129 }, { 4104, 128 } };
+    const Shape trans_shapes[] = { { 5, 7 },
+                                   { 17, 33 },
+                                   { 63, 129 },
+                                   { 16, 24 } };
+    int         supported      = 0;
+
+    for (md_t threads : { (md_t)1, (md_t)-1 }) {
+        PinnedThreadCount pin(threads);
+        for (char order : { 'r', 'c' }) {
+            for (char mat : { 'B' }) {
+                for (const Shape& s : panels) {
+                    md_t              group = 12;
+                    const std::string desc = std::string("bf16s4 panels order=")
+                                             + order + " mat=" + mat
+                                             + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_bf16s4f32of32,
+                                      aocl_reorder_bf16s4f32of32,
+                                      aocl_unreorder_bf16s4f32of32, order, s,
+                                      mat, &group)) {
+                        supported++;
+                    }
+                }
+                SCOPED_TRACE("bf16s4 grow KC");
+                set_current_case("bf16s4 grow KC");
+                if (s4_round_trip(aocl_get_reorder_buf_size_bf16s4f32of32,
+                                  aocl_reorder_bf16s4f32of32,
+                                  aocl_unreorder_bf16s4f32of32, order, grow,
+                                  mat, &grow_group)) {
+                    supported++;
+                }
+            }
+        }
+    }
+
+    PinnedThreadCount pin((md_t)1);
+    for (char order : { 'r', 'c' }) {
+        for (char mat : { 'B' }) {
+            for (char trans_in : { 'n', 't' }) {
+                for (char trans_out : { 'n', 't' }) {
+                    for (const Shape& s : trans_shapes) {
+                        md_t group = 4;
+                        if (!quant_group_legal(s.k, group, 2)) {
+                            continue;
+                        }
+                        const std::string desc =
+                            std::string("bf16s4 trans order=") + order + " mat="
+                            + mat + " in=" + trans_in + " out=" + trans_out;
+                        SCOPED_TRACE(desc);
+                        set_current_case(desc);
+                        if (s4_round_trip(
+                                aocl_get_reorder_buf_size_bf16s4f32of32,
+                                aocl_reorder_bf16s4f32of32,
+                                aocl_unreorder_bf16s4f32of32, order, s, mat,
+                                &group, trans_in, trans_out,
+                                /*extra_ldb=*/1)) {
+                            supported++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (supported == 0) {
+        GTEST_SKIP() << "bf16s4f32of32 is not supported on this processor";
+    }
+}
+
+// n == 1 packs into a min_NR=16 slot (same as a trailing fringe under 16).
+// Odd and even K, plus a group that does not divide table KC, keep the
+// unreorder on the same panel boundaries as reorder.
+TEST(UnreorderRoundTrip, Bf16s4N1)
+{
+    const std::vector<Shape> cases = { { 1, 1 },   { 2, 1 },   { 3, 1 },
+                                       { 4, 1 },   { 5, 1 },   { 7, 1 },
+                                       { 15, 1 },  { 16, 1 },  { 17, 1 },
+                                       { 63, 1 },  { 64, 1 },  { 100, 1 },
+                                       { 128, 1 }, { 4104, 1 } };
+    const Shape trans_shapes[]     = { { 16, 1 }, { 17, 1 }, { 64, 1 } };
+    int         supported          = 0;
+
+    for (md_t threads : { (md_t)1, (md_t)-1 }) {
+        PinnedThreadCount pin(threads);
+        for (char order : { 'r', 'c' }) {
+            for (const Shape& s : cases) {
+                for (md_t group :
+                     { (md_t)0, (md_t)2, (md_t)4, (md_t)12, s.k }) {
+                    if (!quant_group_legal(s.k, group, 2)) {
+                        continue;
+                    }
+                    const std::string desc =
+                        std::string("bf16s4 n1 threads=")
+                        + (threads < 0 ? std::string("default")
+                                       : std::to_string(threads))
+                        + " order=" + order + " group=" + std::to_string(group)
+                        + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_bf16s4f32of32,
+                                      aocl_reorder_bf16s4f32of32,
+                                      aocl_unreorder_bf16s4f32of32, order, s,
+                                      'B', &group)) {
+                        supported++;
+                    }
+                }
+            }
+        }
+    }
+
+    PinnedThreadCount pin((md_t)1);
+    for (char order : { 'r', 'c' }) {
+        for (char trans_in : { 'n', 't' }) {
+            for (char trans_out : { 'n', 't' }) {
+                for (const Shape& s : trans_shapes) {
+                    const md_t        group = s.k;
+                    const std::string desc =
+                        std::string("bf16s4 n1 trans order=") + order
+                        + " in=" + trans_in + " out=" + trans_out
+                        + " k=" + std::to_string(s.k);
+                    SCOPED_TRACE(desc);
+                    set_current_case(desc);
+                    if (s4_round_trip(aocl_get_reorder_buf_size_bf16s4f32of32,
+                                      aocl_reorder_bf16s4f32of32,
+                                      aocl_unreorder_bf16s4f32of32, order, s,
+                                      'B', &group, trans_in, trans_out,
+                                      /*extra_ldb=*/1)) {
+                        supported++;
+                    }
+                }
+            }
+        }
+    }
+
+    if (supported == 0) {
+        GTEST_SKIP() << "bf16s4f32of32 is not supported on this processor";
+    }
+}
+
+TEST(UnreorderRoundTrip, Bf16s4IgnoresBlockParams)
+{
+    const Shape         s  = { 100, 80 };
+    dlp_gemm_blocking_t bp = {};
+    bp.KC                  = 128;
+    PinnedThreadCount pin((md_t)-1);
+
+    dlp_metadata_t plain = fresh_metadata();
+    msz_t nbytes = aocl_get_reorder_buf_size_bf16s4f32of32('r', 'n', 'B', s.k,
+                                                           s.n, &plain);
+    if (nbytes == 0) {
+        GTEST_SKIP() << "bf16s4f32of32 is not supported on this processor";
+    }
+
+    const md_t             ldb     = s.n;
+    const size_t           nibbles = (size_t)s.k * (size_t)ldb;
+    GuardedBuffer<uint8_t> input((nibbles + 1u) / 2u);
+    GuardedBuffer<uint8_t> packed_plain((size_t)nbytes);
+    GuardedBuffer<uint8_t> packed_kc((size_t)nbytes);
+    std::memset(input.data(), 0, input.size());
+    for (size_t i = 0; i < nibbles; i++) {
+        s4_set_nibble(input.data(), i, (int)((i * 3 + 1) & 0xF));
+    }
+
+    plain = fresh_metadata();
+    aocl_reorder_bf16s4f32of32('r', 'n', 'B', (const int8_t*)input.data(),
+                               (int8_t*)packed_plain.data(), s.k, s.n, ldb,
+                               &plain);
+    ASSERT_EQ(plain.error_hndl.error_code, DLP_CLSC_SUCCESS);
+
+    dlp_metadata_t with_kc = fresh_metadata();
+    with_kc.block_params   = &bp;
+    aocl_reorder_bf16s4f32of32('r', 'n', 'B', (const int8_t*)input.data(),
+                               (int8_t*)packed_kc.data(), s.k, s.n, ldb,
+                               &with_kc);
+    ASSERT_EQ(with_kc.error_hndl.error_code, DLP_CLSC_SUCCESS);
+    EXPECT_EQ(
+        std::memcmp(packed_plain.data(), packed_kc.data(), (size_t)nbytes), 0);
+
+    md_t group = 12;
+    EXPECT_TRUE(s4_round_trip(
+        aocl_get_reorder_buf_size_bf16s4f32of32, aocl_reorder_bf16s4f32of32,
+        aocl_unreorder_bf16s4f32of32, 'r', s, 'B', &group, 'n', 'n', 0, &bp));
+    EXPECT_TRUE(s4_round_trip(
+        aocl_get_reorder_buf_size_bf16s4f32of32, aocl_reorder_bf16s4f32of32,
+        aocl_unreorder_bf16s4f32of32, 'c', s, 'B', &group, 'n', 'n', 0, &bp));
+}
+
+TEST(UnreorderBf16s4Validation, RejectsIllegalGroupAndMatrixType)
+{
+    const Shape    s     = { 32, 16 };
+    const md_t     ldb   = s.n;
+    dlp_metadata_t probe = fresh_metadata();
+    msz_t nbytes = aocl_get_reorder_buf_size_bf16s4f32of32('r', 'n', 'B', s.k,
+                                                           s.n, &probe);
+    if (nbytes == 0) {
+        GTEST_SKIP() << "bf16s4f32of32 is not supported on this processor";
+    }
+
+    std::vector<uint8_t> packed((size_t)nbytes, 0);
+    std::vector<uint8_t> output(((size_t)s.k * (size_t)ldb + 1u) / 2u, 0);
+    const md_t           illegal[] = { 5, 7, 64, -2 };
+    for (md_t group : illegal) {
+        dlp_quant_op_t op;
+        std::memset(&op, 0, sizeof(op));
+        op.quant_op_kind  = DLP_QUANT_OP_DEQUANTIZE;
+        op.group_size     = group;
+        dlp_metadata_t md = fresh_metadata();
+        md.b_quant_op     = &op;
+        aocl_unreorder_bf16s4f32of32(
+            'r', 'n', 'B', (const int8_t*)packed.data(), (int8_t*)output.data(),
+            s.k, s.n, ldb, &md);
+        EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_GROUP_DIMENSION)
+            << "group=" << group;
+
+        md            = fresh_metadata();
+        md.b_quant_op = &op;
+        aocl_reorder_bf16s4f32of32('r', 'n', 'B', (const int8_t*)output.data(),
+                                   (int8_t*)packed.data(), s.k, s.n, ldb, &md);
+        EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_INVALID_GROUP_DIMENSION)
+            << "reorder group=" << group;
+    }
+
+    dlp_quant_op_t quantize;
+    std::memset(&quantize, 0, sizeof(quantize));
+    quantize.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+    quantize.group_size    = 4;
+    dlp_metadata_t md      = fresh_metadata();
+    md.b_quant_op          = &quantize;
+    aocl_unreorder_bf16s4f32of32('r', 'n', 'B', (const int8_t*)packed.data(),
+                                 (int8_t*)output.data(), s.k, s.n, ldb, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+
+    md = fresh_metadata();
+    aocl_unreorder_bf16s4f32of32('r', 'n', 'A', (const int8_t*)packed.data(),
+                                 (int8_t*)output.data(), s.k, s.n, ldb, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+
+    md = fresh_metadata();
+    aocl_unreorder_bf16s4f32of32('r', 'n', 'W', (const int8_t*)packed.data(),
+                                 (int8_t*)output.data(), s.k, s.n, ldb, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+
+    // size / reorder also accept only B (not A or W).
+    md = fresh_metadata();
+    EXPECT_EQ(
+        aocl_get_reorder_buf_size_bf16s4f32of32('r', 'n', 'W', s.k, s.n, &md),
+        (msz_t)0);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+
+    md = fresh_metadata();
+    aocl_reorder_bf16s4f32of32('r', 'n', 'W', (const int8_t*)output.data(),
+                               (int8_t*)packed.data(), s.k, s.n, ldb, &md);
+    EXPECT_EQ(md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+
+    md_t expand_group = 4;
+    EXPECT_TRUE(s4_round_trip(
+        aocl_get_reorder_buf_size_bf16s4f32of32, aocl_reorder_bf16s4f32of32,
+        aocl_unreorder_bf16s4f32of32, 'r', s, 'B', &expand_group, 'n', 'n', 0,
+        nullptr, DLP_QUANT_OP_EXPAND));
+}
+
+// Col-major pack with n < 16 and an odd ldb exercises the nr<16 odd-stride
+// mask path (shared-byte nibble load).
+TEST(UnreorderRoundTrip, Bf16s4ColMajorNrLt16OddLdb)
+{
+    const Shape s     = { 17, 7 }; // n in (0, 16)
+    md_t        group = 4;
+    if (!s4_round_trip(aocl_get_reorder_buf_size_bf16s4f32of32,
+                       aocl_reorder_bf16s4f32of32, aocl_unreorder_bf16s4f32of32,
+                       'c', s, 'B', &group, 'n', 'n',
+                       /*extra_ldb=*/1)) {
+        GTEST_SKIP() << "bf16s4f32of32 is not supported on this processor";
     }
 }
 

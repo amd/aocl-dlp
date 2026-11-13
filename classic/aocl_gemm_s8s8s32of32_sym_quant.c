@@ -385,25 +385,19 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
 
     lcntx_l.dlp_quant_kernel_hndl.kernel_base = NULL;
 
-    dlp_group_op group_ops;
-    err = dlp_gemm_translate_to_group_op_list(metadata, &group_ops, m, n, k);
-    if (err != DLP_CLSC_SUCCESS) {
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
-
-    // dlp_gemm_translate_to_group_op_list points straight at the caller's
-    // metadata, which still describes the ORIGINAL A and B. Column major runs
-    // the kernel on swapped operands (see the (n, m, ..., b, ..., a) call
-    // below), and grp_post_op_list was already swapped above to match. The
-    // decision engine derives the kernel's per-group scale layout from these
-    // dims, so it has to see the same swapped roles or it will configure the
-    // kernel for the wrong operand. Copy rather than mutate: the metadata
-    // belongs to the caller.
-    dlp_quant_op_t kernel_a_quant_op;
-    dlp_quant_op_t kernel_b_quant_op;
-    dlp_qparam_t   kernel_a_scale_factors;
-    dlp_qparam_t   kernel_b_scale_factors;
+    // Metadata describes the ORIGINAL A and B. Column major runs the kernel on
+    // swapped operands (see the (n, m, ..., b, ..., a) call below), and
+    // grp_post_op_list was already swapped above to match. The decision engine
+    // derives the kernel's per-group scale layout from these dims, so it has
+    // to see the same swapped roles or it will configure the kernel for the
+    // wrong operand. Copy rather than mutate: the metadata belongs to the
+    // caller.
+    dlp_quant_op_t* a_quant_op = metadata->a_quant_op;
+    dlp_quant_op_t* b_quant_op = metadata->b_quant_op;
+    dlp_quant_op_t  kernel_a_quant_op;
+    dlp_quant_op_t  kernel_b_quant_op;
+    dlp_qparam_t    kernel_a_scale_factors;
+    dlp_qparam_t    kernel_b_scale_factors;
 
     if (is_column_major == TRUE) {
         kernel_a_quant_op      = *(metadata->b_quant_op);
@@ -428,8 +422,8 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         kernel_a_quant_op.dequant_scale_factors = &kernel_a_scale_factors;
         kernel_b_quant_op.dequant_scale_factors = &kernel_b_scale_factors;
 
-        group_ops.a_post_quant_op = &kernel_a_quant_op;
-        group_ops.b_post_quant_op = &kernel_b_quant_op;
+        a_quant_op = &kernel_a_quant_op;
+        b_quant_op = &kernel_b_quant_op;
     }
 
     // Align KC to group_size
@@ -449,12 +443,12 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         dlp_init_and_get_gemm_quant_kernel_hndl(
             DLP_KERNEL_S8S8S32OF32_SYM_QUANT, order, mtag_b, mtag_a, n, m, k,
             rs_b, cs_b, rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta,
-            post_op_list, &group_ops, &lcntx_l, DLP_F32);
+            post_op_list, a_quant_op, b_quant_op, &lcntx_l, DLP_F32);
     } else {
         dlp_init_and_get_gemm_quant_kernel_hndl(
             DLP_KERNEL_S8S8S32OF32_SYM_QUANT, order, mtag_a, mtag_b, m, n, k,
             rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta,
-            post_op_list, &group_ops, &lcntx_l, DLP_F32);
+            post_op_list, a_quant_op, b_quant_op, &lcntx_l, DLP_F32);
     }
 
     // The GEMM path is required to run on the JIT kernel. A NULL handle would

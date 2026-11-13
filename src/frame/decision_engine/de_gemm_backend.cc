@@ -781,4 +781,30 @@ gemmQuantS8S4DEBackend::gemmQuantS8S4DEBackend()
     }
 }
 
+gemmQuantBf16WoqDEBackend::gemmQuantBf16WoqDEBackend()
+    : isAvx512(false)
+    , isAvx512Bf16(false)
+    , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
+    , canGenerateKernelInfo(true)
+{
+    eKernelInstPref = dlp::env_utils::EnvironmentVariableManager::getInstance()
+                          .getKernelInstructionPreferenceFromEnv(
+                              "AOCL_DLP_ENABLE_INSTRUCTIONS");
+
+    const auto& archMgr = arch_utils::archConfigManager::getInstance();
+    isAvx512Bf16        = archMgr.isAvx512Bf16SupportedByConfiguredArch();
+    isAvx512            = archMgr.isAvx512SupportedByConfiguredArch();
+
+    // Public bf16s4/u4 APIs already reject hosts without AVX512-BF16 (+ the
+    // per-path nibble ISA). No AVX2/F32 reroute and no gemmBF16DEBackend —
+    // this DE owns tiles, widen site, and thread split; pre-widen codegen is
+    // the bf16s4 quant JIT.
+    if (isAvx512Bf16) {
+        eKernelInstPref =
+            kernel_frame::kernelInstrPreference::avx512_zmm_bf16_favour;
+    } else {
+        canGenerateKernelInfo = false;
+    }
+}
+
 } // namespace dlp::de

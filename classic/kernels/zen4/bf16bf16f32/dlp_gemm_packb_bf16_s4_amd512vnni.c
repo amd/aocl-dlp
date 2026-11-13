@@ -2229,12 +2229,13 @@ dlp_packb_nrlt16_bf16s4f32of32_col_major(int8_t*              pack_b_buffer,
 
             RIGHT_SHIFT_LAST_4BITS_ODD
             CLEAN_HIGH_4BITS_EVEN
+            CLEAN_HIGH_4BITS_ODD
             UNPACKHILO8_AVX2
             UNPACKHILO16_AVX2
             UNPACKHILO32_AVX2
             UNPACKHILO64_AVX2
 
-            // store to pack_b buffer
+            // UNPACKHILO64 outputs the complete 16-column slot to a_reg[0].
             _mm256_mask_storeu_epi32(((pack_b_buffer + (((kr + 0) * NR)) / 2)),
                                      msk0, a_reg[0]);
         }

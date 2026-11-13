@@ -1314,6 +1314,131 @@ gemm_tests:
             b_zp_granularity: ["PER_GROUP", "PER_CHANNEL", "PER_TENSOR"]
             group_size: ["16"]
 
+  # Reorder and GEMM must agree on the group-aligned KC. Table KC is 4096;
+  # group 12 aligns it to 4092. K=4094 is in (aligned KC, table KC], so the
+  # pack creates a second (partial) panel — the case where a one-panel
+  # beta=0 specialization would wrongly zero the second panel. M=1 stays
+  # in-kernel (below MC); M=160 is above MC so shape-based pre-widen can run.
+  # Neither case uses a JIT-only post-op, so M=1 does not exercise the BF16
+  # quant JIT wrapper's group-aligned KC override.
+  - name: "woq_bf16s4_reorder_group_aligned_kc"
+    a_type: ["bf16"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 160]
+    n: [1, 128]
+    k: [4094]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 10.0
+      absolute: 5.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_type: ["f32"]
+            b_scale_granularity: ["PER_CHANNEL"]
+            group_size: ["12"]
+
+  - name: "woq_bf16u4_reorder_group_aligned_kc"
+    a_type: ["bf16"]
+    b_type: ["u4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 160]
+    n: [1, 128]
+    k: [4094]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 10.0
+      absolute: 5.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_type: ["f32"]
+            b_scale_granularity: ["PER_CHANNEL"]
+            b_zp_type: ["s8"]
+            b_zp_granularity: ["PER_CHANNEL"]
+            group_size: ["12"]
+
+  # Force pre-widen via a JIT-only post-op (MISH) at M=1 so choosePreWiden
+  # cannot pick classic in-kernel. K=4104 with group 12 keeps two panels under
+  # the group-aligned KC (4092 when table KC is 4096); a wrong KC / missing
+  # BF16 quant JIT wrapper fails numerically against the reference.
+  - name: "woq_bf16s4_reorder_group_aligned_kc_prewiden_mish"
+    a_type: ["bf16"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [128]
+    k: [4104]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 20.0
+      absolute: 10.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_type: ["f32"]
+            b_scale_granularity: ["PER_CHANNEL"]
+            group_size: ["12"]
+        - type: "Elementwise-MISH"
+
+  - name: "woq_bf16u4_reorder_group_aligned_kc_prewiden_mish"
+    a_type: ["bf16"]
+    b_type: ["u4"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [128]
+    k: [4104]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 20.0
+      absolute: 10.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            b_scale_type: ["f32"]
+            b_scale_granularity: ["PER_CHANNEL"]
+            b_zp_type: ["s8"]
+            b_zp_granularity: ["PER_CHANNEL"]
+            group_size: ["12"]
+        - type: "Elementwise-MISH"
+
   # --------------------------------------------------------------------------
 
   # To test unpack B routine when bf16 fallbacks to f32 on avx2 machines

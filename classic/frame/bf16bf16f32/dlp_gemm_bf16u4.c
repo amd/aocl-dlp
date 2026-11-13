@@ -33,6 +33,7 @@
  * provided in reordered format.
  *
  */
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_5loop_interface_apis.h"
 #include "gemm_utils/dlp_gemm_utils.h"
@@ -40,25 +41,6 @@
 #include "kernels/dlp_gemm_kernels.h"
 #include "sys_utils/dlp_gemm_sys.h"
 #include "threading/dlp_gemm_thread_utils.h"
-
-// Kernel function prototypes
-typedef void (*dlp_gemm_rowvar_bf16)(const md_t,
-                                     const md_t,
-                                     const md_t,
-                                     const bfloat16*,
-                                     const md_t,
-                                     const md_t,
-                                     const md_t,
-                                     const bfloat16*,
-                                     const md_t,
-                                     const md_t,
-                                     float*,
-                                     const md_t,
-                                     const md_t,
-                                     const float,
-                                     const float,
-                                     dlp_gemm_post_op*,
-                                     dlp_gemm_post_op_attr);
 
 // B should always be packed.
 DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
@@ -114,8 +96,9 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
     // To decide whether to use original C or temp buffer for beta scale.
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr post_ops_attr = { 0 };
-    dlp_gemm_pre_op_attr  pre_ops_attr  = { 0 };
+    dlp_gemm_post_op_attr     post_ops_attr     = { 0 };
+    dlp_gemm_pre_op_attr      pre_ops_attr      = { 0 };
+    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -158,8 +141,19 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
+    // DE-/API-selected widen site owns the frame B path (same idea as s8s4's
+    // in_kernel_widen): in-kernel → classic UNPACKED; pre-widen → PACK_KC +
+    // BF16 JIT. Single-GEMM hard-fails pre-widen when JIT is null; batch
+    // forces IN_KERNEL so it never enters the packed path without a kernel.
+    AOCL_DLP_MEMORY_TAG mtag_b_use =
+        (lcntx->dlp_quant_kernel_hndl.nibble_widen_site
+         == DLP_NIBBLE_WIDEN_IN_KERNEL)
+            ? UNPACKED
+            : PACK_KC;
+    (void)mtag_b;
+
     /* Group quantization is not supported for this packing schema */
-    if (mtag_b == PACK_NR) {
+    if (mtag_b_use == PACK_NR) {
         /* Allocating private pack buffer of size KCxNR for each thread */
         mem_b_size_req = (KC * NR * sizeof(bfloat16));
 
@@ -246,7 +240,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
                               / 2;
 
             // B matrix will always be packed.
-            if (mtag_b == PACK_KC) {
+            if (mtag_b_use == PACK_KC) {
                 // Pack B chunks are based on jc work id.
                 md_t jc_work_id = thread_jc.work_id;
 
@@ -365,7 +359,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
                     post_ops_attr.post_op_c_j    = (jc + jr);
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
-                    if (mtag_b == PACK_NR) {
+                    if (mtag_b_use == PACK_NR) {
                         uint8_t* b_jr = b_reorder + (jr * kc0_updated) / 2;
                         pre_ops_attr.pre_op_b_i = pc;
                         pre_ops_attr.pre_op_b_j =
@@ -385,43 +379,29 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
                                 pre_ops_attr);
                         }
 
-                        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                            dlp_execute_kernel(
-                                &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
-                                (bfloat16*)a_use, rs_a_use, cs_a_use,
-                                a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
-                                cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
-                                (void*)&alpha, (void*)&beta0, post_op_list,
-                                post_ops_attr);
-                        } else {
-                            ((dlp_gemm_rowvar_bf16)lcntx->kern_fun_ptr)(
-                                mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                                a_block_stride, b_use_jr, rs_b_use, cs_b_use,
-                                (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                                post_op_list, post_ops_attr);
-                        }
-                    } else if (mtag_b == PACK_KC) {
+                        /* packed B kernel (JIT guaranteed for pre-widen) */
+                        dlp_execute_gemm_quant_kernel(
+                            &(lcntx->dlp_quant_kernel_hndl), mc0, nr0, kc0,
+                            (bfloat16*)a_use, rs_a_use, cs_a_use,
+                            a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
+                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                            (void*)&alpha, (void*)&beta0, post_op_list,
+                            post_ops_attr, pre_ops_attr, grp_post_ops_attr);
+                    } else if (mtag_b_use == PACK_KC) {
                         bfloat16* b_use_jr =
                             (bfloat16*)b_use + (jr * kc0_updated);
 
-                        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                            dlp_execute_kernel(
-                                &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
-                                (bfloat16*)a_use, rs_a_use, cs_a_use,
-                                a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
-                                cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
-                                (void*)&alpha, (void*)&beta0, post_op_list,
-                                post_ops_attr);
-                        } else {
-                            ((dlp_gemm_rowvar_bf16)lcntx->kern_fun_ptr)(
-                                mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                                a_block_stride, b_use_jr, rs_b_use, cs_b_use,
-                                (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                                post_op_list, post_ops_attr);
-                        }
+                        /* packed B kernel (JIT guaranteed for pre-widen) */
+                        dlp_execute_gemm_quant_kernel(
+                            &(lcntx->dlp_quant_kernel_hndl), mc0, nr0, kc0,
+                            (bfloat16*)a_use, rs_a_use, cs_a_use,
+                            a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
+                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                            (void*)&alpha, (void*)&beta0, post_op_list,
+                            post_ops_attr, pre_ops_attr, grp_post_ops_attr);
                     }
 #if (defined(DLP_KERNELS_ZEN4))
-                    else // mtag_b == UNPACKED
+                    else // mtag_b_use == UNPACKED
                     {
                         uint8_t* b_jr = b_reorder + (jr * kc0_updated) / 2;
 
@@ -448,7 +428,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
     }
 
     // Release pack buffers.
-    if (mtag_b == PACK_KC) {
+    if (mtag_b_use == PACK_KC) {
         // All threads in work group should wait till B matrix usage is
         // completed by the participating threads.
         dlp_atomic_barrier(thread_jc.ocomm_id,
@@ -459,7 +439,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
                 dlp_free_page_aligned(pack_b_buffer_bf16);
             }
         }
-    } else if (mtag_b == PACK_NR) {
+    } else if (mtag_b_use == PACK_NR) {
         /* releasing private B buffer */
         if (pack_b_buffer_bf16 != NULL) {
             dlp_free_page_aligned(pack_b_buffer_bf16);

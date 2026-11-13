@@ -342,7 +342,12 @@ typedef struct
     DLP_TYPE dst_type; /**< Destination element type after quantization or
                           dequantization. */
     md_t group_size;   /**< Group size along K for grouped quantization. A value
-                          of 0 means one group spanning the full K dimension. */
+                            of 0 means one group spanning the full K dimension.
+                            For bf16s4/u4 WOQ this also selects KC alignment on
+                            reorder, GEMM with reordered B, and unreorder; pass
+                            the same value on all three because the packed buffer
+                            has no header (a mismatch silently uses the wrong
+                            KC). */
     dlp_qparam_t*
         quant_scale_factors; /**< Scale factors for source-to-quantized
                                 conversion; NULL when not applicable. When

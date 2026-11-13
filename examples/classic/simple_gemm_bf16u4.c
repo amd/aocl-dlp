@@ -31,7 +31,8 @@
  *
  * B is packed (two u4 nibbles per byte), reordered with the same helper
  * as bf16s4; GEMM uses aocl_gemm_bf16u4f32of32 with mem_format_b 'R' and
- * metadata.b_quant_op (dequant scale factors and zero point). Scale and ZP
+ * metadata.b_quant_op (dequant scale factors and zero point). Pass the same
+ * b_quant_op.group_size to reorder and GEMM. Scale and ZP
  * may be per-tensor, per-channel, or per-group independently. Supported ZP
  * types include DLP_S8 and DLP_BF16; this example uses s8 ZPs.
  */
@@ -399,6 +400,19 @@ main()
                                         .dequant_scale_factors = &b_scl_group,
                                         .zero_point = &b_zp_t_group };
     metadata.b_quant_op             = &b_quant_op_group;
+
+    // Reorder again with the same group_size GEMM will use; the packed
+    // buffer has no header for KC alignment.
+    aocl_reorder_bf16s4f32of32('R', 'N', 'B', (const int8_t*)b_packed,
+                               (int8_t*)b_reordered, k, n, ldb_in, &metadata);
+    if (metadata.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+        printf("aocl_reorder_bf16s4f32of32 (group) failed, error_code=%d\n",
+               (int)metadata.error_hndl.error_code);
+        free(b_scale_group);
+        free(b_zp_group);
+        goto cleanup;
+    }
+
     memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
 
     aocl_gemm_bf16u4f32of32('R', 'N', 'N', m, n, k, 1.0f, a, lda, 'N',
