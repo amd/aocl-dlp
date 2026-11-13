@@ -135,21 +135,27 @@ jitGEMMF32RD<KType>::allocateReg()
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
-    aReg     = MR;
-    accumReg = MR * nSubBlockSize; // currently only supports when NR %4 == 0
-    cReg     = MR;
-    bReg     = numRegs - cReg - aReg;
+    aReg        = MR;
+    accumReg    = MR * nSubBlockSize;
+    cReg        = MR;
+    accumRegIdx = numRegs - accumReg;
 
-    // Check if we have enough registers
+    // The accumulator block owns the high registers. Use as many of the
+    // registers below it for B as the current MR permits, up to one per RD
+    // output column. A full MR=6 ZMM kernel has room for two, while smaller
+    // JIT-generated fringes can hide more B load latency with three or four.
+    // AVX2 MR=3 naturally has room for one.
+    bReg = accumRegIdx - aReg;
+    if (bReg > nSubBlockSize) {
+        bReg = nSubBlockSize;
+    }
     if (bReg < 1) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
-    accumRegIdx = numRegs - accumReg; // start from the end
 
     // accum registers are reused to store the result after reduction.
     cRegIdx = numRegs - cReg; // start from the end
 
-    bReg    = 1;
     bRegIdx = 0;
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
         if (useMask) {
@@ -256,15 +262,18 @@ jitGEMMF32RD<KType>::generateKrLoop(int unrollFactor, bool isKFringe)
         loadMRrowsOfA(isKFringe);
 
         for (iter_t unrollB = 0; unrollB < nSubBlockSize; unrollB++) {
-            // load column from B
+            // Alternate B registers when the JIT register budget allows it.
+            // This breaks the load-to-FMA dependency chain without fixing the
+            // generator to one MR or ISA-specific schedule.
+            const int bIdx = bRegIdx + (unrollB % bReg);
             loadRegF32Values(
-                bRegIdx,
+                bIdx,
                 ptr[regTmpBptr + ((unrollB == 3) ? regCsB3 : unrollB * regCsB)],
                 isKFringe);
             for (iter_t row = 0; row < MR; row++) {
                 // fma with A values
                 vfmadd231ps(RegType(accumRegIdx + unrollB * MR + row),
-                            RegType(aRegIdx + row), RegType(bRegIdx));
+                            RegType(aRegIdx + row), RegType(bIdx));
             }
         }
         // increment B pointer
@@ -592,62 +601,44 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32RD<KType>::reduceToXmm(int offset, int tmpIdx, int blockSize)
 {
-    // Function only handles blocks of 4 or fewer ZMMs
-    if (blockSize > nElemsPerXmm) {
+    // Pack four independent horizontal reductions into one shuffle/add tree.
+    // Missing columns reuse the last valid source; only the first blockSize
+    // lanes are stored. This makes the same primitive cover NR fringes 1..4.
+    if ((blockSize < 1) || (blockSize > nElemsPerXmm)) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
-    // Zero out the temporary registers we'll need
-    for (iter_t i = 0; i < nElemsPerXmm; i++) {
-        vxorps(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
-               Xbyak::Ymm(tmpIdx + i));
-    }
+    const int src0 = accumRegIdx + offset;
+    const int src1 = accumRegIdx + offset + ((blockSize > 1) ? MR : 0);
+    const int src2 = accumRegIdx + offset + ((blockSize > 2) ? (2 * MR) : 0);
+    const int src3 =
+        accumRegIdx + offset
+        + ((blockSize > 3) ? (3 * MR) : ((blockSize > 2) ? (2 * MR) : 0));
 
-    // Extract upper 256-bits and add to lower 256-bits for valid inputs
-    // This extact + add logic is specific to AVX512 ISA, when using ZMM
-    // registers. In case of using YMM registers, just move it onto temporary
-    // registers.
-    for (iter_t i = 0; i < blockSize; i++) {
-        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            // Extract upper 256-bits to temp YMM
-            vextractf32x8(Xbyak::Ymm(tmpIdx + i),
-                          Xbyak::Zmm(accumRegIdx + offset + i * MR), 1);
-            // Add to lower 256-bits of input ZMM, storing in original ZMM's YMM
-            // part
-            vaddps(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
-                   Xbyak::Ymm(accumRegIdx + offset + i * MR));
-        } else {
-            vmovups(Xbyak::Ymm(tmpIdx + i),
-                    Xbyak::Ymm(accumRegIdx + offset + i * MR));
-        }
-    }
+    // Pair adjacent K lanes while interleaving columns. After the second
+    // shuffle/add pair, each 128-bit lane contains one partial sum per output
+    // column. Unlike vhaddps, the independent shuffles can issue in parallel.
+    vshufps(RegType(tmpIdx), RegType(src0), RegType(src1), 0x88);
+    vshufps(RegType(tmpIdx + 1), RegType(src0), RegType(src1), 0xDD);
+    vaddps(RegType(tmpIdx), RegType(tmpIdx), RegType(tmpIdx + 1));
 
-    // First round of horizontal adds
-    vhaddps(Xbyak::Ymm(tmpIdx), Xbyak::Ymm(tmpIdx),
-            Xbyak::Ymm(tmpIdx + 1)); // First pair (with zero if blockSize=1)
+    vshufps(RegType(tmpIdx + 2), RegType(src2), RegType(src3), 0x88);
+    vshufps(RegType(tmpIdx + 3), RegType(src2), RegType(src3), 0xDD);
+    vaddps(RegType(tmpIdx + 2), RegType(tmpIdx + 2), RegType(tmpIdx + 3));
 
-    // Second round of horizontal adds
-    vhaddps(Xbyak::Ymm(tmpIdx + 2), Xbyak::Ymm(tmpIdx + 2),
-            Xbyak::Ymm(tmpIdx + 3));
+    vshufps(RegType(tmpIdx + 1), RegType(tmpIdx), RegType(tmpIdx + 2), 0x88);
+    vshufps(RegType(tmpIdx + 3), RegType(tmpIdx), RegType(tmpIdx + 2), 0xDD);
+    vaddps(RegType(tmpIdx + 1), RegType(tmpIdx + 1), RegType(tmpIdx + 3));
 
-    // Third round of horizontal adds
-    vhaddps(Xbyak::Ymm(tmpIdx), Xbyak::Ymm(tmpIdx), Xbyak::Ymm(tmpIdx + 2));
-
-    // Final reduction from YMM to XMM
-    if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-        vextractf128(Xbyak::Xmm(tmpIdx + 1), Xbyak::Ymm(tmpIdx),
-                     1); // Extract upper 128-bits
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        vextractf32x8(Ymm(tmpIdx), Zmm(tmpIdx + 1), 1);
+        vaddps(Ymm(tmpIdx), Ymm(tmpIdx), Ymm(tmpIdx + 1));
+        vextractf128(Xmm(tmpIdx + 1), Ymm(tmpIdx), 1);
     } else {
-        vextractf32x4(Xbyak::Xmm(tmpIdx + 1), Xbyak::Ymm(tmpIdx), 1);
+        vextractf128(Xmm(tmpIdx), Ymm(tmpIdx + 1), 1);
     }
-    vaddps(Xbyak::Xmm(cRegIdx + offset), Xbyak::Xmm(tmpIdx + 1),
-           Xbyak::Xmm(tmpIdx)); // Add to lower 128-bits
+    vaddps(Xmm(cRegIdx + offset), Xmm(tmpIdx + 1), Xmm(tmpIdx));
 
-    // Result is now in the XMM portion of startIdx
-    // - For blockSize=1: Only first float is valid
-    // - For blockSize=2: First two floats are valid
-    // - For blockSize=3: First three floats are valid
-    // - For blockSize=4: All four floats are valid
     return dlp::jit::jitGeneratorError::success;
 }
 

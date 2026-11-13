@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "aocl_dlp_gemm_check.h"
+#include "bindings/c_wrappers/capi_cpu_features.h"
 #include "classic/aocl_gemm_interface_apis.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "classic/dlp_errors.h"
@@ -41,6 +42,7 @@
 #include "logging/dlp_gemm_logger.h"
 #include "runtime/dlp_runtime.h"
 #include "threading/dlp_gemm_thread_decor_openmp.h"
+#include "tiny/dlp_gemm_f32_tiny_sgemm.h"
 
 static inline bool
 is_tiny_input_f32(md_t m, md_t n, md_t k, dlp_gemm_cntx_t* lcntx)
@@ -177,6 +179,22 @@ aocl_gemm_f32f32f32of32(const char      order,
         goto err_hndl;
     }
 
+    // Initialize a local runtime with global settings. The direct Tiny
+    // leaves run only for single-thread calls, on the calling thread.
+    dlp_rntm_t rntm_g;
+    dlp_rntm_init_from_global(&rntm_g);
+
+    // Unpacked f32 without metadata the framework acts on or validates
+    // (post-ops, GLU, quantization, block parameters, thresholds, hints) may
+    // run a direct Tiny leaf on the original operands, before stride
+    // rewriting and the decision engine.
+    if ((mtag_a == UNPACKED) && (mtag_b == UNPACKED)
+        && dlp_is_single_thread(&rntm_g) && dlp_sgemm_tiny_metadata_ok(metadata)
+        && dlp_sgemm_tiny_f32(order, dlp_transa, dlp_transb, m, n, k, alpha, a,
+                              lda, b, ldb, beta, c, ldc)) {
+        goto err_hndl;
+    }
+
     // Temporary variables to store/transform the input for kernel generation
     // and execution.
     md_t                m_use = m, n_use = n, k_use = k;
@@ -193,11 +211,6 @@ aocl_gemm_f32f32f32of32(const char      order,
     // Convert post op struct to post op linked list format.
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
     dlp_clsc_err_t   err;
-
-    // Initialize a local runtime with global settings if necessary. Note
-    // that in the case that a runtime is passed in, we make a local copy.
-    dlp_rntm_t rntm_g;
-    dlp_rntm_init_from_global(&rntm_g);
 
     // Create local copy, since each thread in a multi-instance setup
     // modifies the context object.

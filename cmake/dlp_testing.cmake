@@ -176,9 +176,9 @@ endfunction()
 #
 function(dlp_add_test)
     # Parse arguments for the test function
-    set(options DISABLED)
+    set(options DISABLED SINGLE_TEST)
     set(oneValueArgs NAME)
-    set(multiValueArgs SOURCES OBJECT_LIBS DEPENDS INCLUDE_DIRS)
+    set(multiValueArgs SOURCES OBJECT_LIBS DEPENDS INCLUDE_DIRS ENVIRONMENT EXTRA_ARGS)
 
     cmake_parse_arguments(DLP_TEST "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -238,10 +238,22 @@ function(dlp_add_test)
     # Add test to CTest
     if(DLP_TEST_DISABLED OR DLP_TESTING_CTEST_DISABLED)
         # Traditional Testing
-        add_test(NAME ${DLP_TEST_NAME} COMMAND ${DLP_TEST_NAME})
+        add_test(NAME ${DLP_TEST_NAME} COMMAND ${DLP_TEST_NAME} ${DLP_TEST_EXTRA_ARGS})
+        set_tests_properties(${DLP_TEST_NAME} PROPERTIES ENVIRONMENT "${DLP_TEST_ENVIRONMENT}")
+    elseif(DLP_TEST_SINGLE_TEST)
+        # One CTest entry for a whole gtest selection (e.g. a YAML sweep).
+        # It must run at least one test, and a selection that matches
+        # nothing fails instead of passing silently.
+        add_test(NAME ${DLP_TEST_NAME} COMMAND ${DLP_TEST_NAME} ${DLP_TEST_EXTRA_ARGS})
+        set_tests_properties(${DLP_TEST_NAME} PROPERTIES
+            ENVIRONMENT "${DLP_TEST_ENVIRONMENT}"
+            PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] [1-9][0-9]* test"
+            FAIL_REGULAR_EXPRESSION "\\[  FAILED  \\]|did not match any test")
     else()
         # Gtest aware testing
-        gtest_discover_tests(${DLP_TEST_NAME})
+        gtest_discover_tests(${DLP_TEST_NAME}
+            EXTRA_ARGS ${DLP_TEST_EXTRA_ARGS}
+            PROPERTIES ENVIRONMENT "${DLP_TEST_ENVIRONMENT}")
     endif()
 
 endfunction()

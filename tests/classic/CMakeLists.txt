@@ -37,6 +37,10 @@ dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 #
 foreach(test_source ${TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
+    # test_tiny_route includes internal headers and is added explicitly.
+    if(test_name STREQUAL "test_tiny_route")
+        continue()
+    endif()
     dlp_add_test(
         NAME ${test_name}
         SOURCES ${test_source}
@@ -49,3 +53,42 @@ foreach(test_source ${TEST_SOURCES})
     endif()
     dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
 endforeach()
+
+# Internal-header test: routes through the tiny header, which needs src/include.
+dlp_add_test(
+    NAME test_tiny_route
+    SOURCES test_tiny_route.cc
+    OBJECT_LIBS test_framework_obj test_adaptors_obj
+    INCLUDE_DIRS ${TEST_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/src/include
+    DEPENDS yaml-cpp
+)
+if(DLP_ENABLE_OPENMP)
+    target_link_libraries(test_tiny_route PRIVATE dlp::openmp)
+endif()
+dlp_set_global_compile_flags(test_tiny_route VISIBILITY PUBLIC)
+
+# Direct Tiny F32 leaves run only for single-thread calls. The sweep is one
+# CTest entry; the binary checks its own thread precondition.
+dlp_add_test(
+    NAME test_gemm_f32_tiny_sgemm
+    SOURCES test_gemm.cc
+    OBJECT_LIBS test_framework_obj test_adaptors_obj
+    INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
+    DEPENDS yaml-cpp
+    SINGLE_TEST
+    ENVIRONMENT "DLP_NUM_THREADS=1;OMP_NUM_THREADS=1;DLP_IC_NT=1;DLP_JC_NT=1;DLP_REQUIRE_SINGLE_THREAD=1"
+    EXTRA_ARGS -f ${CMAKE_CURRENT_SOURCE_DIR}/configs/f32_tiny_sgemm_test_config.yaml --gtest_filter=YamlConfigurations*
+)
+if(DLP_ENABLE_OPENMP)
+    target_link_libraries(test_gemm_f32_tiny_sgemm PRIVATE dlp::openmp)
+endif()
+dlp_set_global_compile_flags(test_gemm_f32_tiny_sgemm VISIBILITY PUBLIC)
+
+# The same sweep pinned to the AVX2 tier. AVX2 pinning selects Zen3 and the
+# AVX2 YMM preference, so the AVX2 leaves run on an AVX-512 host too.
+add_test(NAME test_gemm_f32_tiny_sgemm_avx2
+    COMMAND test_gemm_f32_tiny_sgemm -f ${CMAKE_CURRENT_SOURCE_DIR}/configs/f32_tiny_sgemm_test_config.yaml --gtest_filter=YamlConfigurations*)
+set_tests_properties(test_gemm_f32_tiny_sgemm_avx2 PROPERTIES
+    ENVIRONMENT "DLP_NUM_THREADS=1;OMP_NUM_THREADS=1;DLP_IC_NT=1;DLP_JC_NT=1;DLP_REQUIRE_SINGLE_THREAD=1;AOCL_DLP_ENABLE_INSTRUCTIONS=avx2"
+    PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] [1-9][0-9]* test"
+    FAIL_REGULAR_EXPRESSION "\\[  FAILED  \\]|did not match any test")

@@ -1,0 +1,192 @@
+# JIT f32 tiny SGEMM, minimal set. Covers the direct RV/RD and wide-RD leaves
+# with their tails, the alpha/beta and NaN rules, and padded leading
+# dimensions. Integer fill keeps the dots exact in f32, so a mismatch is an
+# indexing or alpha/beta bug.
+#
+# Run (single thread):
+#   DLP_REQUIRE_SINGLE_THREAD=1 OMP_NUM_THREADS=1 DLP_NUM_THREADS=1 \
+#     ./build/tests/classic/test_gemm_f32_tiny_sgemm -f <this file>
+
+gemm_tests:
+  - name: "f32_tiny_sweep_m"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m:
+      lb: 1
+      ub: 32
+      step: 1
+    n: [1, 8, 9, 17]
+    k: [1, 8, 16, 31]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -3.0
+      ub: 3.0
+      dist: "uniform"
+      force_int_distribution: true
+
+  - name: "f32_tiny_alpha_beta"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 8, 16, 31, 32]
+    n: [1, 8, 16, 31, 32]
+    k: [1, 8, 16, 31, 32]
+    alpha: [0.0, 1.0, -1.0, 2.0, 2.5]
+    beta: [0.0, 1.0, -1.0, 0.5, 2.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -3.0
+      ub: 3.0
+      dist: "uniform"
+      force_int_distribution: true
+
+  - name: "f32_tiny_padded_ld"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 3, 8, 15, 16, 31]
+    n: [1, 3, 8, 15, 16, 31]
+    k: [1, 3, 8, 15, 16, 31]
+    lda: [40]
+    ldb: [40]
+    ldc: [40]
+    alpha: [0.0, 1.0, -1.0, 2.5]
+    beta: [0.0, 1.0, -1.0, 0.5]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -3.0
+      ub: 3.0
+      dist: "uniform"
+      force_int_distribution: true
+
+  - name: "f32_tiny_alpha0_nan_ab"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [7, 64]
+    n: [17]
+    k: [1, 9, 63]
+    alpha: [0.0]
+    beta: [0.5, 1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_pattern:
+      - apply_matrix: ["A", "B"]
+        type: "static"
+        values: [.nan]
+      - apply_matrix: ["C"]
+        type: "static"
+        values: [1.0, -2.0, 3.0, 0.5]
+
+  - name: "f32_tiny_beta0_nan_c"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [7, 64]
+    n: [17]
+    k: [9, 63]
+    alpha: [1.0, -2.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_pattern:
+      - apply_matrix: ["A", "B"]
+        type: "static"
+        values: [1.0, -1.0, 2.0, 0.5]
+      - apply_matrix: ["C"]
+        type: "static"
+        values: [.nan]
+
+  - name: "f32_tiny_cache_fit_wide_rd"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [false]
+    m: [100, 1600, 3648]
+    n: [2, 4]
+    k: [16, 32, 128]
+    alpha: [1.0, -0.5]
+    beta: [0.0, 1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -3.0
+      ub: 3.0
+      dist: "uniform"
+      force_int_distribution: true
+
+  # Column-major TN normalizes to a wide-RD leaf with N=101 (not a multiple of
+  # four) and K=31/17 (not a multiple of 16): both the K and column tails of the
+  # wide leaf run.
+  - name: "f32_tiny_wide_rd_tails"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [false]
+    m: [101]
+    n: [2]
+    k: [31, 17]
+    alpha: [1.0]
+    beta: [1.0, 0.5]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -3.0
+      ub: 3.0
+      dist: "uniform"
+      force_int_distribution: true
+
+  # RV with three and four zmm column vectors (N 33..64). The sweep above
+  # stops at N=32, so these are the only numerical checks of those blocks.
+  - name: "f32_tiny_rv_wide_panels"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [6, 7, 16]
+    n: [33, 48, 49, 63, 64]
+    k: [1, 9, 31, 33]
+    alpha: [1.0, 2.5]
+    beta: [0.0, 1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -3.0
+      ub: 3.0
+      dist: "uniform"
+      force_int_distribution: true

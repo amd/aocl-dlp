@@ -51,6 +51,7 @@
 #include "logging/dlp_gemm_logger.h"
 #include "sys_utils/dlp_gemm_sys.h"
 #include "threading/dlp_gemm_thread_utils.h"
+#include "tiny/dlp_gemm_f32_tiny_sgemm.h"
 
 DLP_ALIGN_PREFIX(64)
 static dlp_gemm_cntx_t
@@ -101,6 +102,12 @@ dlp_arch_t
 dlp_gemm_get_enabled_arch()
 {
     return global_dlp_gemmenable_arch;
+}
+
+dlp_instr_pref_t
+dlp_gemm_get_enabled_instr_pref()
+{
+    return global_dlp_gemmenable_instr_pref;
 }
 
 static void
@@ -436,6 +443,7 @@ dlp_gemm_cntx_init_map()
 {
     _dlp_gemm_init_enable_arch();
     _dlp_gemm_init_enable_instr_pref();
+    dlp_sgemm_tiny_init();
     _dlp_gemm_cntx_init_func_map();
     _dlp_gemm_cntx_init_blksz_map();
     _dlp_gemm_cntx_init_sup_thres_map();

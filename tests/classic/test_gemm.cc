@@ -49,6 +49,9 @@
 #include <cctype>
 #include <cerrno>
 #include <cmath>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -2807,6 +2810,32 @@ main(int argc, char** argv)
         setenv("OMP_NUM_THREADS", "1", /*overwrite=*/1);
     }
 #endif
+
+    // A config that exercises single-thread-only leaves declares it. Refuse
+    // to run on a wider thread team rather than pass on the framework path.
+    if (std::getenv("DLP_REQUIRE_SINGLE_THREAD") != nullptr) {
+#ifdef _OPENMP
+        const int threads = omp_get_max_threads();
+#else
+        const int threads = 1;
+#endif
+        if (threads != 1) {
+            std::cerr << "DLP_REQUIRE_SINGLE_THREAD set, but the team has "
+                      << threads << " threads\n";
+            return 2;
+        }
+        // DLP_NUM_THREADS and the inherited way counts outrank OpenMP, so a
+        // single OpenMP team is not on its own enough to keep one thread.
+        for (const char* var :
+             { "DLP_NUM_THREADS", "DLP_IC_NT", "DLP_JC_NT" }) {
+            const char* const value = std::getenv(var);
+            if ((value != nullptr) && (std::string(value) != "1")) {
+                std::cerr << "DLP_REQUIRE_SINGLE_THREAD set, but " << var
+                          << " is " << value << "\n";
+                return 2;
+            }
+        }
+    }
 
     // Parse custom arguments before GoogleTest processes them
     auto parser = dlp::testing::utils::ArgParser::parseTestArgs(argc, argv);

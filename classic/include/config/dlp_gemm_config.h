@@ -258,6 +258,9 @@ dlp_gemm_get_sup_thres_KT_global_cntx(AOCL_DLP_OPERATION_TYPE op_type);
 dlp_arch_t
 dlp_gemm_get_enabled_arch();
 
+dlp_instr_pref_t
+dlp_gemm_get_enabled_instr_pref();
+
 void
 dlp_gemm_get_packa_strides(dlp_gemm_cntx_t* lcntx, md_t* rs, md_t* cs);
 
