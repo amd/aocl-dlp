@@ -37,11 +37,10 @@ from packaging import version as _version
 
 try:
     _rocm_version = _metadata.version('rocm-docs-core')
-except _metadata.PackageNotFoundError as e:
+except _metadata.PackageNotFoundError:
     _rocm_version = None
     print("Please install rocm-docs-core package!")
     print("pip install rocm-docs-core")
-    raise e
 
 _rocm_version_expected = "1.0.0"
 
@@ -87,10 +86,23 @@ source_suffix = {
 breathe_show_define_initializer = True
 
 if _rocm_version is None or _version.parse(_rocm_version) < _version.parse(_rocm_version_expected):
-    print("Old version of rocm-docs-core detected, falling back")
+    if _rocm_version is None:
+        print("rocm-docs-core is not installed, falling back")
+    else:
+        print("Old version of rocm-docs-core detected, falling back")
     templates_path = ['_template_fallback']
+    html_theme = 'alabaster'
+    html_theme_options = {}
 else:
     templates_path = ['_template']
+    html_theme = 'rocm_docs_theme'
+    html_theme_options = {
+        "link_main_doc": False,
+        "flavor": "local",
+        "repository_provider" : "github",
+        "repository_url": "https://github.com/amd/aocl-dlp",
+        "repository_branch": "dev",
+    }
 
 
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'CMakeLists.txt', 'requirements.txt']
@@ -104,14 +116,6 @@ f.close()
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_title = 'Home'
-html_theme = 'rocm_docs_theme'
-html_theme_options = {
-    "link_main_doc": False,
-    "flavor": "local",
-    "repository_provider" : "github",
-    "repository_url": "https://github.com/amd/aocl-dlp",
-    "repository_branch": "dev",
-}
 
 # Set canonical base URL for link generation (local server during development)
 html_baseurl = _os.environ.get('HTML_BASEURL', 'http://localhost:8082')

@@ -26,23 +26,26 @@ BFloat16 Support
 Constants and Enumerations
 ---------------------------
 
-Memory Format Constants
-~~~~~~~~~~~~~~~~~~~~~~~
+Layout and Memory Format Constants
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. list-table:: Memory Format Values
+.. list-table:: Layout and Memory Format Values
    :header-rows: 1
    :widths: 25 75
 
    * - Constant
      - Description
    * - ``'R'``
-     - Row-major (C-style) memory layout
+     - Row-major (C-style) ``order`` layout
    * - ``'C'``
-     - Column-major (Fortran-style) memory layout
+     - Column-major (Fortran-style) ``order`` layout
    * - ``'N'``
-     - Normal (unpacked) matrix format
+     - Normal (unpacked) ``mem_format_a`` or ``mem_format_b`` storage
+   * - ``'P'``
+     - Packed storage where supported by the API
    * - ``'R'``
-     - Reordered (packed) matrix format
+     - Reordered B storage (``mem_format_b``) where supported; reordering A is
+       not supported
 
 Transpose Options
 ~~~~~~~~~~~~~~~~~
@@ -128,7 +131,8 @@ Row-Major vs Column-Major
 Leading Dimensions
 ~~~~~~~~~~~~~~~~~~
 
-The leading dimension must be at least as large as the corresponding matrix dimension:
+For non-transposed operands, the leading dimension must be at least as large as
+the corresponding physical matrix dimension:
 
 .. code-block:: c
 
@@ -141,6 +145,15 @@ The leading dimension must be at least as large as the corresponding matrix dime
    assert(lda >= m);  // For matrix A (m × k)
    assert(ldb >= k);  // For matrix B (k × n)
    assert(ldc >= m);  // For matrix C (m × n)
+
+   // When an operand is transposed, use its physical stored dimensions.
+   // Row-major: A^T is k × m and B^T is n × k.
+   assert(lda >= m);  // For transposed matrix A
+   assert(ldb >= k);  // For transposed matrix B
+
+   // Column-major: leading dimension is the physical row count.
+   assert(lda >= k);  // For transposed matrix A
+   assert(ldb >= n);  // For transposed matrix B
 
 BFloat16 Usage
 --------------
@@ -161,12 +174,8 @@ Usage Example
 
    #include "aocl_dlp.h"
 
-   // Convert float32 to bfloat16
-   float f32_value = 3.14159f;
-   aocl_bf16 bf16_value = (aocl_bf16)f32_value;
-
    // Use in GEMM operations
-   aocl_bf16 *a_bf16, *b_bf16;
+   bfloat16 *a_bf16, *b_bf16;
    float *c_f32;
 
    aocl_gemm_bf16bf16f32of32(

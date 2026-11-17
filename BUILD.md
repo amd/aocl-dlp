@@ -106,13 +106,15 @@ Before building AOCL-DLP, ensure your system meets the following requirements:
 - OpenMP library (for multi-threading)
 - ninja-build (default generator for the CMake presets; optional if you use a `-make` preset or the manual build)
 
-**Note: GCC 11 introduced AVX512_BF16 support, which is required for bfloat16 GEMM.**
+**Note:** GCC 11 introduced AVX512_BF16 support for native bfloat16 kernels.
+The bf16 × bf16 → f32 API also has an AVX2/FMA3 fallback; requirements for
+other bfloat16 API families are operation-specific.
 
 ### Hardware
 - x86 CPU with AVX2/FMA3 support
 - AVX512 support for enhanced performance
 - AVX512_VNNI support for int8 GEMM
-- AVX512_BF16 support for bfloat16 GEMM
+- AVX512_BF16 support for native bfloat16 GEMM kernels
 
 ## Build Configuration Options
 

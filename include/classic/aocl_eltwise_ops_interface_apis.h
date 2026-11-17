@@ -38,9 +38,11 @@ DLP_BEGIN_EXTERN_C
 
 /**
  * @brief Elementwise operations for GEMM output.
- * @param[in] order Memory layout (row-major or column-major).
- * @param[in] transa Transpose option for matrix A.
- * @param[in] transb Transpose option for matrix B.
+ * @param[in] order Memory layout; only row-major ('R' or 'r') is supported.
+ * @param[in] transa Transpose option for matrix A; only no-transpose ('N' or
+ *                   'n') is supported.
+ * @param[in] transb Transpose option for matrix B; only no-transpose ('N' or
+ *                   'n') is supported.
  * @param[in] m Number of rows in matrix A and B.
  * @param[in] n Number of columns in matrix A and B.
  * @param[in] a Pointer to matrix A.
@@ -48,6 +50,9 @@ DLP_BEGIN_EXTERN_C
  * @param[out] b Pointer to matrix B.
  * @param[in] ldb Leading dimension of matrix B.
  * @param[in,out] metadata Pointer to post-operation structures.
+ *
+ * @note Column-major or transposed requests return without processing the
+ *       input or output matrices.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_eltwise_ops_bf16of32(const char      order,

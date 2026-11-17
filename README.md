@@ -16,7 +16,7 @@ AOCL-DLP is a library designed to provide optimized deep learning primitives for
 
 | Terminology | Description |
 |-------------|-------------|
-| u4/s4       | uint4_t or int4_t |
+| u4/s4       | packed 4-bit values stored in uint8_t or int8_t buffers |
 | u8/s8       | uint8_t or int8_t |
 | u32/s32     | uint32_t or int32_t |
 | f32         | float32 |
@@ -29,12 +29,14 @@ AOCL-DLP provides support for various data type combinations for GEMM operations
 
 | Input A | Input B | Output C | Accumulator | Function Suffix |
 |---------|---------|----------|-------------|-----------------|
-| u8/s8 | s8 | s32/s8/u8/f32/bf16 | s32 | <u8\|s8>s8s32o<s32\|s8\|u8\|f32\|bf16> |
+| u8/s8 | s8 | s32/s8/u8/f16/f32/bf16 | s32 | <u8\|s8>s8s32o<s32\|s8\|u8\|f16\|f32\|bf16> |
 | bf16/f32 | s8 | s32/s8/u8/f32/bf16 | s32 | <bf16\|f32>s8s32o<s32\|s8\|u8\|f32\|bf16> |
 | bf16 | s4/u4 | f32/bf16 | f32 | bf16<s4\|u4>f32o<f32\|bf16> |
 | bf16 | bf16 | f32/bf16 | f32 | bf16bf16f32o<f32\|bf16> |
 | f32 | f32 | f32 | f32 | f32f32f32of32 |
-| f16 | f16 | f16 | f16 | f16f16f16of16 |
+| f16 | f16 | f16/f32 | f16 | f16f16f16o<f16\|f32> |
+| f32 | f16 | f32 | f32 | f32f16f32of32 |
+| s8 | s4 | f32/bf16 | s32 | s8s4s32o<f32\|bf16> |
 | u8 | s4 | s32 | s32 | u8s4s32os32 |
 
 **Notes:**
@@ -51,12 +53,12 @@ AOCL-DLP supports the following pre-operations:
 | Zero Point  | Input tensor zero point compensation for quantized operations |
 | Scale Factor| Input tensor scaling for quantized operations |
 
-These pre-operations support different storage types:
-- `AOCL_GEMM_F32` (float)
-- `AOCL_GEMM_BF16` (bfloat16)
-- `AOCL_GEMM_INT8` (int8_t)
-- `AOCL_GEMM_UINT8` (uint8_t)
-- `AOCL_GEMM_INT32` (int32_t)
+These pre-operations use the `DLP_TYPE` storage-type values:
+- `DLP_F32` (float)
+- `DLP_BF16` (bfloat16)
+- `DLP_S8` (int8_t)
+- `DLP_U8` (uint8_t)
+- `DLP_S32` (int32_t)
 
 ## Post-Operations
 
@@ -84,6 +86,14 @@ The following eltwise algorithm types are supported:
 | SWISH        | Swish activation function |
 | TANH         | Hyperbolic tangent activation |
 | SIGMOID      | Sigmoid activation function |
+| MISH         | Mish activation function |
+
+### Terminal GLU Operations
+
+GLU is a fused terminal operation configured through `dlp_metadata_t::glu`,
+not through `seq_vector`. `GATED_SWIGLU` and `GATED_SWIGLU_AND_MUL` fold an
+`M × 2I` GEMM result into an `M × I` output and must be the last operation in
+the chain.
 
 ## Utility Functions
 
@@ -114,14 +124,20 @@ AOCL-DLP is optimized for AMD processors and requires specific minimum architect
 
 ### Minimum Architecture Requirements
 
-| Function Type          | Minimum Required ISA      | Available On                                        |
-|------------------------|---------------------------|-----------------------------------------------------|
-| f32 (float)            | AVX2/FMA3                 | AMD Zen1 and newer, Intel Haswell and newer         |
-| bf16 (bfloat16)        | AVX2/FMA3                 | AMD Zen1 and newer, Intel Haswell and newer         |
-| ↳                      | AVX512_BF16 (optimal)     | AMD Zen4 and newer, Intel Cooper Lake and newer     |
-| int8 (int8, uint8)     | AVX512_VNNI               | AMD Zen4 and newer, Intel Cascade Lake and newer    |
+| Function Type                    | Minimum Required ISA | Notes |
+|----------------------------------|----------------------|-------|
+| f32 (float)                      | AVX2/FMA3            | AMD Zen1 and newer |
+| bf16 × bf16 → f32                | AVX2/FMA3            | AVX512_BF16 enables native BF16 kernels |
+| bf16 × s8                        | AVX512_BF16 + AVX512_VNNI | Mixed-precision BF16 APIs |
+| bf16 × s4                        | AVX512_BF16 + AVX512_VNNI + AVX512_VBMI + GFNI | Mixed-precision BF16 APIs |
+| bf16 × u4                        | AVX512_BF16 + AVX512_VNNI + AVX512_VBMI | Mixed-precision BF16 APIs |
+| f32 × f16 → f32                  | AVX512               | Mixed-precision API |
+| f16 × f16 → f16/f32              | AVX512_FP16          | Native FP16 APIs |
+| int8 (int8, uint8)               | AVX512_VNNI          | Quantized GEMM APIs |
 
-While optimized for AMD processors, the library is compatible with any x86_64 CPU that meets these minimum requirements. For best performance on AMD processors, it is recommended to use Zen4 or newer architectures which support all instruction sets.
+While optimized for AMD processors, AOCL-DLP API availability depends on the
+requested operation and the processor ISA. Zen4 does not provide AVX512_FP16;
+check the requirements for the specific API family you use.
 
 ## Quick Build with CMake Presets
 

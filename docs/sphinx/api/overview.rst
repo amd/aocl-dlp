@@ -141,7 +141,7 @@ For optimizing repeated operations:
 Library Management
 ~~~~~~~~~~~~~~~~~~
 
-For configuration and feature detection:
+For configuration:
 
 .. code-block:: c
 
@@ -149,7 +149,7 @@ For configuration and feature detection:
    dlp_thread_set_num_threads(...)
    dlp_thread_set_ways(...)
 
-   // Hardware feature detection
+   // Validate an AOCL_DLP_ENABLE_INSTRUCTIONS override
    dlp_aocl_enable_instruction_query()
 
 API Design Principles
@@ -172,24 +172,31 @@ Examples:
 Memory Layout Flexibility
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All APIs support multiple memory layouts:
+GEMM APIs use ``order`` for matrix layout and ``mem_format_a`` /
+``mem_format_b`` for storage format:
 
-.. list-table:: Memory Layout Options
+.. list-table:: Layout and Memory Format Options
    :header-rows: 1
-   :widths: 20 30 50
+   :widths: 20 20 60
 
-   * - Format
+   * - Parameter
+     - Value
      - Description
-     - Use Case
-   * - Row-major (``'R'``)
-     - C-style layout
-     - Most common, cache-friendly for many operations
-   * - Column-major (``'C'``)
-     - Fortran-style layout
-     - Interoperability with Fortran/BLAS libraries
-   * - Reordered (``'R'``)
-     - Optimized layout
-     - Repeated operations with same matrix
+   * - ``order``
+     - ``'R'``
+     - Row-major (C-style) layout
+   * - ``order``
+     - ``'C'``
+     - Column-major (Fortran-style) layout
+   * - ``mem_format_a`` or ``mem_format_b``
+     - ``'N'``
+     - Normal (unpacked) matrix storage
+   * - ``mem_format_a`` or ``mem_format_b``
+     - ``'P'``
+     - Packed matrix storage where supported by the API
+   * - ``mem_format_b``
+     - ``'R'``
+     - Reordered B storage where supported; A reordering is not supported
 
 .. _api-design-parameter-validation:
 
@@ -206,11 +213,12 @@ AOCL-DLP APIs perform robust parameter validation:
 Hardware Abstraction
 ~~~~~~~~~~~~~~~~~~~~~
 
-The library provides automatic hardware optimization:
+The library selects implementations supported by the current processor:
 
 - **Feature detection**: Runtime detection of CPU capabilities
-- **Automatic fallbacks**: Graceful degradation when features unavailable
-- **Optimal path selection**: Choose best implementation for current hardware
+- **Path selection**: Choose an available implementation for the requested API
+- **Availability**: Unsupported ISA/API combinations follow the individual
+  API's documented error or no-op behavior
 
 Post-Operations Framework
 -------------------------
@@ -346,7 +354,7 @@ Typical workflow for neural network layers:
    aocl_reorder_f32f32f32of32(..., weights, weights_reordered, ...);
 
    // 3. Set up post-operations (bias + activation)
-   aocl_post_op post_ops;
+   dlp_metadata_t post_ops = {0};
    setup_post_ops(&post_ops, bias, activation_type);
 
    // 4. Process inputs (repeated)
@@ -372,7 +380,7 @@ Workflow for quantized neural networks:
    float *scales = load_scales();
 
    // 2. Set up quantization post-ops
-   aocl_post_op post_ops;
+   dlp_metadata_t post_ops = {0};
    setup_quantization_post_ops(&post_ops, scales, zero_points);
 
    // 3. Process quantized inputs
@@ -387,29 +395,25 @@ Workflow for quantized neural networks:
 Batch Processing
 ~~~~~~~~~~~~~~~~
 
-Efficient processing of multiple similar operations:
+The batch API takes ``group_count`` groups, each containing ``group_size``
+matrix multiplications. The example below uses one group with one matrix
+multiplication:
 
 .. code-block:: c
 
-   // Prepare batch data
-   float **a_array = malloc(batch_count * sizeof(float*));
-   float **b_array = malloc(batch_count * sizeof(float*));
-   float **c_array = malloc(batch_count * sizeof(float*));
+   const char order[] = { 'R' }, transa[] = { 'N' }, transb[] = { 'N' };
+   const md_t m[] = { rows }, n[] = { columns }, k[] = { inner };
+   const float alpha[] = { 1.0f }, beta[] = { 0.0f };
+   const float *a[] = { input }, *b[] = { weights };
+   float *c[] = { output };
+   const md_t lda[] = { inner }, ldb[] = { columns }, ldc[] = { columns };
+   const md_t group_size[] = { 1 };
+   const char mem_format_a[] = { 'N' }, mem_format_b[] = { 'N' };
+   dlp_metadata_t *metadata[] = { NULL };
 
-   // Fill arrays with matrix pointers
-   for (int i = 0; i < batch_count; i++) {
-       a_array[i] = &input_matrices[i * m * k];
-       b_array[i] = &weight_matrices[i * k * n];
-       c_array[i] = &output_matrices[i * m * n];
-   }
-
-   // Process batch
    aocl_batch_gemm_f32f32f32of32(
-       'R', 'N', 'N', m, n, k,
-       1.0f, a_array, k,
-       b_array, n,
-       0.0f, c_array, n,
-       batch_count, NULL
+       order, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
+       1, group_size, mem_format_a, mem_format_b, metadata
    );
 
 Error Handling
@@ -440,10 +444,9 @@ Hardware Compatibility
 
 .. code-block:: c
 
-   // Check hardware support
+   // Check whether an instruction-preference override is recognized
    if (!dlp_aocl_enable_instruction_query()) {
-       printf("Warning: Some optimizations not available\n");
-       // Library will use fallback implementations
+       printf("AOCL_DLP_ENABLE_INSTRUCTIONS is unset or invalid\n");
    }
 
 Best Practices
