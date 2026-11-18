@@ -278,8 +278,9 @@ namespace dlp { namespace testing { namespace framework {
          * @brief Destructor
          *
          * Memory is properly released based on allocation type.
+         * Virtual to support MatrixView (non-owning) derived class.
          */
-        ~Matrix();
+        virtual ~Matrix();
 
         /**
          * @brief Copy assignment operator
@@ -342,6 +343,33 @@ namespace dlp { namespace testing { namespace framework {
          * @return bool True if the matrix is reordered, false otherwise
          */
         bool isReordered() const;
+
+        /**
+         * @brief Get the GEMM M this matrix's reordered bytes were built
+         * for (see m_reorderCtxM). Meaningless (0) unless isReordered().
+         */
+        md_t getReorderContextM() const;
+
+        /**
+         * @brief Get A's transpose flag this matrix's reordered bytes were
+         * built for (see m_reorderCtxTransA). Meaningless unless
+         * isReordered().
+         */
+        bool getReorderContextTransA() const;
+
+        /**
+         * @brief Get the C type this matrix's reordered bytes were built
+         * for (see m_reorderCtxCType). Meaningless unless isReordered().
+         */
+        MatrixType getReorderContextCType() const;
+
+        /**
+         * @brief Record the external GEMM parameters a reorder() call used
+         * to produce this matrix's blocked bytes (see m_reorderCtxM/
+         * m_reorderCtxTransA/m_reorderCtxCType). Callers should also call
+         * setReordered(true).
+         */
+        void setReorderContext(md_t m, bool transA, MatrixType cType);
 
         /**
          * @brief Check if the matrix is packed
@@ -901,6 +929,14 @@ namespace dlp { namespace testing { namespace framework {
          */
         void deallocateAlignedMemory(uint8_t* ptr, size_t alignment);
 
+      protected:
+        /// When false, the destructor will NOT free m_data.
+        /// This is set by MatrixView (non-owning derived class) so that
+        /// Matrix objects created by slicing a MatrixView into
+        /// std::vector<Matrix> preserve the non-owning semantics.
+        bool m_ownsMemory = true;
+
+      private:
         md_t         m_rows; ///< Number of rows in the matrix
         md_t         m_cols; ///< Number of columns in the matrix
         mutable md_t m_k =
@@ -918,6 +954,23 @@ namespace dlp { namespace testing { namespace framework {
         bool m_transposed; ///< Whether the matrix is logically transposed
         bool m_reordered;  ///< Whether the matrix is reordered
         bool m_packed;     ///< Whether the matrix is packed
+
+        // Reorder-context metadata (meaningful only when m_reordered is
+        // true). Some backends' "optimal blocked format" for a reordered
+        // matrix is a function of parameters EXTERNAL to this matrix's own
+        // shape/type/layout -- e.g. oneDNN's format_tag::any weight-blocking
+        // choice depends on the GEMM's M and A's transpose flag, not just
+        // this matrix's own K x N shape. Recorded here (and copied/moved
+        // like m_reordered below) so a backend can verify at GEMM time that
+        // a reordered buffer's blocked bytes were actually produced for the
+        // SAME external parameters, instead of re-deriving a descriptor
+        // from the GEMM's own current parameters and blindly trusting it
+        // matches -- which can silently compute the wrong result (or read
+        // past the original allocation) when it doesn't.
+        md_t m_reorderCtxM      = 0;     ///< GEMM M used at reorder time
+        bool m_reorderCtxTransA = false; ///< A's transpose at reorder time
+        MatrixType m_reorderCtxCType =
+            MatrixType::f32; ///< C type at reorder time
     };
 
     // Template specializations for default type mapping (must be outside class)

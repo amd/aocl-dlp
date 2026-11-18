@@ -149,6 +149,8 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 | **Testing Options**           |              |                                                                    |
 | DLP_TESTING_LINK_STATIC       | ON           | Link tests with static AOCL-DLP library for better performance    |
 | DLP_TESTING_ENABLE_DETAILED_DEBUG | OFF      | Enable detailed debug information for tests                        |
+| DLP_TESTING_ENABLE_ONEDNN     | OFF          | Enable oneDNN UAL backend for testing/benchmarking                 |
+| DLP_ONEDNN_INSTALL_DIR        | ""           | Custom path to oneDNN installation root                            |
 |                               |              |                                                                    |
 | **Benchmarking Options**      |              |                                                                    |
 | DLP_BENCHMARKS_LINK_STATIC    | ON           | Link benchmarks with static AOCL-DLP library for better performance |
@@ -284,6 +286,70 @@ For custom OpenMP installation:
 cmake -DDLP_THREADING_MODEL=openmp -DDLP_OPENMP_ROOT=/path/to/openmp ..
 ```
 
+### oneDNN UAL Backend (Optional)
+
+AOCL-DLP includes an optional oneDNN UAL (Unified Abstraction Layer) backend for testing and benchmarking against Intel's oneDNN library. This enables comparison testing between AOCL-DLP and oneDNN implementations.
+
+**Prerequisites**: oneDNN must be built and installed separately. See [oneDNN documentation](https://github.com/oneapi-src/oneDNN) for installation instructions.
+
+```bash
+# Build oneDNN (example)
+cd ~/oneDNN
+cmake -B build -DCMAKE_INSTALL_PREFIX=$HOME/oneDNN/install -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cmake --install build
+```
+
+**Enable oneDNN UAL backend**:
+
+```bash
+# Using custom installation path (recommended)
+cmake -DBUILD_TESTING=ON \
+      -DDLP_TESTING_ENABLE_ONEDNN=ON \
+      -DDLP_ONEDNN_INSTALL_DIR=$HOME/oneDNN/install ..
+
+# Or using dnnl_DIR directly
+cmake -DBUILD_TESTING=ON \
+      -DDLP_TESTING_ENABLE_ONEDNN=ON \
+      -Ddnnl_DIR=$HOME/oneDNN/install/lib/cmake/dnnl ..
+```
+
+**Run tests with oneDNN backend**:
+
+```bash
+# Set library path for runtime
+export LD_LIBRARY_PATH=$HOME/oneDNN/install/lib:$LD_LIBRARY_PATH
+
+# Run GEMM tests comparing oneDNN vs Reference implementation
+./build/tests/classic/test_gemm --ual-test ONEDNN --ual-ref REF
+
+# Run with specific filter
+./build/tests/classic/test_gemm --ual-test ONEDNN --ual-ref REF --gtest_filter="*f32*"
+```
+
+**Note**: When `DLP_TESTING_ENABLE_ONEDNN=OFF` (default), the oneDNN adaptor is not compiled and the `--ual-test ONEDNN` option will not be available.
+
+#### Supported Subset
+
+The oneDNN backend only runs configurations that oneDNN can compute natively with the same arithmetic as AOCL-DLP and the reference implementation. Everything else returns `UAL_NOT_SUPPORTED`, which the test harness reports as a skip (not a failure) and the benchmarks skip at registration.
+
+| Feature | oneDNN backend behavior |
+|---------|-------------------------|
+| Data types (A/B/C) | `f32`, `bf16`, `fp16`, `s8`, `u8`, `s32`; other types (e.g. `s4`/`u4`) are `UAL_NOT_SUPPORTED` |
+| `u8`/`s8` x `s8` with `s32` accumulation | Supported only on AVX2-VNNI or AVX-512 VNNI (and newer) hosts. On AVX2-only hosts (and AVX-512 hosts without VNNI) this path is `UAL_NOT_SUPPORTED`, so those cases are skipped, because oneDNN's fallback kernel saturates its 16-bit intermediate |
+| `fp16` accumulation | `UAL_NOT_SUPPORTED` (oneDNN accumulates in f32, not with fp16-rounded FMA) |
+| alpha / beta | Supported (alpha as source scale, beta as sum post-op). `alpha == 0` is `UAL_NOT_SUPPORTED` |
+| alpha / beta with `s32` accumulation | Truncated to integers to match AOCL-DLP; `UAL_NOT_SUPPORTED` if not exactly representable as f32, or if `beta != 0` with a floating-point C |
+| Layouts and transposes | Row/column-major A, B, C and transposed A/B supported; transposed C is `UAL_NOT_SUPPORTED` |
+| Reordered B | Supported via `reorder()` (oneDNN-chosen blocked format); reusing it with a different M, A transpose, or C type than it was reordered for is `UAL_NOT_SUPPORTED` |
+| Reordered A | `UAL_NOT_SUPPORTED` |
+| Element-wise post-ops | ReLU, PReLU (scalar slope), GELU (tanh/erf), Clip, Swish, Tanh, Sigmoid, Mish |
+| Scale post-op | Per-tensor, per-channel and per-token scale with optional zero-point |
+| Bias post-op | Supported when it is the first post-op, has length N, and has no scale/zero-point; otherwise `UAL_NOT_SUPPORTED` |
+| GLU, MatAdd, MatMul post-ops | `UAL_NOT_SUPPORTED` |
+| A/B quantization, group scale, weight-only quantization | `UAL_NOT_SUPPORTED` |
+| Batch GEMM | Supported without post-ops or quantization; mixed A/B/C layouts or non-uniform leading dimension / transpose within a group are `UAL_NOT_SUPPORTED`. The prepared (benchmark) path additionally requires contiguous per-group storage and non-reordered matrices |
+
 ### Static vs Dynamic Linking
 
 By default, tests, benchmarks, and examples are linked with the static AOCL-DLP library for better performance. You can control this behavior:
@@ -377,7 +443,7 @@ AOCL-DLP uses a modern CMake build system structured as follows:
 - `cmake/dlp_benchmark.cmake`: Defines benchmarking options and infrastructure
 - `cmake/dlp_build_options.cmake`: Defines build target options (examples, sanitizers)
 - `cmake/dlp_documentation.cmake`: Defines documentation options and generation
-- `cmake/dlp_dependencies.cmake`: Manages OpenMP dependencies
+- `cmake/dlp_dependencies.cmake`: Manages dependencies (OpenMP, oneDNN)
 - `cmake/dlp_compiler_flags_linux.cmake`: Sets compiler flags for Linux
 - `cmake/dlp_compiler_flags_windows.cmake`: Sets compiler flags for Windows
 - `cmake/dlp_install.cmake`: Manages installation rules

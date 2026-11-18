@@ -34,6 +34,7 @@ dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 # Add each test executable
 # Reuse parent test framework and adaptor object libraries to eliminate duplication
 # Each test only compiles its own source file, then links with pre-compiled objects
+# Note: dlp::onednn provides compile definitions and linking automatically (or is empty if disabled)
 #
 foreach(test_source ${TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
@@ -46,7 +47,7 @@ foreach(test_source ${TEST_SOURCES})
         SOURCES ${test_source}
         OBJECT_LIBS test_framework_obj test_adaptors_obj
         INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
-        DEPENDS yaml-cpp
+        DEPENDS yaml-cpp dlp::onednn
     )
     if(DLP_ENABLE_OPENMP)
         target_link_libraries(${test_name} PRIVATE dlp::openmp)
@@ -60,7 +61,7 @@ dlp_add_test(
     SOURCES test_tiny_route.cc
     OBJECT_LIBS test_framework_obj test_adaptors_obj
     INCLUDE_DIRS ${TEST_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/src/include
-    DEPENDS yaml-cpp
+    DEPENDS yaml-cpp dlp::onednn
 )
 if(DLP_ENABLE_OPENMP)
     target_link_libraries(test_tiny_route PRIVATE dlp::openmp)
@@ -74,7 +75,7 @@ dlp_add_test(
     SOURCES test_gemm.cc
     OBJECT_LIBS test_framework_obj test_adaptors_obj
     INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
-    DEPENDS yaml-cpp
+    DEPENDS yaml-cpp dlp::onednn
     SINGLE_TEST
     ENVIRONMENT "DLP_NUM_THREADS=1;OMP_NUM_THREADS=1;DLP_IC_NT=1;DLP_JC_NT=1;DLP_REQUIRE_SINGLE_THREAD=1"
     EXTRA_ARGS -f ${CMAKE_CURRENT_SOURCE_DIR}/configs/f32_tiny_sgemm_test_config.yaml --gtest_filter=YamlConfigurations*

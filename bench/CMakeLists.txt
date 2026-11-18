@@ -50,8 +50,16 @@ dlp_glob_sources_recursive(FRAMEWORK_SOURCES "${PROJECT_SOURCE_DIR}/tests/framew
 # Collect utils source files from tests directory
 dlp_glob_sources_recursive(UTILS_SOURCES "${PROJECT_SOURCE_DIR}/tests/utils")
 
-# Collect ref source files from tests directory
-dlp_glob_sources_recursive(ADAPTORS_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors")
+# Collect adaptor source files from tests directory
+dlp_glob_sources_recursive(ADAPTORS_DLP_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors/dlp")
+dlp_glob_sources_recursive(ADAPTORS_REF_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors/ref")
+set(ADAPTORS_SOURCES ${ADAPTORS_DLP_SOURCES} ${ADAPTORS_REF_SOURCES})
+
+# Add oneDNN adaptors if enabled (dlp::onednn handles linking/definitions)
+if(DLP_TESTING_ENABLE_ONEDNN)
+    dlp_glob_sources_recursive(ADAPTORS_ONEDNN_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors/onednn")
+    list(APPEND ADAPTORS_SOURCES ${ADAPTORS_ONEDNN_SOURCES})
+endif()
 
 # Collect bench infrastructure source files
 dlp_glob_sources_recursive(BENCH_INFRA_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/framework")
@@ -62,12 +70,13 @@ dlp_glob_sources(OUTPUT BENCHMARK_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}
 #
 # Create reusable OBJECT library for benchmark infrastructure
 # Eliminates redundant compilation when multiple benchmarks are built
+# Note: dlp::onednn provides compile definitions and linking automatically
 #
 dlp_create_test_object_library(
     NAME bench_infrastructure_obj
     SOURCES ${BENCH_INFRA_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
     INCLUDE_DIRS ${BENCH_INCLUDE_DIRS}
-    DEPENDS yaml-cpp benchmark dlp::openmp
+    DEPENDS yaml-cpp benchmark dlp::openmp dlp::onednn
 )
 
 #
@@ -81,7 +90,7 @@ foreach(benchmark_source ${BENCHMARK_SOURCES})
         NAME ${benchmark_name}
         SOURCES ${benchmark_source}
         OBJECT_LIBS bench_infrastructure_obj
-        DEPENDS yaml-cpp dlp::openmp
+        DEPENDS yaml-cpp dlp::openmp dlp::onednn
     )
     dlp_set_global_compile_flags(${benchmark_name} VISIBILITY PUBLIC)
 

@@ -702,11 +702,12 @@ TEST_F(MatrixReorderTest, ReorderWithoutTranspose)
     }
 
     // Reorder using reference implementation
-    UalRef   ual_ref;
-    Matrix   output;
+    UalRef ual_ref;
+    Matrix output;
+    // M=16 (typical small test value), transA=false
     UALError result =
         ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
-                        MatrixType::f32, MatrixType::f32);
+                        MatrixType::f32, MatrixType::f32, 16, false);
 
     EXPECT_EQ(result, UALError::UAL_SUCCESS);
 
@@ -750,11 +751,12 @@ TEST_F(MatrixReorderTest, ReorderWithTranspose)
     }
 
     // Reorder using reference implementation
+    // M=16 (typical small test value), transA=false
     UalRef   ual_ref;
     Matrix   output;
     UALError result =
         ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
-                        MatrixType::f32, MatrixType::f32);
+                        MatrixType::f32, MatrixType::f32, 16, false);
 
     EXPECT_EQ(result, UALError::UAL_SUCCESS);
 
@@ -796,11 +798,12 @@ TEST_F(MatrixReorderTest, EffectiveDimensionsAfterReorder)
     EXPECT_EQ(input.getEffectiveCols(), 256);
 
     // Reorder
+    // M=128 (typical medium test value), transA=false
     UalRef   ual_ref;
     Matrix   output;
     UALError result =
         ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
-                        MatrixType::f32, MatrixType::f32);
+                        MatrixType::f32, MatrixType::f32, 128, false);
 
     EXPECT_EQ(result, UALError::UAL_SUCCESS);
 

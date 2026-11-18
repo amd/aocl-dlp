@@ -56,13 +56,14 @@ set(BENCH_TEST_INCLUDE_DIRS
 dlp_glob_sources(OUTPUT BENCH_TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Add each test file as a separate test
+# Note: dlp::onednn provides compile definitions and linking automatically (or is empty if disabled)
 foreach(test_source ${BENCH_TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
     dlp_add_test(
         NAME ${test_name}
         SOURCES ${test_source} ${BENCH_INFRA_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
         INCLUDE_DIRS ${TEST_INCLUDE_DIRS} ${BENCH_TEST_INCLUDE_DIRS}
-        DEPENDS yaml-cpp benchmark::benchmark
+        DEPENDS yaml-cpp benchmark::benchmark dlp::onednn
     )
     dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
 endforeach()

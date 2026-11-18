@@ -101,15 +101,9 @@ class UalRef : public IUal
     }
 
     /**
-     * @brief Get string representation of UAL type
-     *
-     * @param type UAL type
-     * @return std::string Human-readable name
-     */
-    std::string toString(UALType type) override;
-
-    /**
      * @brief Reorder matrix data to specified accumulation type
+     *
+     * Reference implementation performs a simple copy (no actual reordering).
      *
      * @param in Input matrix to reorder
      * @param out Output matrix to store reordered data
@@ -117,6 +111,8 @@ class UalRef : public IUal
      * @param B_type Type of matrix B in GEMM context
      * @param C_type Type of matrix C in GEMM context
      * @param accType Accumulation type
+     * @param M M dimension (unused by Ref)
+     * @param transA Whether A is transposed (unused by Ref)
      * @param group_scale Optional symmetric-quantization group-scale parameters
      * @return UALError Error code indicating success or failure
      */
@@ -126,6 +122,8 @@ class UalRef : public IUal
                      MatrixType             B_type,
                      MatrixType             C_type,
                      MatrixType             accType,
+                     md_t                   M           = 0,
+                     bool                   transA      = false,
                      const GroupScaleParam* group_scale = nullptr,
                      const WOQParam*        woq         = nullptr) override;
 
@@ -152,6 +150,60 @@ class UalRef : public IUal
      * @return UALError Error code indicating success or failure
      */
     UALError batch_gemm(const PreparedBatchGemmArgs& prepared) override;
+
+    /**
+     * @brief Perform general matrix multiplication: C = alpha*A*B + beta*C
+     *
+     * This method performs general matrix multiplication on raw matrix data
+     * pointers, supporting various data types, layouts, and transposition
+     * options.
+     *
+     * @param m Number of rows of matrix A and C
+     * @param n Number of columns of matrix B and C
+     * @param k Number of columns of matrix A and rows of matrix B
+     * @param matA Pointer to matrix A data
+     * @param matA_type Data type of matrix A
+     * @param matA_layout Layout of matrix A (row-major or column-major)
+     * @param matA_transposed Whether matrix A is transposed
+     * @param matA_leadingDim Leading dimension of matrix A
+     * @param matB Pointer to matrix B data
+     * @param matB_type Data type of matrix B
+     * @param matB_layout Layout of matrix B (row-major or column-major)
+     * @param matB_transposed Whether matrix B is transposed
+     * @param matB_leadingDim Leading dimension of matrix B
+     * @param matC Pointer to matrix C data (output)
+     * @param matC_type Data type of matrix C
+     * @param matC_layout Layout of matrix C (row-major or column-major)
+     * @param matC_transposed Whether matrix C is transposed
+     * @param matC_leadingDim Leading dimension of matrix C
+     * @param accType Accumulation type
+     * @param alpha Scaling factor for A*B (default: 1.0)
+     * @param beta Scaling factor for C (default: 0.0)
+     * @return UALError Error code indicating success or failure
+     */
+    UALError gemm(md_t         m,
+                  md_t         n,
+                  md_t         k,
+                  void*        matA,
+                  MatrixType   matA_type,
+                  MatrixLayout matA_layout,
+                  bool         matA_transposed,
+                  char         memFormatA,
+                  md_t         matA_leadingDim,
+                  void*        matB,
+                  MatrixType   matB_type,
+                  MatrixLayout matB_layout,
+                  bool         matB_transposed,
+                  char         memFormatB,
+                  md_t         matB_leadingDim,
+                  void*        matC,
+                  MatrixType   matC_type,
+                  MatrixLayout matC_layout,
+                  bool         matC_transposed,
+                  md_t         matC_leadingDim,
+                  MatrixType   accType,
+                  double       alpha = 1.0,
+                  double       beta  = 0.0) override;
 
     friend class RefUalPlan;
 

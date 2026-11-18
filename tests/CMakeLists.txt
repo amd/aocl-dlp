@@ -41,8 +41,16 @@ dlp_glob_sources_recursive(FRAMEWORK_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/framew
 # Collect utils source files
 dlp_glob_sources_recursive(UTILS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/utils")
 
-# Collect ref source files
-dlp_glob_sources_recursive(ADAPTORS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/adaptors")
+# Collect adaptor source files
+# Note: oneDNN adaptors are conditionally included based on DLP_TESTING_ENABLE_ONEDNN
+dlp_glob_sources_recursive(ADAPTORS_DLP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/adaptors/dlp")
+dlp_glob_sources_recursive(ADAPTORS_REF_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/adaptors/ref")
+set(ADAPTORS_SOURCES ${ADAPTORS_DLP_SOURCES} ${ADAPTORS_REF_SOURCES})
+
+if(DLP_TESTING_ENABLE_ONEDNN)
+    dlp_glob_sources_recursive(ADAPTORS_ONEDNN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/adaptors/onednn")
+    list(APPEND ADAPTORS_SOURCES ${ADAPTORS_ONEDNN_SOURCES})
+endif()
 
 # Collect test source files
 dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -54,11 +62,12 @@ dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 #
 
 # Test framework object library (ual, operation, matrix, etc.)
+# Note: dlp::onednn provides compile definitions and linking automatically
 dlp_create_test_object_library(
     NAME test_framework_obj
     SOURCES ${FRAMEWORK_SOURCES} ${UTILS_SOURCES}
     INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
-    DEPENDS yaml-cpp
+    DEPENDS yaml-cpp dlp::onednn
 )
 
 # Test adaptors object library (reference implementations for validation)
@@ -66,6 +75,7 @@ dlp_create_test_object_library(
     NAME test_adaptors_obj
     SOURCES ${ADAPTORS_SOURCES}
     INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
+    DEPENDS dlp::onednn
 )
 
 
@@ -80,7 +90,7 @@ foreach(test_source ${TEST_SOURCES})
         SOURCES ${test_source}
         OBJECT_LIBS test_framework_obj test_adaptors_obj
         INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
-        DEPENDS yaml-cpp
+        DEPENDS yaml-cpp dlp::onednn
     )
     dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
 endforeach()

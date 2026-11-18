@@ -264,7 +264,13 @@ Matrix::Matrix(const Matrix& other)
     , m_transposed(other.m_transposed)
     , m_reordered(other.m_reordered)
     , m_packed(other.m_packed)
+    , m_reorderCtxM(other.m_reorderCtxM)
+    , m_reorderCtxTransA(other.m_reorderCtxTransA)
+    , m_reorderCtxCType(other.m_reorderCtxCType)
 {
+    // Deep copies always own their data (even if source is a MatrixView)
+    m_ownsMemory = true;
+
     // Allocate new memory using helper method
     m_data = allocateAlignedMemory(m_dataSizeBytes, m_alignment);
 
@@ -292,27 +298,42 @@ Matrix::Matrix(Matrix&& other) noexcept
     , m_transposed(other.m_transposed)
     , m_reordered(other.m_reordered)
     , m_packed(other.m_packed)
+    , m_reorderCtxM(other.m_reorderCtxM)
+    , m_reorderCtxTransA(other.m_reorderCtxTransA)
+    , m_reorderCtxCType(other.m_reorderCtxCType)
 {
+    // Transfer ownership flag — critical for MatrixView slicing safety.
+    // When a MatrixView (m_ownsMemory=false) is moved into a
+    // std::vector<Matrix>, this ensures the resulting Matrix won't free
+    // the backing storage.
+    m_ownsMemory = other.m_ownsMemory;
+
     // Reset other matrix
-    other.m_data          = nullptr;
-    other.m_rows          = 0;
-    other.m_cols          = 0;
-    other.m_dataSizeBytes = 0;
-    other.m_alignment     = 0;
-    other.m_leadingDim    = 0;
-    other.m_transposed    = false;
-    other.m_reordered     = false;
-    other.m_packed        = false;
+    other.m_data             = nullptr;
+    other.m_rows             = 0;
+    other.m_cols             = 0;
+    other.m_dataSizeBytes    = 0;
+    other.m_alignment        = 0;
+    other.m_leadingDim       = 0;
+    other.m_transposed       = false;
+    other.m_reordered        = false;
+    other.m_packed           = false;
+    other.m_reorderCtxM      = 0;
+    other.m_reorderCtxTransA = false;
+    other.m_reorderCtxCType  = MatrixType::f32;
 }
 
 /**
  * @brief Destructor implementation
  *
  * Properly releases memory based on allocation type.
+ * Skips deallocation when m_ownsMemory is false (MatrixView semantics).
  */
 Matrix::~Matrix()
 {
-    deallocateAlignedMemory(m_data, m_alignment);
+    if (m_ownsMemory) {
+        deallocateAlignedMemory(m_data, m_alignment);
+    }
 }
 
 /**
@@ -328,21 +349,41 @@ Matrix::operator=(const Matrix& other)
         return *this;
     }
 
-    // Free existing memory using helper method
-    deallocateAlignedMemory(m_data, m_alignment);
+    // Free existing memory only if we own it
+    if (m_ownsMemory) {
+        deallocateAlignedMemory(m_data, m_alignment);
+    }
 
     // Copy metadata
-    m_rows          = other.m_rows;
-    m_cols          = other.m_cols;
-    m_k             = other.m_k;
-    m_type          = other.m_type;
-    m_dataSizeBytes = other.m_dataSizeBytes;
-    m_alignment     = other.m_alignment;
-    m_layout        = other.m_layout;
-    m_leadingDim    = other.m_leadingDim;
-    m_transposed    = other.m_transposed;
-    m_reordered     = other.m_reordered;
-    m_packed        = other.m_packed;
+    m_rows             = other.m_rows;
+    m_cols             = other.m_cols;
+    m_k                = other.m_k;
+    m_type             = other.m_type;
+    m_dataSizeBytes    = other.m_dataSizeBytes;
+    m_alignment        = other.m_alignment;
+    m_layout           = other.m_layout;
+    m_leadingDim       = other.m_leadingDim;
+    m_transposed       = other.m_transposed;
+    m_reordered        = other.m_reordered;
+    m_packed           = other.m_packed;
+    m_reorderCtxM      = other.m_reorderCtxM;
+    m_reorderCtxTransA = other.m_reorderCtxTransA;
+    m_reorderCtxCType  = other.m_reorderCtxCType;
+
+    // Deep copies own their data. Do not retain a borrowed or freed pointer
+    // if the replacement allocation throws: at this point m_data may still
+    // hold a non-owning pointer (e.g. this Matrix was a MatrixView slice
+    // into shared ContiguousBatchStorage, m_ownsMemory was false above so
+    // the dealloc guard skipped it). Clearing it before flipping
+    // m_ownsMemory to true means that if allocateAlignedMemory() below
+    // throws, the destructor (run during exception unwinding or later)
+    // sees m_ownsMemory=true + m_data=nullptr and calls
+    // deallocateAlignedMemory(nullptr, ...), which is a documented no-op --
+    // instead of freeing the borrowed pointer, which would be an invalid
+    // free for an interior batch slot or a double free of slot 0 once
+    // ContiguousBatchStorage's own destructor runs.
+    m_data       = nullptr;
+    m_ownsMemory = true;
 
     // Allocate new memory using helper method
     m_data = allocateAlignedMemory(m_dataSizeBytes, m_alignment);
@@ -368,33 +409,42 @@ Matrix::operator=(Matrix&& other) noexcept
         return *this;
     }
 
-    // Free existing memory using helper method
-    deallocateAlignedMemory(m_data, m_alignment);
+    // Free existing memory only if we own it
+    if (m_ownsMemory) {
+        deallocateAlignedMemory(m_data, m_alignment);
+    }
 
-    // Transfer ownership
-    m_rows          = other.m_rows;
-    m_cols          = other.m_cols;
-    m_k             = other.m_k;
-    m_type          = other.m_type;
-    m_data          = other.m_data;
-    m_dataSizeBytes = other.m_dataSizeBytes;
-    m_alignment     = other.m_alignment;
-    m_layout        = other.m_layout;
-    m_leadingDim    = other.m_leadingDim;
-    m_transposed    = other.m_transposed;
-    m_reordered     = other.m_reordered;
-    m_packed        = other.m_packed;
+    // Transfer ownership (including ownership flag)
+    m_rows             = other.m_rows;
+    m_cols             = other.m_cols;
+    m_k                = other.m_k;
+    m_type             = other.m_type;
+    m_data             = other.m_data;
+    m_dataSizeBytes    = other.m_dataSizeBytes;
+    m_alignment        = other.m_alignment;
+    m_layout           = other.m_layout;
+    m_leadingDim       = other.m_leadingDim;
+    m_transposed       = other.m_transposed;
+    m_reordered        = other.m_reordered;
+    m_packed           = other.m_packed;
+    m_reorderCtxM      = other.m_reorderCtxM;
+    m_reorderCtxTransA = other.m_reorderCtxTransA;
+    m_reorderCtxCType  = other.m_reorderCtxCType;
+    m_ownsMemory       = other.m_ownsMemory;
 
     // Reset other matrix
-    other.m_data          = nullptr;
-    other.m_rows          = 0;
-    other.m_cols          = 0;
-    other.m_dataSizeBytes = 0;
-    other.m_alignment     = 0;
-    other.m_leadingDim    = 0;
-    other.m_transposed    = false;
-    other.m_reordered     = false;
-    other.m_packed        = false;
+    other.m_data             = nullptr;
+    other.m_rows             = 0;
+    other.m_cols             = 0;
+    other.m_dataSizeBytes    = 0;
+    other.m_alignment        = 0;
+    other.m_leadingDim       = 0;
+    other.m_transposed       = false;
+    other.m_reordered        = false;
+    other.m_packed           = false;
+    other.m_reorderCtxM      = 0;
+    other.m_reorderCtxTransA = false;
+    other.m_reorderCtxCType  = MatrixType::f32;
 
     return *this;
 }
@@ -451,6 +501,45 @@ bool
 Matrix::isReordered() const
 {
     return m_reordered;
+}
+
+/**
+ * @brief Get the GEMM M this matrix's reordered bytes were built for
+ */
+md_t
+Matrix::getReorderContextM() const
+{
+    return m_reorderCtxM;
+}
+
+/**
+ * @brief Get A's transpose flag this matrix's reordered bytes were built for
+ */
+bool
+Matrix::getReorderContextTransA() const
+{
+    return m_reorderCtxTransA;
+}
+
+/**
+ * @brief Get the C type this matrix's reordered bytes were built for
+ */
+MatrixType
+Matrix::getReorderContextCType() const
+{
+    return m_reorderCtxCType;
+}
+
+/**
+ * @brief Record the external GEMM parameters a reorder() call used to
+ * produce this matrix's blocked bytes
+ */
+void
+Matrix::setReorderContext(md_t m, bool transA, MatrixType cType)
+{
+    m_reorderCtxM      = m;
+    m_reorderCtxTransA = transA;
+    m_reorderCtxCType  = cType;
 }
 
 /**

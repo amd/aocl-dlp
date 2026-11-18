@@ -104,14 +104,6 @@ class UalDlp : public IUal
     }
 
     /**
-     * @brief Get string representation of UAL type
-     *
-     * @param type UAL type
-     * @return std::string Human-readable name
-     */
-    std::string toString(UALType type) override;
-
-    /**
      * @brief Reorder matrix data to specified accumulation type
      *
      * @param in Input matrix to reorder
@@ -120,8 +112,10 @@ class UalDlp : public IUal
      * @param B_type Type of matrix B in GEMM context
      * @param C_type Type of matrix C in GEMM context
      * @param accType Accumulation type
+     * @param M M dimension (unused by DLP, for API compatibility)
+     * @param transA Whether A is transposed (unused by DLP)
      * @param group_scale Optional symmetric-quantization group-scale
-     * parameters; when non-null selects the sym_quant reorder path
+     *          parameters; when non-null selects the sym_quant reorder path
      * @param woq Optional weight-only-quantization parameters
      * @return UALError Error code indicating success or failure
      */
@@ -131,6 +125,8 @@ class UalDlp : public IUal
                      MatrixType             B_type,
                      MatrixType             C_type,
                      MatrixType             accType,
+                     md_t                   M           = 0,
+                     bool                   transA      = false,
                      const GroupScaleParam* group_scale = nullptr,
                      const WOQParam*        woq         = nullptr) override;
 
@@ -183,6 +179,60 @@ class UalDlp : public IUal
      * @return UALError Error code indicating success or failure
      */
     UALError batch_gemm(const PreparedBatchGemmArgs& prepared) override;
+
+    /**
+     * @brief Perform general matrix multiplication with raw pointers for
+     * benchmarking
+     *
+     * @param m Number of rows in A and C
+     * @param n Number of columns in B and C
+     * @param k Number of columns in A and rows in B
+     * @param matA Pointer to matrix A data
+     * @param matA_type Data type of matrix A
+     * @param matA_layout Memory layout of matrix A
+     * @param matA_transposed Whether matrix A is transposed
+     * @param matA_reordered Whether matrix A is reordered
+     * @param matA_leadingDim Leading dimension of matrix A
+     * @param matB Pointer to matrix B data
+     * @param matB_type Data type of matrix B
+     * @param matB_layout Memory layout of matrix B
+     * @param matB_transposed Whether matrix B is transposed
+     * @param matB_reordered Whether matrix B is reordered
+     * @param matB_leadingDim Leading dimension of matrix B
+     * @param matC Pointer to matrix C data
+     * @param matC_type Data type of matrix C
+     * @param matC_layout Memory layout of matrix C
+     * @param matC_transposed Whether matrix C is transposed
+     * @param matC_leadingDim Leading dimension of matrix C
+     * @param accType Accumulation type
+     * @param alpha Scaling factor for A*B
+     * @param beta Scaling factor for C
+     * @return UAL_SUCCESS on success, or an appropriate UALError error code on
+     * failure
+     */
+    UALError gemm(md_t         m,
+                  md_t         n,
+                  md_t         k,
+                  void*        matA,
+                  MatrixType   matA_type,
+                  MatrixLayout matA_layout,
+                  bool         matA_transposed,
+                  char         memFormatA,
+                  md_t         matA_leadingDim,
+                  void*        matB,
+                  MatrixType   matB_type,
+                  MatrixLayout matB_layout,
+                  bool         matB_transposed,
+                  char         memFormatB,
+                  md_t         matB_leadingDim,
+                  void*        matC,
+                  MatrixType   matC_type,
+                  MatrixLayout matC_layout,
+                  bool         matC_transposed,
+                  md_t         matC_leadingDim,
+                  MatrixType   accType,
+                  double       alpha = 1.0,
+                  double       beta  = 0.0) override;
 
   private:
     // Tuning-knob backing storage for the reorder path. Attached to the local

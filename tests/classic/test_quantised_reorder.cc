@@ -70,7 +70,7 @@ TEST_F(QuantisedReorderTest, ReorderS8MatrixBasic)
 
     auto status =
         ual_dlp->reorder(B_normal, B_reordered, MatrixType::u8, MatrixType::s8,
-                         MatrixType::s32, MatrixType::s32);
+                         MatrixType::s32, MatrixType::s32, 0, false);
 
     // Reorder may return NOT_SUPPORTED on non-AMD hardware
     EXPECT_TRUE(status == UALError::UAL_SUCCESS
@@ -88,9 +88,9 @@ TEST_F(QuantisedReorderTest, ReorderBf16MatrixBasic)
     Matrix B_reordered(rows, cols, MatrixType::bf16, MatrixLayout::ROW_MAJOR);
     B_reordered.setReordered(true);
 
-    auto status =
-        ual_dlp->reorder(B_normal, B_reordered, MatrixType::bf16,
-                         MatrixType::bf16, MatrixType::f32, MatrixType::f32);
+    auto status = ual_dlp->reorder(B_normal, B_reordered, MatrixType::bf16,
+                                   MatrixType::bf16, MatrixType::f32,
+                                   MatrixType::f32, 0, false);
 
     EXPECT_TRUE(status == UALError::UAL_SUCCESS
                 || status == UALError::UAL_NOT_SUPPORTED);
@@ -107,9 +107,9 @@ TEST_F(QuantisedReorderTest, ReorderF32MatrixBasic)
     Matrix B_reordered(rows, cols, MatrixType::f32, MatrixLayout::ROW_MAJOR);
     B_reordered.setReordered(true);
 
-    auto status =
-        ual_dlp->reorder(B_normal, B_reordered, MatrixType::f32,
-                         MatrixType::f32, MatrixType::f32, MatrixType::f32);
+    auto status = ual_dlp->reorder(B_normal, B_reordered, MatrixType::f32,
+                                   MatrixType::f32, MatrixType::f32,
+                                   MatrixType::f32, 0, false);
 
     EXPECT_TRUE(status == UALError::UAL_SUCCESS
                 || status == UALError::UAL_NOT_SUPPORTED);
@@ -126,9 +126,9 @@ TEST_F(QuantisedReorderTest, ReorderNonSquareMatrix)
     Matrix B_reordered(rows, cols, MatrixType::s8, MatrixLayout::ROW_MAJOR);
     B_reordered.setReordered(true);
 
-    auto status =
-        ual_dlp->reorder(B_normal, B_reordered, MatrixType::bf16,
-                         MatrixType::s8, MatrixType::f32, MatrixType::s32);
+    auto status = ual_dlp->reorder(B_normal, B_reordered, MatrixType::bf16,
+                                   MatrixType::s8, MatrixType::f32,
+                                   MatrixType::s32, 0, false);
 
     EXPECT_TRUE(status == UALError::UAL_SUCCESS
                 || status == UALError::UAL_NOT_SUPPORTED);
@@ -166,7 +166,8 @@ TEST_F(QuantisedReorderTest, ReorderS8S4GroupScale)
 
     auto status =
         ual_dlp->reorder(B_normal, B_reordered, MatrixType::s8, MatrixType::s4,
-                         MatrixType::f32, MatrixType::s32, group_scale);
+                         MatrixType::f32, MatrixType::s32,
+                         /*M=*/0, /*transA=*/false, group_scale);
 
     // Reorder may return NOT_SUPPORTED on non-AMD hardware.
     EXPECT_TRUE(status == UALError::UAL_SUCCESS

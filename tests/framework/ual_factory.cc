@@ -29,11 +29,17 @@
 #include "framework/ual_factory.hh"
 #include "adaptors/dlp/ual_dlp.hh"
 #include "adaptors/ref/ual_ref.hh"
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+#include "adaptors/onednn/ual_onednn.hh"
+#endif
 
 namespace dlp::testing::framework {
 
 using dlp::testing::classic::UalDlp;
 using dlp::testing::classic::UalRef;
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+using dlp::testing::classic::UalOneDNN;
+#endif
 
 std::unique_ptr<IUal>
 UalFactory::createUal(UALType type)
@@ -43,6 +49,15 @@ UalFactory::createUal(UALType type)
             return std::make_unique<UalDlp>();
         case UALType::REF:
             return std::make_unique<UalRef>();
+        case UALType::ONEDNN:
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+            return std::make_unique<UalOneDNN>();
+#else
+            throw std::invalid_argument(
+                "oneDNN UAL backend is not available. "
+                "Please reconfigure with -DDLP_TESTING_ENABLE_ONEDNN=ON "
+                "and -DDLP_ONEDNN_INSTALL_DIR=/path/to/onednn/install");
+#endif
         default:
             throw std::invalid_argument("Unsupported UAL type");
     }

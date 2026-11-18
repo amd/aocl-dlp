@@ -36,6 +36,12 @@
 #include <string>
 #include <vector>
 
+// Forward-declare ContiguousBatchStorage so BatchGroup can hold shared_ptrs
+// to it without pulling in the full header.
+namespace dlp { namespace testing { namespace framework {
+    class ContiguousBatchStorage;
+}}} // namespace dlp::testing::framework
+
 namespace dlp::testing::framework {
 
 // Forward declarations
@@ -110,6 +116,18 @@ struct BatchGroup
 
     MatrixMemFormat memFormatA = MatrixMemFormat::Normal;
     MatrixMemFormat memFormatB = MatrixMemFormat::Normal;
+
+    /// Optional contiguous backing storage.
+    /// When set, the Matrix objects in A_matrices/B_matrices/C_matrices are
+    /// non-owning views (created via MatrixView) into these contiguous blocks.
+    /// The shared_ptrs keep the storage alive for the lifetime of this
+    /// BatchGroup.
+    std::shared_ptr<ContiguousBatchStorage> a_storage;
+    std::shared_ptr<ContiguousBatchStorage> b_storage;
+    std::shared_ptr<ContiguousBatchStorage> c_storage;
+
+    /// Returns true if all three matrix roles use contiguous storage.
+    bool isContiguous() const { return a_storage && b_storage && c_storage; }
 
     size_t size() const { return A_matrices.size(); }
 
@@ -241,19 +259,58 @@ class IUal
     virtual ~IUal() = default;
 
     /**
+     * @brief Convert UALType to string representation
+     *
+     * Static utility for converting UALType enum to human-readable string.
+     * Can be called without an IUal instance: IUal::UALTypeToString(type).
+     *
+     * @param type UAL type to convert
+     * @return std::string "DLP", "MKL", "ONEDNN", "REF", or "UNKNOWN"
+     */
+    static std::string UALTypeToString(UALType type)
+    {
+        switch (type) {
+            case UALType::DLP:
+                return "DLP";
+            case UALType::MKL:
+                return "MKL";
+            case UALType::ONEDNN:
+                return "ONEDNN";
+            case UALType::REF:
+                return "REF";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
+    /**
      * @brief Reorder matrix data to specified accumulation type
      *
-     * @param in Input matrix to reorder
+     * This method transforms input matrix data into an optimized layout for
+     * the target backend. For AOCL-DLP, this produces blocked/packed format.
+     * For oneDNN, this uses dnnl::reorder to transform to optimal blocking.
+     *
+     * @param in Input matrix to reorder (typically matrix B/weights)
      * @param out Output matrix to store reordered data
      * @param A_type Type of matrix A in GEMM context
      * @param B_type Type of matrix B in GEMM context
      * @param C_type Type of matrix C in GEMM context
      * @param accType Accumulation type
+     * @param M M dimension of the GEMM operation (rows of A/C).
+     *          oneDNN uses this to determine optimal weight blocking
+     *          since blocking can depend on the full GEMM shape (M,N,K).
+     *          Pass 0 to use a default heuristic (256).
+     * @param transA Whether matrix A is transposed (affects oneDNN blocking)
      * @param group_scale Optional symmetric-quantization group-scale
-     * parameters; when non-null selects the sym_quant reorder path
+     *          parameters; when non-null selects the sym_quant reorder path
      * @param woq Optional weight-only-quantization parameters. Its group size
-     * is required when reordering bf16s4/bf16u4 B for a grouped WOQ GEMM.
+     *          is required when reordering bf16s4/bf16u4 B for a grouped WOQ
+     *          GEMM.
      * @return UALError Error code indicating success or failure
+     *
+     * @note For oneDNN: The M and transA parameters enable optimal weight
+     *       blocking via format_tag::any. Without M, a default heuristic
+     *       is used which may not be optimal for all GEMM shapes.
      */
     virtual UALError reorder(const Matrix&          in,
                              Matrix&                out,
@@ -261,6 +318,8 @@ class IUal
                              MatrixType             B_type,
                              MatrixType             C_type,
                              MatrixType             accType,
+                             md_t                   M           = 0,
+                             bool                   transA      = false,
                              const GroupScaleParam* group_scale = nullptr,
                              const WOQParam*        woq         = nullptr) = 0;
 
@@ -351,19 +410,76 @@ class IUal
     virtual UALError batch_gemm(const PreparedBatchGemmArgs& prepared) = 0;
 
     /**
+     * @brief Perform general matrix multiplication with raw pointers for
+     * benchmarking
+     *
+     * @param m Number of rows in A and C
+     * @param n Number of columns in B and C
+     * @param k Number of columns in A and rows in B
+     * @param matA Pointer to matrix A data
+     * @param matA_type Data type of matrix A
+     * @param matA_layout Memory layout of matrix A
+     * @param matA_transposed Whether matrix A is transposed
+     * @param matA_leadingDim Leading dimension of matrix A
+     * @param matB Pointer to matrix B data
+     * @param matB_type Data type of matrix B
+     * @param matB_layout Memory layout of matrix B
+     * @param matB_transposed Whether matrix B is transposed
+     * @param matB_leadingDim Leading dimension of matrix B
+     * @param matC Pointer to matrix C data
+     * @param matC_type Data type of matrix C
+     * @param matC_layout Memory layout of matrix C
+     * @param matC_transposed Whether matrix C is transposed
+     * @param matC_leadingDim Leading dimension of matrix C
+     * @param accType Accumulation type
+     * @param alpha Scaling factor for A*B
+     * @param beta Scaling factor for C
+     * @return true on success
+     */
+    virtual UALError gemm(md_t         m,
+                          md_t         n,
+                          md_t         k,
+                          void*        matA,
+                          MatrixType   matA_type,
+                          MatrixLayout matA_layout,
+                          bool         matA_transposed,
+                          char         memFormatA,
+                          md_t         matA_leadingDim,
+                          void*        matB,
+                          MatrixType   matB_type,
+                          MatrixLayout matB_layout,
+                          bool         matB_transposed,
+                          char         memFormatB,
+                          md_t         matB_leadingDim,
+                          void*        matC,
+                          MatrixType   matC_type,
+                          MatrixLayout matC_layout,
+                          bool         matC_transposed,
+                          md_t         matC_leadingDim,
+                          MatrixType   accType,
+                          double       alpha = 1.0,
+                          double       beta  = 0.0) = 0;
+
+    /**
      * @brief Get string representation of UAL type
+     *
+     * Default implementation delegates to the centralized UALTypeToString()
+     * utility. Subclasses need not override unless custom behavior is needed.
      *
      * @param type UAL type
      * @return std::string Human-readable name
      */
-    virtual std::string toString(UALType type) = 0;
+    virtual std::string toString(UALType type) { return UALTypeToString(type); }
 
     /**
      * @brief Get the UAL type
      *
+     * Returns the type stored at construction time. Subclasses need not
+     * override unless they have a reason to diverge from m_type.
+     *
      * @return UALType
      */
-    virtual UALType getUALType() const = 0;
+    virtual UALType getUALType() const { return m_type; }
 
   private:
     UALType m_type;

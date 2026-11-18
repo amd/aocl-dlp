@@ -138,38 +138,10 @@ UalRef::createPlan()
     return std::make_unique<RefUalPlan>();
 }
 
-/**
- * @brief Get the UAL implementation type
- *
- * @return UALType::REF for this implementation
- */
 UALType
 UalRef::getUALType() const
 {
     return UALType::REF;
-}
-
-/**
- * @brief Convert UAL type to human-readable string
- *
- * @param type The UAL type to convert
- * @return std::string Human-readable description
- */
-std::string
-UalRef::toString(UALType type)
-{
-    switch (type) {
-        case UALType::DLP:
-            return "Deep Learning Primitives";
-        case UALType::MKL:
-            return "Intel MKL";
-        case UALType::ONEDNN:
-            return "OneDNN";
-        case UALType::REF:
-            return "Reference Implementation";
-        default:
-            return "Unknown UAL";
-    }
 }
 
 /**
@@ -257,6 +229,10 @@ reorderTyped(const Matrix& in,
  * @param B_type Type of matrix B in GEMM context
  * @param C_type Type of matrix C in GEMM context
  * @param accType Target accumulation type
+ * @param M M dimension (unused by Ref)
+ * @param transA Whether A is transposed (unused by Ref)
+ * @param group_scale Optional symmetric-quantization group-scale parameters
+ *                    (unused by Ref)
  * @return UALError Error code indicating success or failure
  */
 UALError
@@ -266,9 +242,14 @@ UalRef::reorder(const Matrix& in,
                 MatrixType    B_type,
                 MatrixType    C_type,
                 MatrixType    accType,
+                md_t          M,
+                bool          transA,
                 const GroupScaleParam* /*group_scale*/,
                 const WOQParam* /*woq*/)
 {
+    // M and transA are unused by reference implementation
+    (void)M;
+    (void)transA;
     /*
         Reordering operation in reference is
         1. Apply transpose if needed
@@ -1216,6 +1197,37 @@ UalRef::batch_gemm(const PreparedBatchGemmArgs& prepared)
     // For now, just indicate not supported to force use of vector<BatchGroup>
     // variant
     return UALError::UAL_NOT_SUPPORTED;
+}
+
+UALError
+UalRef::gemm(md_t         m,
+             md_t         n,
+             md_t         k,
+             void*        matA,
+             MatrixType   matA_type,
+             MatrixLayout matA_layout,
+             bool         matA_transposed,
+             char         memFormatA,
+             md_t         matA_leadingDim,
+             void*        matB,
+             MatrixType   matB_type,
+             MatrixLayout matB_layout,
+             bool         matB_transposed,
+             char         memFormatB,
+             md_t         matB_leadingDim,
+             void*        matC,
+             MatrixType   matC_type,
+             MatrixLayout matC_layout,
+             bool         matC_transposed,
+             md_t         matC_leadingDim,
+             MatrixType   accType,
+             double       alpha,
+             double       beta)
+{
+    // For now, this is a stub implementation that returns failure
+    // indicating the operation is not supported in the reference implementation
+    // TODO: Implement reference GEMM logic if needed for benchmarking
+    return UALError::UAL_FAILURE;
 }
 
 // Helper function to copy and convert source matrix to s32 matrix

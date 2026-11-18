@@ -183,6 +183,77 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
                 return UALError::UAL_NOT_SUPPORTED;
             }
 
+            // PreparedBatchGemmArgs has only a single `order` field per
+            // group (derived from A alone below), not separate layouts for
+            // A/B/C. BatchGroup::validate() only requires each matrix to be
+            // consistent with its OWN role's reference layout (A_matrices[i]
+            // vs A_matrices.front(), etc.) -- it does NOT require A, B, and
+            // C to share the same layout, so a group with e.g. row-major A
+            // and C but column-major B is a valid BatchGroup. oneDNN's
+            // batch_prepare_metadata() then derives a single `layout` from
+            // this one `order` entry and applies it uniformly to A's, B's,
+            // AND C's memory descriptors -- misinterpreting whichever
+            // operand actually has a different physical layout, producing
+            // a wrong result even for a single 2x2 GEMM. Reject mixed
+            // layouts here, before they're silently collapsed into one
+            // shared `order` value.
+            if (A.getLayout() != B.getLayout()
+                || A.getLayout() != C.getLayout()) {
+                return UALError::UAL_NOT_SUPPORTED;
+            }
+
+            // PreparedBatchGemmArgs has no transc field -- C's transpose
+            // flag has no way to survive past this function, and every
+            // backend consumer (DLP's classic aocl_gemm_* APIs, and
+            // oneDNN's batch_prepare_metadata()/batch_gemm(prepared)) then
+            // unconditionally builds a non-transposed output
+            // descriptor/call. DLP's own raw-pointer gemm() already
+            // rejects a transposed C for the same structural reason (its
+            // classic API has no transc parameter either), and oneDNN's
+            // vector batch_gemm(groups, accType) overload rejects it too.
+            // Reject here as well -- this is the one place in the batch
+            // path shared by every backend that still has the real Matrix
+            // object (and thus isTransposed()) to check, before that
+            // information is discarded into raw pointers + flat per-group
+            // arrays. Without this, a transposed C silently reaches a
+            // descriptor built assuming non-transposed strides, which can
+            // write outside C's actual (smaller, differently-shaped)
+            // physical allocation.
+            //
+            // Check EVERY matrix in the group against its role's front()
+            // matrix, not just C's transpose flag: BatchGroup::validate()
+            // only requires each matrix to match its role's front() on
+            // EFFECTIVE shape/type/layout -- it does NOT require the same
+            // transpose flag (a transposed matrix can still report the same
+            // effective rows/cols as a non-transposed one of swapped
+            // physical shape, e.g. when square) or the same leading
+            // dimension. Every field pushed below (out.transa/transb/lda/
+            // ldb/ldc) is derived from A/B/C (i.e. matrix 0 of each role)
+            // alone and applied uniformly to the WHOLE group by every
+            // consumer (DLP's classic aocl_gemm_* APIs and oneDNN's
+            // batch_prepare_metadata()/batch_gemm(prepared), which share
+            // this one struct). A later matrix in the group with a
+            // different transpose flag or leading dimension -- even while
+            // staying byte-contiguous, so it still passes oneDNN's
+            // zero-copy contiguity check -- would then be executed with
+            // matrix 0's orientation/stride instead of its own, silently
+            // computing the wrong product for that matrix while still
+            // reporting UAL_SUCCESS. Reject any such nonuniformity here,
+            // before it's discarded into the single shared scalar fields.
+            for (size_t i = 0; i < group.size(); ++i) {
+                if (group.C_matrices[i].isTransposed()
+                    || group.A_matrices[i].isTransposed() != A.isTransposed()
+                    || group.B_matrices[i].isTransposed() != B.isTransposed()
+                    || group.A_matrices[i].getLeadingDimension()
+                           != A.getLeadingDimension()
+                    || group.B_matrices[i].getLeadingDimension()
+                           != B.getLeadingDimension()
+                    || group.C_matrices[i].getLeadingDimension()
+                           != C.getLeadingDimension()) {
+                    return UALError::UAL_NOT_SUPPORTED;
+                }
+            }
+
             out.order.push_back(A.getLayout() == MatrixLayout::ROW_MAJOR ? 'r'
                                                                          : 'c');
             out.transa.push_back(A.isTransposed() ? 't' : 'n');

@@ -53,9 +53,19 @@
 
 #include "adaptors/dlp/ual_dlp.hh"
 #include "framework/matrix.hh"
-#include "framework/ual_factory.hh"
+#include "framework/ual.hh"
 #include "framework/ual_plan.hh"
 #include "framework/utils/arg_parser.hh"
+
+// oneDNN UAL support (conditional)
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+#include "adaptors/onednn/ual_onednn.hh"
+#endif
+
+// OpenMP for detailed threading info.
+#ifdef DLP_ENABLE_OPENMP
+#include <omp.h>
+#endif
 
 #include <benchmark/benchmark.h>
 
@@ -168,10 +178,14 @@ class OptimizedGemmBenchmark : public ConcreteUAL
 
         // Apply memory tag for B (reorder and pack are mutually exclusive)
         if (config.reorderB) {
-            Matrix   B_reordered;
-            UALError rstat = this->reorder(
-                B_, B_reordered, a_type_, b_type_, c_type_, acc_type_,
-                config.group_scale_param.get(), config.woq_param.get());
+            Matrix B_reordered;
+            // Pass M dimension and transA for optimal oneDNN blocking;
+            // group_scale_param threads through symmetric-quant reorder and
+            // woq_param carries the WOQ group size for bf16s4/bf16u4 reorder.
+            UALError rstat = this->reorder(B_, B_reordered, a_type_, b_type_,
+                                           c_type_, acc_type_, m_, transA_,
+                                           config.group_scale_param.get(),
+                                           config.woq_param.get());
             if (rstat != UALError::UAL_SUCCESS) {
                 // Kernel REJECTED this configuration during reorder (e.g. an
                 // unsupported tuning-knob combination). Mark the fixture as
@@ -326,6 +340,11 @@ class OptimizedGemmBenchmark : public ConcreteUAL
 // Typedef for DLP backend
 using OptimizedGemmBenchmarkDlp = OptimizedGemmBenchmark<UalDlp>;
 
+// Typedef for oneDNN backend (conditional)
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+using OptimizedGemmBenchmarkOneDNN = OptimizedGemmBenchmark<UalOneDNN>;
+#endif
+
 // ============================================================================
 // BENCHMARK PARAMETER VALIDATION
 // ============================================================================
@@ -416,23 +435,32 @@ checkValidGemmParams(const GemmBenchConfig& config)
 // ============================================================================
 
 /**
- * @brief Register benchmarks with optimized fixture management
+ * @brief Register benchmarks with optimized fixture management (templated)
  *
  * KEY: Create ONE fixture instance per benchmark configuration,
  * stored in a vector to keep them alive for the entire benchmark run.
  *
- * @param configs Vector of benchmark configurations to register
+ * @tparam BenchmarkFixture The benchmark fixture type
+ * (OptimizedGemmBenchmarkDlp or OptimizedGemmBenchmarkOneDNN)
+ * @param configs Vector of benchmark configurations
+ * @param backend_prefix Prefix for benchmark names (e.g., "DLP" or "ONEDNN")
  * @param iterations Number of iterations to run (-1 for default MinTime
  * behavior)
  */
+template<typename BenchmarkFixture>
 void
-registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
-                            int64_t                             iterations = -1,
-                            double bench_min_time = 3.0)
+registerOptimizedBenchmarksImpl(const std::vector<GemmBenchConfig>& configs,
+                                const std::string& backend_prefix,
+                                int64_t            iterations     = -1,
+                                double             bench_min_time = 3.0)
 {
     // Store fixture instances to keep them alive
     // This is critical: fixtures are created ONCE and reused
-    static std::vector<std::unique_ptr<OptimizedGemmBenchmarkDlp>> fixtures;
+    // Use a static map keyed by backend prefix to support multiple backends
+    static std::map<std::string, std::vector<std::unique_ptr<BenchmarkFixture>>>
+        fixtures_map;
+
+    auto& fixtures = fixtures_map[backend_prefix];
 
     // Detect NUMA node from environment or use default
     int         numa_node = 1;
@@ -462,8 +490,7 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
         }
 
         // Create fixture ONCE per benchmark
-        auto fixture =
-            std::make_unique<OptimizedGemmBenchmarkDlp>(config, numa_node);
+        auto fixture = std::make_unique<BenchmarkFixture>(config, numa_node);
 
         // If probing this config failed, SKIP it instead of registering — so
         // it is reported as skipped, not as a benchmark ERROR (mirrors
@@ -485,11 +512,14 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
         auto* fixture_ptr = fixture.get();
         fixtures.push_back(std::move(fixture));
 
+        // Create benchmark name with backend prefix
+        std::string bench_name = backend_prefix + "/" + config.name;
+
         // Register benchmark with lambda that uses existing fixture
         // Use Iterations() if specified, otherwise use MinTime()
         if (iterations > 0) {
             benchmark::RegisterBenchmark(
-                config.name.c_str(),
+                bench_name.c_str(),
                 [fixture_ptr](benchmark::State& st) { fixture_ptr->run(st); })
                 ->Unit(benchmark::kMillisecond)
                 ->UseManualTime()
@@ -497,7 +527,7 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
                     static_cast<benchmark::IterationCount>(iterations));
         } else {
             benchmark::RegisterBenchmark(
-                config.name.c_str(),
+                bench_name.c_str(),
                 [fixture_ptr](benchmark::State& st) { fixture_ptr->run(st); })
                 ->Unit(benchmark::kMillisecond)
                 ->UseManualTime()
@@ -508,9 +538,118 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
               << std::endl;
 }
 
+/**
+ * @brief Register benchmarks for specified UAL backend
+ *
+ * @param configs Vector of benchmark configurations
+ * @param ual_type UAL backend type to use
+ * @param iterations Number of iterations to run (-1 for default MinTime
+ * behavior)
+ * @param bench_min_time MinTime (seconds) used when iterations <= 0
+ */
+void
+registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
+                            UALType                             ual_type,
+                            int64_t                             iterations = -1,
+                            double bench_min_time = 3.0)
+{
+    switch (ual_type) {
+        case UALType::DLP:
+            registerOptimizedBenchmarksImpl<OptimizedGemmBenchmarkDlp>(
+                configs, "DLP", iterations, bench_min_time);
+            break;
+
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+        case UALType::ONEDNN:
+            registerOptimizedBenchmarksImpl<OptimizedGemmBenchmarkOneDNN>(
+                configs, "ONEDNN", iterations, bench_min_time);
+            break;
+#endif
+
+        default:
+            std::cerr << "Error: Unsupported UAL backend '"
+                      << IUal::UALTypeToString(ual_type) << "'" << std::endl;
+#ifndef DLP_TESTING_ENABLE_ONEDNN
+            if (ual_type == UALType::ONEDNN) {
+                std::cerr
+                    << "       oneDNN support not enabled in this build.\n"
+                    << "       Rebuild with -DDLP_TESTING_ENABLE_ONEDNN=ON"
+                    << std::endl;
+            }
+#endif
+            break;
+    }
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
+
+/**
+ * @brief Print benchmark-specific usage information
+ */
+void
+printBenchUsage(const std::string& program_name)
+{
+    std::cout << "AOCL-DLP GEMM Benchmark\n";
+    std::cout << "Usage: " << program_name << " [OPTIONS]\n\n";
+    std::cout << "Custom Options:\n";
+    std::cout << "  -f, --file <path>       Specify YAML configuration file\n";
+    std::cout << "  --ual <type>            UAL backend to benchmark (DLP";
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+    std::cout << "|ONEDNN";
+#endif
+    std::cout << ") [default: DLP]\n";
+    std::cout << "  -h, --help              Show this help message\n";
+    std::cout << "\nEnvironment Variables:\n";
+    std::cout << "  BENCH_NUMA_NODE         NUMA node for memory allocation "
+                 "[default: 1]\n";
+    std::cout << "  OMP_NUM_THREADS         Number of OpenMP threads\n";
+    std::cout << "  OMP_PROC_BIND           Thread binding policy\n";
+    std::cout << "  OMP_PLACES              Thread placement\n";
+    std::cout << "\nExamples:\n";
+    std::cout << "  " << program_name << " -f my_config.yaml\n";
+    std::cout << "  " << program_name << " --ual DLP\n";
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+    std::cout << "  " << program_name << " --ual ONEDNN -f config.yaml\n";
+#endif
+    std::cout << "  " << program_name
+              << " --benchmark_filter=f32 --benchmark_counters_tabular=true\n";
+}
+
+/**
+ * @brief Parse --ual argument from command line
+ * @return UAL type string, empty if not specified
+ */
+std::string
+parseUalArg(int argc, char** argv)
+{
+    for (int i = 1; i < argc - 1; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--ual" || arg == "--ual-test") {
+            return std::string(argv[i + 1]);
+        }
+    }
+    return "";
+}
+
+/**
+ * @brief Remove --ual argument from argv for Google Benchmark
+ */
+void
+removeUalArg(int& argc, char** argv)
+{
+    int write_idx = 1;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "--ual" || arg == "--ual-test") && i + 1 < argc) {
+            ++i; // Skip both flag and value
+            continue;
+        }
+        argv[write_idx++] = argv[i];
+    }
+    argc = write_idx;
+}
 
 int
 main(int argc, char** argv)
@@ -521,11 +660,58 @@ main(int argc, char** argv)
     // Handle help request - show our custom help first, then let Google
     // Benchmark show its help
     if (parser.helpRequested()) {
-        parser.printUsage(argv[0]);
+        printBenchUsage(argv[0]);
         std::cout << "\n" << std::string(60, '=') << std::endl;
         std::cout << "Google Benchmark Help:" << std::endl;
         std::cout << std::string(60, '=') << std::endl;
     }
+
+    // Parse UAL backend selection (check both --ual and --ual-test)
+    std::string ual_str = parseUalArg(argc, argv);
+    if (ual_str.empty()) {
+        ual_str = parser.getUalTest("DLP"); // Default to DLP
+    }
+
+    // Convert string to UALType
+    UALType ual_type;
+    try {
+        ual_type = ArgParser::parseUALType(ual_str);
+
+        // ArgParser::parseUALType() recognizes REF and MKL too (they're
+        // valid UALType enum values used elsewhere, e.g. as the
+        // correctness-test oracle), but this executable only registers DLP
+        // and oneDNN benchmark fixtures (see registerOptimizedBenchmarks()'s
+        // switch below). Without this check, --ual REF/MKL would pass
+        // parseUALType(), fall through registerOptimizedBenchmarks()'s
+        // logging-only default case, and then still reach
+        // benchmark::RunSpecifiedBenchmarks()/return 0 with zero benchmarks
+        // registered -- a silent, successful-looking no-op that CI would
+        // read as "passed". Reject it here instead, alongside genuinely
+        // unparsable strings.
+        if (ual_type != UALType::DLP && ual_type != UALType::ONEDNN) {
+            throw std::invalid_argument("Unsupported benchmark backend");
+        }
+    } catch (const std::invalid_argument& e) {
+        std::cerr << "Error: Invalid UAL type '" << ual_str << "'\n";
+        std::cerr << "Valid options: DLP";
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+        std::cerr << ", ONEDNN";
+#endif
+        std::cerr << std::endl;
+        return 1;
+    }
+
+    // Verify oneDNN is available if requested
+#ifndef DLP_TESTING_ENABLE_ONEDNN
+    if (ual_type == UALType::ONEDNN) {
+        std::cerr << "Error: ONEDNN backend requested but not available.\n";
+        std::cerr << "       Rebuild with -DDLP_TESTING_ENABLE_ONEDNN=ON\n";
+        return 1;
+    }
+#endif
+
+    // Remove --ual from argv so Google Benchmark doesn't complain
+    removeUalArg(argc, argv);
 
     // Get YAML configuration file path(s). Multiple files may be provided via
     // repeated -f/--file flags and/or comma-separated values. The built-in
@@ -598,8 +784,10 @@ main(int argc, char** argv)
         return 1;
     }
 
-    std::cerr << "=== AOCL-DLP Benchmark ===" << std::endl;
-    std::cerr << "Loaded " << configs.size() << " configurations from "
+    std::cout << "=== AOCL-DLP Benchmark ===" << std::endl;
+    std::cout << "UAL Backend: " << IUal::UALTypeToString(ual_type)
+              << std::endl;
+    std::cout << "Loaded " << configs.size() << " configurations from "
               << yaml_files.size() << " file(s)" << std::endl;
 
 #if DLP_OPENMP_ENABLED
@@ -633,8 +821,8 @@ main(int argc, char** argv)
     // value for the per-thread sink array.
     dlp::bench::initColdCache(parser.getColdCache(), parser.getColdPasses());
 
-    // Register all benchmarks
-    registerOptimizedBenchmarks(configs, iterations, bench_min_time);
+    // Register all benchmarks for the selected UAL backend
+    registerOptimizedBenchmarks(configs, ual_type, iterations, bench_min_time);
 
     // Initialize and run Google Benchmark
     benchmark::Initialize(&argc, argv);

@@ -110,25 +110,16 @@ struct TestGlobalConfig
     void print() const
     {
         std::cout << "Test Configuration:\n";
-        std::cout << "  UAL Under Test: " << toString(ual_test_type) << "\n";
-        std::cout << "  UAL Reference:  " << toString(ual_ref_type) << "\n";
+        std::cout << "  UAL Under Test: "
+                  << IUal::UALTypeToString(ual_test_type) << "\n";
+        std::cout << "  UAL Reference:  " << IUal::UALTypeToString(ual_ref_type)
+                  << "\n";
     }
 
-  private:
-    std::string toString(UALType type) const
+    /// Convert UALType to string
+    static std::string toString(UALType type)
     {
-        switch (type) {
-            case UALType::DLP:
-                return "DLP";
-            case UALType::REF:
-                return "REF";
-            case UALType::MKL:
-                return "MKL";
-            case UALType::ONEDNN:
-                return "ONEDNN";
-            default:
-                return "UNKNOWN";
-        }
+        return IUal::UALTypeToString(type);
     }
 };
 
@@ -1326,16 +1317,18 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             dlp_reorder_status = ual_test_->reorder(
                 B, B_reordered, config_.a_type, config_.b_type, config_.c_type,
-                config_.acc_type, config_.group_scale_param.get(),
-                config_.woq_param.get());
+                config_.acc_type, config_.m, config_.transA,
+                config_.group_scale_param.get(), config_.woq_param.get());
             const auto* dlp_ual = dynamic_cast<const UalDlp*>(ual_test_.get());
             const dlp_clsc_err_t dlp_reorder_error =
                 dlp_ual ? dlp_ual->lastErrorCode() : DLP_CLSC_FAILURE;
 
-            // Skip test if DLP reorder is not supported
+            // Skip test if reorder is not supported by UAL under test
             if (dlp_reorder_status == UALError::UAL_NOT_SUPPORTED) {
                 GTEST_SKIP()
-                    << "DLP reorder not supported for this configuration";
+                    << "UAL under test ("
+                    << g_test_config.toString(g_test_config.ual_test_type)
+                    << ") reorder not supported for this configuration";
             }
 
             if ((config_.has_blocking || config_.has_sup_thresholds
@@ -1358,8 +1351,32 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             if (params_valid) {
                 ref_reorder_status = ual_ref_->reorder(
                     B_ref, B_ref_reordered, config_.a_type, config_.b_type,
-                    config_.c_type, config_.acc_type,
+                    config_.c_type, config_.acc_type, config_.m, config_.transA,
                     config_.group_scale_param.get(), config_.woq_param.get());
+
+                // --ual-ref can select a reference backend other than REF
+                // (e.g. ONEDNN), and that backend may legitimately reject a
+                // reorder for a config DLP supports (oneDNN's reorder has no
+                // native mapping for every WOQ/GLU/quant combination -- see
+                // the UAL_NOT_SUPPORTED guards throughout ual_onednn.cc).
+                // Mirror the under-test reorder skip above instead of
+                // falling through: leaving this unhandled would silently
+                // keep B_ref unreordered and later surface as a correctness
+                // *failure* in the reference GEMM execution/comparison
+                // below, rather than the SKIP this actually warrants.
+                // s4/u4 B is exempt: REF always declines to reorder it and
+                // computes from the original B (see below), so its
+                // NOT_SUPPORTED here is expected rather than a reason to skip.
+                const bool ref_uses_original_b =
+                    config_.b_type == MatrixType::s4
+                    || config_.b_type == MatrixType::u4;
+                if (ref_reorder_status == UALError::UAL_NOT_SUPPORTED
+                    && !ref_uses_original_b) {
+                    GTEST_SKIP()
+                        << "UAL reference ("
+                        << g_test_config.toString(g_test_config.ual_ref_type)
+                        << ") reorder not supported for this configuration";
+                }
 
                 if (ref_reorder_status == UALError::UAL_SUCCESS) {
                     // For bf16×s4 and bf16×u4, the reference uses row-major B
@@ -1493,6 +1510,46 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             ref_plan->setGluOutput(&D_ref);
         ref_plan->prepare();
         UALError ref_status = ref_plan->executeWith(A_ref, B_ref, C_ref);
+
+        // Mirror the under-test NOT_SUPPORTED skip above: with --ual-ref
+        // ONEDNN, a DLP-supported config (e.g. WOQ or GLU) that has no
+        // native oneDNN mapping returns UAL_NOT_SUPPORTED here. Without this
+        // check, ref_result below becomes false and the EXPECT_TRUE(
+        // ref_result) further down for a valid config reports it as a
+        // correctness FAILURE, when it should just be SKIPPED -- there is
+        // no reference result to compare against test_result in that case.
+        if (ref_status == UALError::UAL_NOT_SUPPORTED) {
+            // Validate the under-test success/failure contract BEFORE
+            // skipping the unavailable reference comparison. Without this,
+            // an unsupported reference op (e.g. GLU with --ual-ref ONEDNN)
+            // would unconditionally GTEST_SKIP() here and hide a genuine
+            // DLP execution failure/regression on an otherwise valid (or
+            // invalid) configuration -- the skip would fire before the
+            // params_valid branch's EXPECT_TRUE(test_result)/EXPECT_FALSE
+            // checks further down ever ran. Use ASSERT_ (fatal) rather than
+            // EXPECT_ so a contract violation reports as a FAILURE here and
+            // returns immediately, instead of also reaching the SKIP below.
+            if (params_valid) {
+                ASSERT_TRUE(test_result)
+                    << "UAL under test GEMM should succeed with valid "
+                       "parameters:"
+                    << printConfigDetails(config_);
+            } else {
+                // Mirrors the existing invalid-parameters contract check
+                // further down (params_valid == false branch).
+                ASSERT_FALSE(test_result
+                             && dlp_reorder_status == UALError::UAL_SUCCESS)
+                    << "UAL under test GEMM should fail gracefully with "
+                       "invalid parameters:"
+                    << printConfigDetails(config_);
+            }
+            GTEST_SKIP() << "UAL reference ("
+                         << g_test_config.toString(g_test_config.ual_ref_type)
+                         << ") GEMM not supported for this configuration "
+                            "(implementation rejected an existing API, e.g. "
+                            "ISA):"
+                         << printConfigDetails(config_);
+        }
 
         bool ref_result = (ref_status == UALError::UAL_SUCCESS);
 
@@ -1845,10 +1902,11 @@ TEST(GEMMTest, DebugDoubleFree)
     Matrix B_reordered;
 
     // Try reordering
+    // M=256 (typical test value), transA=false
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
     UALError              reorder_result =
         ual_dlp->reorder(B, B_reordered, MatrixType::f32, MatrixType::f32,
-                         MatrixType::f32, MatrixType::f32);
+                         MatrixType::f32, MatrixType::f32, 256, false);
 
     // Reordering should fail and ldb is lower than min needed ldb.
     EXPECT_TRUE(reorder_result == UALError::UAL_FAILURE

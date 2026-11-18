@@ -48,6 +48,107 @@ function(dlp_openmp_flags_match_runtime flags runtime frontend out_var)
     set(${out_var} ${_dlp_matches} PARENT_SCOPE)
 endfunction()
 
+#[==[
+Function to set up oneDNN dependency for UAL testing/benchmarking.
+This function:
+1. Uses oneDNN's provided CMake config files (dnnl-config.cmake)
+2. Creates a clean interface target for consistent usage
+3. Adds compile definition DLP_TESTING_ENABLE_ONEDNN when enabled
+4. Creates dummy target when disabled for seamless conditional linking
+
+Usage: dlp_setup_onednn()
+
+Variables affecting behavior:
+- DLP_TESTING_ENABLE_ONEDNN: Set to ON/OFF to enable/disable oneDNN UAL support
+- DLP_ONEDNN_INSTALL_DIR: Custom oneDNN installation root directory (Priority 1)
+- dnnl_DIR: Direct path to oneDNN CMake config directory (Priority 2)
+- System paths and CMAKE_PREFIX_PATH search (Priority 3)
+
+Created targets:
+- dlp::onednn: Interface library that provides oneDNN linking and compile definitions
+
+Example usage in CMakeLists.txt:
+    target_link_libraries(my_target PRIVATE dlp::onednn)
+]==]
+function(dlp_setup_onednn)
+    # Check if oneDNN is disabled
+    if(NOT DLP_TESTING_ENABLE_ONEDNN)
+        message(STATUS "oneDNN UAL backend disabled")
+        # Create a dummy interface target for consistent usage
+        # This allows unconditional target_link_libraries(... dlp::onednn)
+        if(NOT TARGET dlp_onednn_interface)
+            add_library(dlp_onednn_interface INTERFACE)
+            add_library(dlp::onednn ALIAS dlp_onednn_interface)
+        endif()
+        return()
+    endif()
+
+    # Priority 1: Check DLP_ONEDNN_INSTALL_DIR (consistent with DLP_EIGEN_INSTALL_DIR pattern)
+    if(DEFINED DLP_ONEDNN_INSTALL_DIR AND NOT DLP_ONEDNN_INSTALL_DIR STREQUAL "")
+        # Check for oneDNN CMake config in lib/cmake/dnnl or lib64/cmake/dnnl
+        # Different systems/builds may use different layouts
+        set(_onednn_cmake_paths
+            "${DLP_ONEDNN_INSTALL_DIR}/lib/cmake/dnnl"
+            "${DLP_ONEDNN_INSTALL_DIR}/lib64/cmake/dnnl"
+        )
+
+        set(_onednn_cmake_found FALSE)
+        foreach(_path ${_onednn_cmake_paths})
+            if(EXISTS "${_path}/dnnl-config.cmake")
+                set(dnnl_DIR "${_path}" CACHE PATH "oneDNN CMake config directory" FORCE)
+                set(_onednn_cmake_found TRUE)
+                message(STATUS "Found oneDNN CMake config at: ${_path}")
+                break()
+            endif()
+        endforeach()
+
+        if(NOT _onednn_cmake_found)
+            message(WARNING "oneDNN CMake config not found in expected locations under ${DLP_ONEDNN_INSTALL_DIR}. "
+                           "Tried: ${_onednn_cmake_paths}. "
+                           "Will fall back to find_package search paths.")
+        endif()
+
+        message(STATUS "Using custom oneDNN installation from: ${DLP_ONEDNN_INSTALL_DIR}")
+    endif()
+
+    # Priority 2: dnnl_DIR can be set directly by user
+    # Priority 3: find_package will search CMAKE_PREFIX_PATH and system paths
+
+    # Find oneDNN using its provided CMake config. The adaptor uses the
+    # 3.x API (primitive_attr::set_scales_mask, and the 3-argument
+    # post_ops::append_eltwise(algorithm, alpha, beta) -- both of which
+    # replaced/changed from their 2.x equivalents), so require 3.0+ here
+    # to fail fast at configure time with an actionable message instead
+    # of a confusing compile error later when building the oneDNN backend
+    # against an installed 2.x package.
+    find_package(dnnl 3.0 REQUIRED)
+
+    if(dnnl_FOUND)
+        message(STATUS "Found oneDNN: ${dnnl_DIR}")
+
+        # Create our interface target wrapping DNNL::dnnl
+        add_library(dlp_onednn_interface INTERFACE)
+
+        # Link to the oneDNN-provided target
+        target_link_libraries(dlp_onednn_interface INTERFACE DNNL::dnnl)
+
+        # Add compile definition so code can check for oneDNN availability
+        target_compile_definitions(dlp_onednn_interface INTERFACE DLP_TESTING_ENABLE_ONEDNN)
+
+        # Make the interface library globally accessible via alias
+        add_library(dlp::onednn ALIAS dlp_onednn_interface)
+
+        # Set export name for the interface library (if we ever export it)
+        set_target_properties(dlp_onednn_interface PROPERTIES EXPORT_NAME onednn)
+
+        message(STATUS "oneDNN UAL backend configured successfully")
+    else()
+        message(FATAL_ERROR "oneDNN was requested (DLP_TESTING_ENABLE_ONEDNN=ON) but not found. "
+                "Please install oneDNN and set DLP_ONEDNN_INSTALL_DIR to installation directory, "
+                "or set DLP_TESTING_ENABLE_ONEDNN=OFF to disable.")
+    endif()
+endfunction()
+
 function(dlp_setup_openmp)
     set(DLP_OPENMP_ROOT "" CACHE PATH
         "Path to custom OpenMP installation root"

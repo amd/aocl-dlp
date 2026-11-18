@@ -83,6 +83,8 @@ dlp_define_toolchain_options()
 dlp_init_project_dep_var()
 # Add capability of openmp
 dlp_setup_openmp()
+# Setup oneDNN for UAL testing/benchmarking (optional)
+dlp_setup_onednn()
 # Setup Profile-Guided Optimization
 dlp_setup_pgo()
 # Run the ZnVer support detection

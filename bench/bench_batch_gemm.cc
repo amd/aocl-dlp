@@ -53,8 +53,13 @@
 #include "threading/dlp_omp_runtime.h"
 
 #include "adaptors/dlp/ual_dlp.hh"
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+#include "adaptors/onednn/ual_onednn.hh"
+#endif
 #include "framework/batch_gemm_args.hh"
+#include "framework/batch_storage.hh"
 #include "framework/matrix.hh"
+#include "framework/matrix_view.hh"
 #include "framework/ual.hh"
 #include "framework/ual_factory.hh"
 #include "framework/utils/arg_parser.hh"
@@ -70,6 +75,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using namespace dlp::testing::framework;
@@ -84,10 +90,25 @@ using namespace dlp::benchmarking;
 /**
  * @brief Convert BatchGemmBenchConfig to vector of BatchGroup
  *
- * This creates the actual Matrix objects with allocated memory
+ * @param config    Benchmark configuration
+ * @param contiguous When true (default), all matrices within a group are
+ *                   allocated in a single contiguous block via
+ *                   ContiguousBatchStorage. This enables zero-copy oneDNN
+ *                   3D batched matmul and is the recommended mode for
+ *                   benchmarking.
+ *                   When false, each matrix is individually allocated
+ *                   (scattered mode). This benchmark's fixture exclusively
+ *                   drives the prepared/zero-copy batch_gemm(prepared)
+ *                   path (see OptimizedBatchGemmBenchmark below), which has
+ *                   no memcpy fallback for non-contiguous input --
+ *                   batch_prepare_metadata() pushes a null metadata entry
+ *                   for a non-contiguous group, and batch_gemm(prepared)
+ *                   then returns UAL_FAILURE for it. Scattered mode is
+ *                   therefore only useful here for exercising that
+ *                   rejection, not a copy fallback.
  */
 std::vector<BatchGroup>
-configToGroups(const BatchGemmBenchConfig& config)
+configToGroups(const BatchGemmBenchConfig& config, bool contiguous = true)
 {
     std::vector<BatchGroup> groups;
 
@@ -129,37 +150,89 @@ configToGroups(const BatchGemmBenchConfig& config)
         size_t group_size = config.group_sizes.empty() ? config.group_size
                                                        : config.group_sizes[g];
 
-        // Create matrices for this group
-        for (std::size_t i = 0; i < group_size; ++i) {
-            bool transA = config.transAs.empty() ? config.transA
-                                                 : (config.transAs.size() == 1
-                                                        ? config.transAs[0]
+        // Resolve transpose flags once (same for all matrices in a group)
+        bool transA = config.transAs.empty()
+                          ? config.transA
+                          : (config.transAs.size() == 1 ? config.transAs[0]
                                                         : config.transAs[g]);
-            bool transB = config.transBs.empty() ? config.transB
-                                                 : (config.transBs.size() == 1
-                                                        ? config.transBs[0]
+        bool transB = config.transBs.empty()
+                          ? config.transB
+                          : (config.transBs.size() == 1 ? config.transBs[0]
                                                         : config.transBs[g]);
 
-            md_t a_rows = transA ? k : m;
-            md_t a_cols = transA ? m : k;
-            md_t b_rows = transB ? n : k;
-            md_t b_cols = transB ? k : n;
+        md_t a_rows = transA ? k : m;
+        md_t a_cols = transA ? m : k;
+        md_t b_rows = transB ? n : k;
+        md_t b_cols = transB ? k : n;
 
-            Matrix A(a_rows, a_cols, config.a_type, config.storage_format,
-                     a_cols, transA, false, alignment);
-            Matrix B(b_rows, b_cols, config.b_type, config.storage_format,
-                     b_cols, transB, false, alignment);
-            Matrix C(m, n, config.c_type, config.storage_format, n, false,
-                     false, alignment);
+        md_t lda = a_cols;
+        md_t ldb = b_cols;
+        md_t ldc = n;
 
-            // Initialize with random data
-            A.fillRandom(42 + g * 100 + i);
-            B.fillRandom(43 + g * 100 + i);
-            C.fillRandom(44 + g * 100 + i);
+        if (contiguous && group_size > 0) {
+            // ============================================================
+            // CONTIGUOUS MODE: single allocation per A/B/C for the group.
+            // Enables zero-copy oneDNN 3D batched matmul.
+            // ============================================================
+            size_t bytes_a = MatrixMemory::calculateRequiredBytes(
+                config.a_type, a_rows, a_cols, config.storage_format, lda);
+            size_t bytes_b = MatrixMemory::calculateRequiredBytes(
+                config.b_type, b_rows, b_cols, config.storage_format, ldb);
+            size_t bytes_c = MatrixMemory::calculateRequiredBytes(
+                config.c_type, m, n, config.storage_format, ldc);
 
-            group.A_matrices.push_back(std::move(A));
-            group.B_matrices.push_back(std::move(B));
-            group.C_matrices.push_back(std::move(C));
+            auto a_store = std::make_shared<ContiguousBatchStorage>(
+                group_size, bytes_a, alignment);
+            auto b_store = std::make_shared<ContiguousBatchStorage>(
+                group_size, bytes_b, alignment);
+            auto c_store = std::make_shared<ContiguousBatchStorage>(
+                group_size, bytes_c, alignment);
+
+            for (size_t i = 0; i < group_size; ++i) {
+                // Create non-owning MatrixViews into contiguous blocks.
+                // When push_back(std::move(view)) slices into vector<Matrix>,
+                // m_ownsMemory=false is preserved via the base move ctor.
+                auto A = a_store->view(i, a_rows, a_cols, config.a_type,
+                                       config.storage_format, lda, transA);
+                auto B = b_store->view(i, b_rows, b_cols, config.b_type,
+                                       config.storage_format, ldb, transB);
+                auto C = c_store->view(i, m, n, config.c_type,
+                                       config.storage_format, ldc);
+
+                A.fillRandom(42 + g * 100 + i);
+                B.fillRandom(43 + g * 100 + i);
+                C.fillRandom(44 + g * 100 + i);
+
+                group.A_matrices.push_back(std::move(A));
+                group.B_matrices.push_back(std::move(B));
+                group.C_matrices.push_back(std::move(C));
+            }
+
+            // Keep the contiguous storage alive for the group's lifetime.
+            group.a_storage = std::move(a_store);
+            group.b_storage = std::move(b_store);
+            group.c_storage = std::move(c_store);
+        } else {
+            // ============================================================
+            // SCATTERED MODE: each matrix individually allocated.
+            // Not currently supported by the prepared batch path.
+            // ============================================================
+            for (size_t i = 0; i < group_size; ++i) {
+                Matrix A(a_rows, a_cols, config.a_type, config.storage_format,
+                         lda, transA, false, alignment);
+                Matrix B(b_rows, b_cols, config.b_type, config.storage_format,
+                         ldb, transB, false, alignment);
+                Matrix C(m, n, config.c_type, config.storage_format, ldc, false,
+                         false, alignment);
+
+                A.fillRandom(42 + g * 100 + i);
+                B.fillRandom(43 + g * 100 + i);
+                C.fillRandom(44 + g * 100 + i);
+
+                group.A_matrices.push_back(std::move(A));
+                group.B_matrices.push_back(std::move(B));
+                group.C_matrices.push_back(std::move(C));
+            }
         }
 
         groups.push_back(std::move(group));
@@ -188,8 +261,34 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
     OptimizedBatchGemmBenchmark(const BatchGemmBenchConfig& config)
         : config_(config)
     {
-        // Step 1: Create BatchGroups with allocated matrices
-        groups_ = configToGroups(config_);
+        // Step 1: Create BatchGroups with allocated matrices.
+        //
+        // configToGroups()'s `contiguous` mode packs every matrix in a
+        // group into one shared allocation so oneDNN's
+        // batch_prepare_metadata() can take its zero-copy 3D-batched path
+        // (see that function's doc comment). DLP's classic
+        // aocl_batch_gemm_* API has no equivalent: it only ever consumes a
+        // plain array of per-matrix pointers (prepared_args_.a_ptrs/
+        // b_ptrs/c_ptrs), so contiguity buys it nothing functionally. This
+        // fixture template is instantiated once per backend
+        // (OptimizedBatchGemmBenchmarkDlp / OptimizedBatchGemmBenchmarkOneDNN)
+        // from this SAME constructor, so defaulting configToGroups()'s
+        // `contiguous` argument to true would silently switch DLP's
+        // allocation strategy too -- not just oneDNN's. A measured A/B
+        // (same binary, only that default flipped) showed DLP's own batch
+        // numbers regress ~8-10% under contiguous mode with no
+        // corresponding change in scattered mode, almost certainly a
+        // benchmark artifact (e.g. power-of-two slot-stride cache-set
+        // aliasing across threads) rather than a real library regression.
+        // Keep DLP on the historical scattered layout and reserve
+        // contiguous mode for the backend that actually benefits from it.
+        constexpr bool kUseContiguousLayout =
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+            std::is_same_v<ConcreteUAL, UalOneDNN>;
+#else
+            false;
+#endif
+        groups_ = configToGroups(config_, kUseContiguousLayout);
 
         // Step 2: Prepare arguments (pre-calculate pointers, dimensions, etc.)
         UALError prep_status =
@@ -301,6 +400,10 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
 
 // Typedef for DLP backend
 using OptimizedBatchGemmBenchmarkDlp = OptimizedBatchGemmBenchmark<UalDlp>;
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+using OptimizedBatchGemmBenchmarkOneDNN =
+    OptimizedBatchGemmBenchmark<UalOneDNN>;
+#endif
 
 // ============================================================================
 // BENCHMARK REGISTRATION
@@ -323,7 +426,11 @@ registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
 {
     // Store fixture instances to keep them alive
     static std::vector<std::unique_ptr<OptimizedBatchGemmBenchmarkDlp>>
-        fixtures;
+        dlp_fixtures;
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+    static std::vector<std::unique_ptr<OptimizedBatchGemmBenchmarkOneDNN>>
+        onednn_fixtures;
+#endif
 
     std::cerr << "================================================"
               << std::endl;
@@ -339,7 +446,6 @@ registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
 
     for (const auto& config : configs) {
         try {
-            // Create fixture ONCE per benchmark
             auto fixture =
                 std::make_unique<OptimizedBatchGemmBenchmarkDlp>(config);
 
@@ -353,45 +459,94 @@ registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
                               << static_cast<int>(probe_status)
                               << "): " << config.name << std::endl;
                 }
+                // Do NOT `continue` the shared config loop here: oneDNN's
+                // registration below is independent of DLP's support for
+                // this config, and lives later in this same loop body. A
+                // `continue` would skip oneDNN too, shrinking the comparison
+                // matrix exactly at the configs where DLP and oneDNN support
+                // might differ. Just skip DLP's own registration instead.
+            } else {
+                // Capture raw pointer (fixture lifetime managed by static
+                // vector)
+                auto* fixture_ptr = fixture.get();
+                dlp_fixtures.push_back(std::move(fixture));
+
+                // Register benchmark with lambda that uses existing fixture
+                // Use Iterations() if specified, otherwise use MinTime()
+                if (iterations > 0) {
+                    benchmark::RegisterBenchmark(
+                        ("DLP/" + config.name).c_str(),
+                        [fixture_ptr](benchmark::State& st) {
+                            fixture_ptr->run(st);
+                        })
+                        ->Unit(benchmark::kMillisecond)
+                        ->UseManualTime()
+                        ->Iterations(
+                            static_cast<benchmark::IterationCount>(iterations));
+                } else {
+                    benchmark::RegisterBenchmark(
+                        ("DLP/" + config.name).c_str(),
+                        [fixture_ptr](benchmark::State& st) {
+                            fixture_ptr->run(st);
+                        })
+                        ->Unit(benchmark::kMillisecond)
+                        ->UseManualTime()
+                        ->MinTime(bench_min_time);
+                }
+            }
+        } catch (const std::exception& ex) {
+            std::cerr << "Skipping DLP benchmark '" << config.name
+                      << "': " << ex.what() << std::endl;
+        } catch (...) {
+            std::cerr << "Skipping DLP benchmark '" << config.name
+                      << "': unknown exception." << std::endl;
+        }
+
+#ifdef DLP_TESTING_ENABLE_ONEDNN
+        try {
+            auto fixture =
+                std::make_unique<OptimizedBatchGemmBenchmarkOneDNN>(config);
+
+            const auto probe_status = fixture->probeStatus();
+            if (probe_status != UALError::UAL_SUCCESS) {
+                std::cerr << "Skipping oneDNN benchmark '" << config.name
+                          << "': probe failed; status="
+                          << static_cast<int>(probe_status) << std::endl;
                 continue;
             }
 
-            // Capture raw pointer (fixture lifetime managed by static vector)
             auto* fixture_ptr = fixture.get();
-            fixtures.push_back(std::move(fixture));
+            onednn_fixtures.push_back(std::move(fixture));
 
-            // Register benchmark with lambda that uses existing fixture
-            // Use Iterations() if specified, otherwise use MinTime()
+            // Match DLP's timing/run-length controls exactly: run() reports
+            // kernel-only duration via SetIterationTime(), which Google
+            // Benchmark only honors under UseManualTime() — without it,
+            // automatic wall-clock timing (including the cold-cache-flush
+            // call inside the loop body) is used instead, making the oneDNN
+            // vs DLP comparison unfair. Likewise honor the user-selected
+            // --iterations/MinTime the same way DLP's registration does,
+            // instead of a hardcoded MinTime(3.0) that ignores them.
+            auto* registration = benchmark::RegisterBenchmark(
+                                     ("oneDNN/" + config.name).c_str(),
+                                     [fixture_ptr](benchmark::State& st) {
+                                         fixture_ptr->run(st);
+                                     })
+                                     ->Unit(benchmark::kMillisecond)
+                                     ->UseManualTime();
             if (iterations > 0) {
-                benchmark::RegisterBenchmark(
-                    config.name.c_str(),
-                    [fixture_ptr](benchmark::State& st) {
-                        fixture_ptr->run(st);
-                    })
-                    ->Unit(benchmark::kMillisecond)
-                    ->UseManualTime()
-                    ->Iterations(
-                        static_cast<benchmark::IterationCount>(iterations));
+                registration->Iterations(
+                    static_cast<benchmark::IterationCount>(iterations));
             } else {
-                benchmark::RegisterBenchmark(
-                    config.name.c_str(),
-                    [fixture_ptr](benchmark::State& st) {
-                        fixture_ptr->run(st);
-                    })
-                    ->Unit(benchmark::kMillisecond)
-                    ->UseManualTime()
-                    ->MinTime(bench_min_time);
+                registration->MinTime(bench_min_time);
             }
         } catch (const std::exception& ex) {
-            std::cerr << "Skipping benchmark '" << config.name
-                      << "' due to exception during fixture construction: "
-                      << ex.what() << std::endl;
+            std::cerr << "Skipping oneDNN benchmark '" << config.name
+                      << "': " << ex.what() << std::endl;
         } catch (...) {
-            std::cerr
-                << "Skipping benchmark '" << config.name
-                << "' due to unknown exception during fixture construction."
-                << std::endl;
+            std::cerr << "Skipping oneDNN benchmark '" << config.name
+                      << "': unknown exception." << std::endl;
         }
+#endif
     }
 }
 

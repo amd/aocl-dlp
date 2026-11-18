@@ -34,10 +34,14 @@ function(dlp_define_build_options)
     option(DLP_ENABLE_UBSAN "Enable Undefined Behavior Sanitizer" OFF)
     option(DLP_ENABLE_TSAN "Enable Thread Sanitizer" OFF)
 
+    # Testing options
+    option(DLP_TESTING_ENABLE_ONEDNN "Enable oneDNN UAL backend for testing/benchmarking" OFF)
+
     # Propagate variables back to the caller
     set(BUILD_EXAMPLES ${BUILD_EXAMPLES} PARENT_SCOPE)
     set(DLP_EXAMPLES_LINK_STATIC ${DLP_EXAMPLES_LINK_STATIC} PARENT_SCOPE)
     set(DLP_ENABLE_ASAN ${DLP_ENABLE_ASAN} PARENT_SCOPE)
     set(DLP_ENABLE_UBSAN ${DLP_ENABLE_UBSAN} PARENT_SCOPE)
     set(DLP_ENABLE_TSAN ${DLP_ENABLE_TSAN} PARENT_SCOPE)
+    set(DLP_TESTING_ENABLE_ONEDNN ${DLP_TESTING_ENABLE_ONEDNN} PARENT_SCOPE)
 endfunction()

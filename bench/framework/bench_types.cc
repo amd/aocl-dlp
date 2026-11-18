@@ -257,7 +257,60 @@ generateBatchBenchmarkName(const BatchGemmBenchConfig& config)
     name << (config.transB ? ",trB:t" : ",trB:n");
 
     // Add batch info (this is what makes it different from GEMM)
-    name << ",batch:" << config.group_size;
+    size_t total_matrices = 0;
+    if (!config.group_sizes.empty()) {
+        for (auto gs : config.group_sizes)
+            total_matrices += gs;
+        name << ",grps:" << config.group_sizes.size();
+        name << ",mats:" << total_matrices;
+
+        // The M/N/K/trA/trB added above only reflect group 0 -- for a
+        // multi-group config that is NOT enough to uniquely identify the
+        // workload: two configs can share group 0's shape and the same
+        // group_sizes (e.g. [4,4]) while differing only in a later
+        // group's dimensions/coefficients/transpose, and would otherwise
+        // collide on the exact same benchmark name (indistinguishable
+        // results). Dump every group's identifying fields explicitly.
+        // ms/ns/ks/alphas/betas/transAs/transBs may be shorter than
+        // group_sizes (or empty, mirroring the single-group scalar-only
+        // shape) -- fall back to the scalar defaults in that case, same
+        // as the loader does for group 0 before the per-group vectors are
+        // populated.
+        //
+        // IMPORTANT: configToGroups() (bench/bench_batch_gemm.cc) broadcasts
+        // a SINGLETON vector (size()==1) to every group, not just group 0 --
+        // e.g. ms=[128] with group_sizes=[4,4] actually executes M=[128,128].
+        // A plain "g < size() ? values[g] : fallback" lookup would instead
+        // fall back to the scalar config.m for g>=1, which can be a totally
+        // different value (e.g. m=1) than the broadcast ms[0]=128. Two
+        // configs -- one with ms=[128] (broadcasts to [128,128]) and one
+        // with an explicit ms=[128,1] (really runs [128,1]) -- would then
+        // collide on the same encoded name despite running different
+        // workloads. Mirror configToGroups()'s exact broadcast rule here.
+        for (size_t g = 0; g < config.group_sizes.size(); ++g) {
+            auto groupValue = [g](const auto& values,
+                                  auto        fallback) -> decltype(fallback) {
+                return values.size() == 1
+                           ? values[0]
+                           : (g < values.size() ? values[g] : fallback);
+            };
+            md_t   g_m      = groupValue(config.ms, config.m);
+            md_t   g_n      = groupValue(config.ns, config.n);
+            md_t   g_k      = groupValue(config.ks, config.k);
+            double g_alpha  = groupValue(config.alphas, config.alpha);
+            double g_beta   = groupValue(config.betas, config.beta);
+            bool   g_transA = groupValue(config.transAs, config.transA);
+            bool   g_transB = groupValue(config.transBs, config.transB);
+
+            name << ",g" << g << ":M" << g_m << "_N" << g_n << "_K" << g_k
+                 << "_a" << g_alpha << "_b" << g_beta
+                 << (g_transA ? "_trA:t" : "_trA:n")
+                 << (g_transB ? "_trB:t" : "_trB:n") << "_sz"
+                 << config.group_sizes[g];
+        }
+    } else {
+        name << ",batch:" << config.group_size;
+    }
 
     // Note: batch_gemm doesn't currently support reordering in benchmark
     // but we could add mtagA/mtagB here if needed in future
@@ -420,22 +473,74 @@ loadBatchGemmBenchmarkConfigs(const std::string& yaml_path)
             MicroTest& microTest =
                 const_cast<MicroTest&>(parser.getMicroTest());
 
-            // For batch_gemm benchmarks, each YAML entry is ONE benchmark
-            // We just take the first iteration's values
             BatchGemmBenchConfig config;
             config.a_type         = microTest.getAType();
             config.b_type         = microTest.getBType();
             config.c_type         = microTest.getCType();
             config.acc_type       = microTest.getAccType();
             config.storage_format = microTest.getStorageFormat();
-            config.m              = microTest.getM();
-            config.n              = microTest.getN();
-            config.k              = microTest.getK();
-            config.alpha          = microTest.getAlpha();
-            config.beta           = microTest.getBeta();
-            config.transA         = microTest.getTransA();
-            config.transB         = microTest.getTransB();
-            config.group_size     = microTest.getGroupSize();
+
+            YieldType yield_type = microTest.getYieldType();
+            size_t    num_iters  = microTest.getSize();
+
+            if (yield_type == YieldType::SIMPLE_PRODUCT && num_iters > 1) {
+                config.m          = microTest.getM();
+                config.n          = microTest.getN();
+                config.k          = microTest.getK();
+                config.alpha      = microTest.getAlpha();
+                config.beta       = microTest.getBeta();
+                config.transA     = microTest.getTransA();
+                config.transB     = microTest.getTransB();
+                config.group_size = microTest.getGroupSize();
+
+                size_t j = 0;
+                do {
+                    // a_type/b_type/c_type/acc_type/storage_format live in
+                    // the same per-combination tuple slots as m/n/k (see
+                    // MicroTest::getAType()/getM() etc.), so they can drift
+                    // across next() just like the dimensions do. config.*
+                    // only retains group 0's scalar values (captured above,
+                    // before this loop), and prepare_batch_gemm_args() has
+                    // no per-group type/layout to cross-check against --
+                    // so a later group with a different type/layout would
+                    // silently be constructed/interpreted as group 0's
+                    // type instead of failing. Fail loudly instead.
+                    if (microTest.getAType() != config.a_type
+                        || microTest.getBType() != config.b_type
+                        || microTest.getCType() != config.c_type
+                        || microTest.getAccType() != config.acc_type
+                        || microTest.getStorageFormat()
+                               != config.storage_format) {
+                        throw std::runtime_error(
+                            "Batch benchmark groups must share data types "
+                            "and storage format");
+                    }
+                    config.ms.push_back(microTest.getM());
+                    config.ns.push_back(microTest.getN());
+                    config.ks.push_back(microTest.getK());
+                    config.alphas.push_back(microTest.getAlpha());
+                    config.betas.push_back(microTest.getBeta());
+                    config.transAs.push_back(microTest.getTransA());
+                    config.transBs.push_back(microTest.getTransB());
+                    config.group_sizes.push_back(
+                        static_cast<size_t>(microTest.getGroupSize()));
+                    ++j;
+                    if (microTest.hasNext()) {
+                        microTest.next();
+                    } else {
+                        break;
+                    }
+                } while (j < num_iters);
+            } else {
+                config.m          = microTest.getM();
+                config.n          = microTest.getN();
+                config.k          = microTest.getK();
+                config.alpha      = microTest.getAlpha();
+                config.beta       = microTest.getBeta();
+                config.transA     = microTest.getTransA();
+                config.transB     = microTest.getTransB();
+                config.group_size = microTest.getGroupSize();
+            }
 
             // Generate name using same convention as bench_gemm
             config.name = generateBatchBenchmarkName(config);
