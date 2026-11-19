@@ -53,7 +53,7 @@ using namespace Xbyak;
      + offsetof(dlp_gemm_post_op_attr, field))
 #define N1_GRP_OFF(field)                                                      \
     (offsetof(dlp::kernels::gemvN1Params, grpKernelOpsAttr)                    \
-     + offsetof(dlp_gemm_grp_post_op_attr, field))
+     + offsetof(dlp_gemm_quant_op_attr, field))
 
 template<utils::kernelInstrType KType>
 jitGEMVQuantN1<KType>::jitGEMVQuantN1(size_t maxSize)
@@ -1082,7 +1082,7 @@ jitGEMVQuantN1<KType>::generateKernel(utils::quantGemvN1GeneratorParams& params)
      + offsetof(dlp_gemm_post_op_attr, field))
 #define M1_GRP_OFF(field)                                                      \
     (offsetof(dlp::kernels::gemvM1Params, grpKernelOpsAttr)                    \
-     + offsetof(dlp_gemm_grp_post_op_attr, field))
+     + offsetof(dlp_gemm_quant_op_attr, field))
 
 // Stack scratch: [rsp+8] groups remaining in the current KC panel. The
 // absolute K-group index used to live at [rsp+0], but three address

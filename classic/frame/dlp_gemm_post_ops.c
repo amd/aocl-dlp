@@ -28,6 +28,7 @@
 
 #include "dlp_gemm_post_ops.h"
 #include "aocl_dlp_gemm_check.h"
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 #include "gemm_utils/dlp_gemm_utils.h"
@@ -92,159 +93,234 @@ dlp_gemm_get_stor_type(DLP_TYPE pstor_type)
     return stor_type;
 }
 
-static inline dlp_sf_t
-dlp_gemm_qparam_to_sf(const dlp_qparam_t* qparam)
+md_t
+dlp_gemm_get_quant_group_size(md_t a_group_size, md_t b_group_size, md_t k)
 {
-    dlp_sf_t sf = { 0 };
-    if (qparam != NULL) {
-        sf.scale_factor_len  = qparam->len;
-        sf.scale_factor_type = qparam->stor_type;
-        sf.scale_factor_dim  = qparam->outer_dim;
-        // Keep len/type/dim so caller-side validation can report the error
-        // when a non-empty qparam has no backing data.
-        if (qparam->data != NULL) {
-            sf.scale_factor = qparam->data;
-        }
+    if (a_group_size == 0) {
+        a_group_size = k;
     }
-    return sf;
-}
-
-static inline dlp_zp_t
-dlp_gemm_qparam_to_zp(const dlp_qparam_t* qparam)
-{
-    dlp_zp_t zp = { 0 };
-    if (qparam != NULL) {
-        zp.zero_point_len  = qparam->len;
-        zp.zero_point_type = qparam->stor_type;
-        zp.zero_point_dim  = qparam->outer_dim;
-        // Keep len/type so caller-side validation can report the error when a
-        // non-empty qparam has no backing data.
-        if (qparam->data != NULL) {
-            zp.zero_point = qparam->data;
-        }
+    if (b_group_size == 0) {
+        b_group_size = k;
     }
-    return zp;
+    return (a_group_size < b_group_size) ? a_group_size : b_group_size;
 }
 
-DLP_INLINE void
-dlp_gemm_set_pre_ops_node_params(dlp_gemm_pre_op*   pre_op_node,
-                                 md_t               group_size,
-                                 DLP_PARAM_DIM_TYPE scale_factor_dim,
-                                 DLP_PARAM_DIM_TYPE zero_point_dim,
-                                 void*              zero_point,
-                                 void*              scale_factor,
-                                 md_t               zero_point_len,
-                                 md_t               scale_factor_len,
-                                 md_t               scale_factor_type,
-                                 md_t               zero_point_type)
+void
+dlp_gemm_fill_quant_op_attr(dlp_gemm_quant_op_attr* attr,
+                            const dlp_quant_op_t*   a_quant_op,
+                            const dlp_quant_op_t*   b_quant_op,
+                            md_t                    group_size,
+                            md_t                    k,
+                            md_t                    n)
 {
-    pre_op_node->group_size        = group_size;
-    pre_op_node->scale_factor      = scale_factor;
-    pre_op_node->scale_factor_len  = scale_factor_len;
-    pre_op_node->scale_factor_dim  = scale_factor_dim;
-    pre_op_node->scale_factor_type = scale_factor_type;
-    pre_op_node->zero_point_dim    = zero_point_dim;
-    pre_op_node->zero_point        = zero_point;
-    pre_op_node->zero_point_len    = zero_point_len;
-    pre_op_node->zero_point_type   = zero_point_type;
-    pre_op_node->next              = NULL;
+    const dlp_qparam_t* a_sf =
+        (a_quant_op == NULL) ? NULL : a_quant_op->dequant_scale_factors;
+    const dlp_qparam_t* b_sf =
+        (b_quant_op == NULL) ? NULL : b_quant_op->dequant_scale_factors;
+    const dlp_qparam_t* a_zp = (a_quant_op == NULL) ? NULL
+                                                    : a_quant_op->zero_point;
+    const dlp_qparam_t* b_zp = (b_quant_op == NULL) ? NULL
+                                                    : b_quant_op->zero_point;
+
+    attr->group_size         = (uint64_t)group_size;
+    attr->a_scale_factor     = (a_sf == NULL) ? NULL : a_sf->data;
+    attr->a_scale_factor_len = (a_sf == NULL) ? 0 : (uint64_t)a_sf->len;
+    attr->b_scale_factor     = (b_sf == NULL) ? NULL : b_sf->data;
+    attr->b_scale_factor_len = (b_sf == NULL) ? 0 : (uint64_t)b_sf->len;
+    attr->a_zp               = (a_zp == NULL) ? NULL : a_zp->data;
+    attr->b_zp               = (b_zp == NULL) ? NULL : b_zp->data;
+    attr->a_zp_len           = (a_zp == NULL) ? 0 : (uint64_t)a_zp->len;
+    attr->b_zp_len           = (b_zp == NULL) ? 0 : (uint64_t)b_zp->len;
+    attr->sf_stor_type =
+        (a_sf == NULL) ? DLP_INVALID : dlp_gemm_get_stor_type(a_sf->stor_type);
+    const dlp_qparam_t* zp_for_type = (a_zp != NULL) ? a_zp : b_zp;
+    attr->zp_stor_type              = (zp_for_type == NULL)
+                                          ? DLP_INVALID
+                                          : dlp_gemm_get_stor_type(zp_for_type->stor_type);
+
+    md_t               num_groups = (group_size == 0) ? 1
+                                                      : ((k + group_size - 1) / group_size);
+    DLP_PARAM_DIM_TYPE a_dim      = (a_sf == NULL) ? DLP_PARAM_DIM_INVALID
+                                                   : a_sf->outer_dim;
+    DLP_PARAM_DIM_TYPE b_dim      = (b_sf == NULL) ? DLP_PARAM_DIM_INVALID
+                                                   : b_sf->outer_dim;
+
+    attr->a_grp_mul = (a_dim == DLP_PARAM_DIM_PER_TOKEN) ? 0 : 1;
+    attr->b_grp_mul = (b_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 0 : 1;
+    attr->grp_post_op_lda =
+        (a_dim == DLP_PARAM_DIM_PER_TOKEN) ? 1 : (uint64_t)num_groups;
+    attr->grp_post_op_ldb = (uint64_t)n;
 }
 
-DLP_INLINE void
-dlp_gemm_set_group_post_ops_node_params(dlp_gemm_group_post_op* post_op_node,
-                                        md_t                    group_size,
-                                        DLP_PARAM_DIM_TYPE a_scale_factor_dim,
-                                        DLP_PARAM_DIM_TYPE b_scale_factor_dim,
-                                        void*              a_zero_point,
-                                        void*              a_scale_factor,
-                                        md_t               a_zero_point_len,
-                                        md_t               a_scale_factor_len,
-                                        void*              b_zero_point,
-                                        void*              b_scale_factor,
-                                        md_t               b_zero_point_len,
-                                        md_t               b_scale_factor_len,
-                                        DLP_TYPE           sf_stor_type,
-                                        DLP_TYPE           zp_stor_type)
+/* Validate one scale-factor descriptor. Used for dequant_scale_factors now
+ * and for quant_scale_factors later.
+ * group_size 0 means full K. outer_count is m for a source scale and n
+ * for a weight scale. PER_GROUP covers one slice of K per outer element.
+ * The other granularities are a single group. */
+static dlp_clsc_err_t
+dlp_gemm_validate_scale_factors(const dlp_qparam_t* scale_factors,
+                                md_t                group_size,
+                                md_t                k,
+                                md_t                outer_count)
 {
-    post_op_node->group_size         = group_size;
-    post_op_node->a_scale_factor_dim = a_scale_factor_dim;
-    post_op_node->b_scale_factor_dim = b_scale_factor_dim;
-    post_op_node->a_zp               = a_zero_point;
-    post_op_node->a_zp_len           = a_zero_point_len;
-    post_op_node->a_scale_factor     = a_scale_factor;
-    post_op_node->a_scale_factor_len = a_scale_factor_len;
-    post_op_node->b_zp               = b_zero_point;
-    post_op_node->b_zp_len           = b_zero_point_len;
-    post_op_node->b_scale_factor     = b_scale_factor;
-    post_op_node->b_scale_factor_len = b_scale_factor_len;
-    post_op_node->sf_stor_type       = sf_stor_type;
-    post_op_node->zp_stor_type       = zp_stor_type;
-    post_op_node->next               = NULL;
+    if (scale_factors == NULL) {
+        dlp_print_msg(" Scale factors are NULL. Exiting..", __FILE__, __LINE__);
+        return DLP_CLSC_NULL_POINTER;
+    }
+    if (scale_factors->len < 0) {
+        return DLP_CLSC_INVALID_SF_LEN;
+    }
+    if ((scale_factors->len > 0) && (scale_factors->data == NULL)) {
+        return DLP_CLSC_NULL_POINTER;
+    }
+    if (dlp_gemm_get_stor_type(scale_factors->stor_type) == DLP_INVALID) {
+        dlp_print_msg(" Scale factor storage type is invalid. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+    if ((scale_factors->outer_dim < DLP_PARAM_DIM_PER_TENSOR)
+        || (scale_factors->outer_dim > DLP_PARAM_DIM_PER_GROUP)) {
+        dlp_print_msg(" Scale factor outer_dim is invalid. Exiting..", __FILE__,
+                      __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+    md_t effective_group_size = group_size;
+    if (effective_group_size == 0) {
+        effective_group_size = k;
+    }
+    md_t num_groups = 1;
+    if (effective_group_size > 0) {
+        num_groups = (k + effective_group_size - 1) / effective_group_size;
+    }
+    md_t scale_groups =
+        (scale_factors->outer_dim == DLP_PARAM_DIM_PER_GROUP) ? num_groups : 1;
+    md_t required_len = (scale_factors->outer_dim == DLP_PARAM_DIM_PER_TENSOR)
+                            ? 1
+                            : (outer_count * scale_groups);
+    if (scale_factors->len != required_len) {
+        dlp_print_msg(" Scale factor length does not match the required "
+                      "length. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_INVALID_SF_LEN;
+    }
+
+    return DLP_CLSC_SUCCESS;
+}
+
+static dlp_clsc_err_t
+dlp_gemm_validate_group_size(md_t group_size, md_t k)
+{
+    // 0 means one group over the full K. A negative size, or one past K,
+    // is rejected. k <= 0 is already rejected by the GEMM argument check.
+    if ((group_size < 0) || (group_size > k)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    return DLP_CLSC_SUCCESS;
 }
 
 dlp_clsc_err_t
-dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
-                                         dlp_quant_op_t*         b_quant_op,
-                                         dlp_gemm_group_post_op* post_op_list,
-                                         md_t                    m,
-                                         md_t                    n,
-                                         md_t                    k)
+dlp_gemm_validate_src_quant_op(const dlp_quant_op_t* src_quant_op,
+                               md_t                  m,
+                               md_t                  k)
 {
-    dlp_sf_t a_scl = dlp_gemm_qparam_to_sf(
-        a_quant_op == NULL ? NULL : a_quant_op->dequant_scale_factors);
-    dlp_sf_t b_scl = dlp_gemm_qparam_to_sf(
-        b_quant_op == NULL ? NULL : b_quant_op->dequant_scale_factors);
-
-    dlp_sf_t* a_scl_ptr =
-        (a_quant_op == NULL || a_quant_op->dequant_scale_factors == NULL)
-            ? NULL
-            : &a_scl;
-    dlp_sf_t* b_scl_ptr =
-        (b_quant_op == NULL || b_quant_op->dequant_scale_factors == NULL)
-            ? NULL
-            : &b_scl;
-
-    if ((a_quant_op == NULL) && (b_quant_op == NULL)) {
-        dlp_gemm_set_group_post_ops_node_params(
-            post_op_list, 0, DLP_PARAM_DIM_PER_GROUP, DLP_PARAM_DIM_PER_GROUP,
-            NULL, NULL, 0, 0, NULL, NULL, 0, 0, DLP_INVALID, DLP_INVALID);
-
-        return DLP_CLSC_SUCCESS;
-    }
-
-    if ((a_quant_op != NULL)
-        && (a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE)) {
-        dlp_print_msg(
-            " A grouped quant metadata must use DLP_QUANT_OP_QUANTIZE. "
-            "Exiting..",
-            __FILE__, __LINE__);
-        return DLP_CLSC_NOT_SUPPORTED;
-    }
-    if ((b_quant_op != NULL)
-        && (b_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE)) {
-        dlp_print_msg(
-            " B grouped quant metadata must use DLP_QUANT_OP_QUANTIZE. "
-            "Exiting..",
-            __FILE__, __LINE__);
-        return DLP_CLSC_NOT_SUPPORTED;
-    }
-
-    if ((a_quant_op != NULL) && (a_quant_op->zero_point != NULL)) {
-        dlp_print_msg(" A zero-point is not supported for grouped "
-                      "symmetric quantization. Exiting..",
+    if (src_quant_op == NULL) {
+        dlp_print_msg(" Source quantization metadata is NULL. Exiting..",
                       __FILE__, __LINE__);
-        return DLP_CLSC_NOT_SUPPORTED;
+        return DLP_CLSC_NULL_POINTER;
     }
-    if ((b_quant_op != NULL) && (b_quant_op->zero_point != NULL)) {
-        dlp_print_msg(" B zero-point is not supported for grouped "
-                      "symmetric quantization. Exiting..",
+
+    dlp_clsc_err_t err =
+        dlp_gemm_validate_group_size(src_quant_op->group_size, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+
+    err = dlp_gemm_validate_scale_factors(src_quant_op->dequant_scale_factors,
+                                          src_quant_op->group_size, k, m);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+
+    // PER_CHANNEL is a weight granularity. A matching length does not make
+    // it a valid source scale.
+    if (src_quant_op->dequant_scale_factors->outer_dim
+        == DLP_PARAM_DIM_PER_CHANNEL) {
+        dlp_print_msg(" A scale factor outer_dim cannot be PER_CHANNEL. "
+                      "Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_NOT_SUPPORTED;
     }
 
-    md_t a_group_size = (a_quant_op != NULL) ? a_quant_op->group_size : 0;
-    md_t b_group_size = (b_quant_op != NULL) ? b_quant_op->group_size : 0;
+    return DLP_CLSC_SUCCESS;
+}
 
+dlp_clsc_err_t
+dlp_gemm_validate_weight_quant_op(const dlp_quant_op_t* weight_quant_op,
+                                  md_t                  n,
+                                  md_t                  k)
+{
+    if (weight_quant_op == NULL) {
+        dlp_print_msg(" Weight quantization metadata is NULL. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    dlp_clsc_err_t err =
+        dlp_gemm_validate_group_size(weight_quant_op->group_size, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+
+    err =
+        dlp_gemm_validate_scale_factors(weight_quant_op->dequant_scale_factors,
+                                        weight_quant_op->group_size, k, n);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+
+    // PER_TOKEN is a source granularity. A matching length does not make
+    // it a valid weight scale.
+    if (weight_quant_op->dequant_scale_factors->outer_dim
+        == DLP_PARAM_DIM_PER_TOKEN) {
+        dlp_print_msg(" B scale factor outer_dim cannot be PER_TOKEN. "
+                      "Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    return DLP_CLSC_SUCCESS;
+}
+
+dlp_clsc_err_t
+dlp_gemm_validate_sym_quant_ops(const dlp_quant_op_t* a_quant_op,
+                                const dlp_quant_op_t* b_quant_op,
+                                md_t                  m,
+                                md_t                  n,
+                                md_t                  k)
+{
+    dlp_clsc_err_t err = dlp_gemm_validate_src_quant_op(a_quant_op, m, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+    err = dlp_gemm_validate_weight_quant_op(b_quant_op, n, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+
+    if ((a_quant_op->dequant_scale_factors->outer_dim
+         == DLP_PARAM_DIM_PER_TENSOR)
+        || (b_quant_op->dequant_scale_factors->outer_dim
+            == DLP_PARAM_DIM_PER_TENSOR)) {
+        dlp_print_msg(" PER_TENSOR scale factors are not supported for "
+                      "symmetric quantization. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    // 0 stays on the quant op. Agreement uses the full-K size.
+    md_t a_group_size = a_quant_op->group_size;
+    md_t b_group_size = b_quant_op->group_size;
     if (a_group_size == 0) {
         a_group_size = k;
     }
@@ -252,89 +328,63 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
         b_group_size = k;
     }
 
-    if ((a_quant_op != NULL) && (b_quant_op != NULL)
-        && (a_group_size != b_group_size)) {
+    // The group sizes must agree. A mismatch either overreads the scales of
+    // the full-K side or disagrees with the layout the B-only reorder used.
+    if (a_group_size != b_group_size) {
         dlp_print_msg(" A and B group size mismatch. Exiting..", __FILE__,
                       __LINE__);
         return DLP_CLSC_INVALID_GROUP_DIMENSION;
     }
-
-    md_t group_size = (a_quant_op != NULL) ? a_group_size : b_group_size;
-
-    // Group ops may pass group_size 0 to mean "default"
-    // (one group over full k).
-    if ((group_size > k) || (group_size < 0)) {
+    if ((a_group_size != k) && ((a_group_size % 4) != 0)) {
         return DLP_CLSC_INVALID_GROUP_DIMENSION;
-    } else if ((group_size != k) && (group_size % 4 != 0)) {
+    }
+    if ((b_group_size != k) && ((b_group_size % 4) != 0)) {
         return DLP_CLSC_INVALID_GROUP_DIMENSION;
     }
 
-    DLP_PARAM_DIM_TYPE a_scale_factor_dim = (a_scl_ptr != NULL)
-                                                ? a_scl_ptr->scale_factor_dim
-                                                : DLP_PARAM_DIM_INVALID;
-    DLP_PARAM_DIM_TYPE b_scale_factor_dim = (b_scl_ptr != NULL)
-                                                ? b_scl_ptr->scale_factor_dim
-                                                : DLP_PARAM_DIM_INVALID;
-
-    if (a_scale_factor_dim == DLP_PARAM_DIM_INVALID
-        || b_scale_factor_dim == DLP_PARAM_DIM_INVALID) {
-        dlp_print_msg(" A or B scale factor dimension is invalid. Exiting..",
+    if (a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE) {
+        dlp_print_msg("Sym quant metadata must use DLP_QUANT_OP_QUANTIZE. "
+                      "Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+    if (b_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE) {
+        dlp_print_msg("Sym quant metadata must use DLP_QUANT_OP_QUANTIZE. "
+                      "Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_NOT_SUPPORTED;
     }
 
-    // Number of K-groups per matrix.
-    // A PER_TOKEN:   A has one scale per row (a_grp_mul=0)
-    // B PER_CHANNEL: B has one scale per column (b_grp_mul=0)
-    // otherwise:     per group (default)
-    md_t num_groups = (k + group_size - 1) / group_size;
-    md_t a_num_groups =
-        (a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 1 : num_groups;
-    md_t b_num_groups =
-        (b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 1 : num_groups;
-
-    if (a_scl_ptr != NULL) {
-        if ((a_scl_ptr->scale_factor_len > 0)
-            && (a_scl_ptr->scale_factor == NULL))
-            return DLP_CLSC_NULL_POINTER;
-
-        if (a_scl_ptr->scale_factor_len < (m * a_num_groups))
-            return DLP_CLSC_INVALID_SF_LEN;
+    if (a_quant_op->zero_point != NULL) {
+        dlp_print_msg(" Matrix A zero-point is not supported for grouped "
+                      "symmetric quantization. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+    if (b_quant_op->zero_point != NULL) {
+        dlp_print_msg(" Matrix B zero-point is not supported for grouped "
+                      "symmetric quantization. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
     }
 
-    if (b_scl_ptr != NULL) {
-        if ((b_scl_ptr->scale_factor_len > 0)
-            && (b_scl_ptr->scale_factor == NULL))
-            return DLP_CLSC_NULL_POINTER;
+    const dlp_qparam_t* a_sf = a_quant_op->dequant_scale_factors;
+    const dlp_qparam_t* b_sf = b_quant_op->dequant_scale_factors;
 
-        if (b_scl_ptr->scale_factor_len < (n * b_num_groups)) {
-            dlp_print_msg(" B scale factor length is less than the number of "
-                          "groups. Exiting..",
-                          __FILE__, __LINE__);
-            return DLP_CLSC_INVALID_SF_LEN;
-        }
-    }
-
-    if ((a_scl_ptr != NULL) && (b_scl_ptr != NULL)
-        && (a_scl_ptr->scale_factor_type != b_scl_ptr->scale_factor_type)) {
+    if (a_sf->stor_type != b_sf->stor_type) {
         dlp_print_msg(" A and B scale factor type mismatch. Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_TYPE_MISMATCH;
     }
 
-    DLP_TYPE tmp_sf_stor_type = DLP_INVALID;
-    if (a_scl_ptr != NULL) {
-        tmp_sf_stor_type = dlp_gemm_get_stor_type(a_scl_ptr->scale_factor_type);
+    // The JIT and classic group kernels load only F32 or BF16 scales, and
+    // the column-major transpose sizes elements the same way.
+    if ((a_sf->stor_type != DLP_F32) && (a_sf->stor_type != DLP_BF16)) {
+        dlp_print_msg(" Sym quant scale factors must be F32 or BF16. "
+                      "Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
     }
-
-    dlp_gemm_set_group_post_ops_node_params(
-        post_op_list, group_size, a_scale_factor_dim, b_scale_factor_dim, NULL,
-        (a_scl_ptr == NULL) ? NULL : a_scl_ptr->scale_factor, 0,
-        (a_scl_ptr == NULL) ? 0 : a_scl_ptr->scale_factor_len, NULL,
-        (b_scl_ptr == NULL) ? NULL : b_scl_ptr->scale_factor, 0,
-        (b_scl_ptr == NULL) ? 0 : b_scl_ptr->scale_factor_len, tmp_sf_stor_type,
-        DLP_INVALID);
-    post_op_list->next = NULL;
 
     return DLP_CLSC_SUCCESS;
 }
@@ -350,11 +400,7 @@ dlp_gemm_translate_to_group_op_list(const dlp_metadata_t* metadata,
     (void)(n);
     (void)(k);
 
-    if ((group_op == NULL) || (metadata == NULL)) {
-        return DLP_CLSC_NULL_POINTER;
-    }
-
-    // Both quant ops are validated by dlp_gemm_translate_to_group_postops_list,
+    // Both quant ops are validated by dlp_gemm_validate_sym_quant_ops,
     // which every caller runs (and error-checks) before reaching this point.
     group_op->a_post_quant_op = metadata->a_quant_op;
     group_op->b_post_quant_op = metadata->b_quant_op;
@@ -362,171 +408,105 @@ dlp_gemm_translate_to_group_op_list(const dlp_metadata_t* metadata,
     return DLP_CLSC_SUCCESS;
 }
 
-dlp_clsc_err_t
-dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
-                                   dlp_gemm_pre_op* pre_op_list,
-                                   md_t             m,
-                                   md_t             n,
-                                   md_t             k)
+static dlp_clsc_err_t
+dlp_gemm_validate_woq_zero_point(const dlp_qparam_t* zero_point,
+                                 md_t                n,
+                                 md_t                num_groups)
 {
-    (void)(m); // Unused for now, potential to be used later.
-
-    if (b_quant_op == NULL) {
+    if (zero_point == NULL) {
+        return DLP_CLSC_NULL_POINTER;
+    }
+    if ((zero_point->len > 0) && (zero_point->data == NULL)) {
         return DLP_CLSC_NULL_POINTER;
     }
 
-    if ((b_quant_op->quant_op_kind != DLP_QUANT_OP_DEQUANTIZE)
-        && (b_quant_op->quant_op_kind != DLP_QUANT_OP_EXPAND)) {
-        dlp_print_msg(
-            " B pre-op quant metadata must use DLP_QUANT_OP_DEQUANTIZE or "
-            "DLP_QUANT_OP_EXPAND. Exiting..",
-            __FILE__, __LINE__);
+    if ((zero_point->outer_dim != DLP_PARAM_DIM_PER_TENSOR)
+        && (zero_point->outer_dim != DLP_PARAM_DIM_PER_CHANNEL)
+        && (zero_point->outer_dim != DLP_PARAM_DIM_PER_GROUP)) {
+        dlp_print_msg("Invalid zero-point granularity for B matrix. Exiting..",
+                      __FILE__, __LINE__);
         return DLP_CLSC_NOT_SUPPORTED;
     }
 
-    dlp_sf_t b_scl = dlp_gemm_qparam_to_sf(b_quant_op->dequant_scale_factors);
-    dlp_zp_t b_zp  = dlp_gemm_qparam_to_zp(b_quant_op->zero_point);
-
-    dlp_sf_t* b_scl_ptr = (b_quant_op->dequant_scale_factors == NULL) ? NULL
-                                                                      : &b_scl;
-    dlp_zp_t* b_zp_ptr  = (b_quant_op->zero_point == NULL) ? NULL : &b_zp;
-
-    md_t group_size = b_quant_op->group_size;
-
-    // WOQ and similar pre-ops may pass group_size 0 to mean "default"
-    // (one group over full k).
-    if (group_size == 0) {
-        group_size = k;
+    md_t required_len = 1;
+    if (zero_point->outer_dim == DLP_PARAM_DIM_PER_CHANNEL) {
+        required_len = n;
+    } else if (zero_point->outer_dim == DLP_PARAM_DIM_PER_GROUP) {
+        required_len = n * num_groups;
     }
 
-    if ((group_size > k) || (group_size < 0)) {
-        return DLP_CLSC_INVALID_GROUP_DIMENSION;
-    } else if ((group_size != k) && (group_size % 2 != 0)) {
-        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    if (zero_point->len != required_len) {
+        return DLP_CLSC_INVALID_ZP_LEN;
     }
 
-    for (iter_t i = 0; i < 1; ++i) {
-        if ((b_quant_op->quant_op_kind == DLP_QUANT_OP_DEQUANTIZE)
-            && (b_scl_ptr == NULL)) {
-            return DLP_CLSC_NULL_POINTER;
-        }
-
-        md_t               num_groups = (k + group_size - 1) / group_size;
-        DLP_PARAM_DIM_TYPE b_scale_factor_dim =
-            (b_scl_ptr != NULL) ? b_scl_ptr->scale_factor_dim
-                                : DLP_PARAM_DIM_INVALID;
-
-        DLP_PARAM_DIM_TYPE b_zero_point_dim = (b_zp_ptr != NULL)
-                                                  ? b_zp_ptr->zero_point_dim
-                                                  : DLP_PARAM_DIM_INVALID;
-
-        DLP_TYPE b_sf_stor_type = DLP_INVALID;
-        DLP_TYPE b_zp_stor_type = DLP_INVALID;
-
-        if (b_scl_ptr != NULL) {
-            if ((b_scl_ptr->scale_factor_len > 0)
-                && (b_scl_ptr->scale_factor == NULL))
-                return DLP_CLSC_NULL_POINTER;
-
-            // B (K x N) varies over columns: PER_TENSOR / PER_CHANNEL /
-            // PER_GROUP are valid, PER_TOKEN is not.
-            if ((b_scale_factor_dim != DLP_PARAM_DIM_PER_TENSOR)
-                && (b_scale_factor_dim != DLP_PARAM_DIM_PER_CHANNEL)
-                && (b_scale_factor_dim != DLP_PARAM_DIM_PER_GROUP)) {
-                dlp_print_msg("Invalid scale-factor granularity for B matrix. "
-                              "Exiting..",
-                              __FILE__, __LINE__);
-                return DLP_CLSC_NOT_SUPPORTED;
-            }
-
-            if ((b_scale_factor_dim == DLP_PARAM_DIM_PER_GROUP)
-                && (b_scl_ptr->scale_factor_len != (n * num_groups))) {
-                dlp_print_msg(
-                    " Invalid B scale factor length for PER_GROUP. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_INVALID_SF_LEN;
-            } else if ((b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL)
-                       && (b_scl_ptr->scale_factor_len != (n))) {
-                dlp_print_msg(
-                    " Invalid B scale factor length for PER_CHANNEL. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_INVALID_SF_LEN;
-            } else if ((b_scale_factor_dim == DLP_PARAM_DIM_PER_TENSOR)
-                       && (b_scl_ptr->scale_factor_len != (1))) {
-                dlp_print_msg(
-                    " Invalid B scale factor length for PER_TENSOR. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_INVALID_SF_LEN;
-            }
-
-            b_sf_stor_type =
-                dlp_gemm_get_stor_type(b_scl_ptr->scale_factor_type);
-            if (b_sf_stor_type != DLP_BF16 && b_sf_stor_type != DLP_F32) {
-                dlp_print_msg(
-                    " B scale factor type must be BF16 or F32. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_NOT_SUPPORTED;
-            }
-        }
-
-        if (b_zp_ptr != NULL) {
-            /* check for validity of pre-ops */
-            if ((b_zp_ptr->zero_point_len > 0)
-                && (b_zp_ptr->zero_point == NULL))
-                return DLP_CLSC_NULL_POINTER;
-
-            // Same column-oriented allowlist as scale. s4 rejects zp before
-            // calling this helper, so this path is u4 (and any future zp WOQ).
-            if ((b_zero_point_dim != DLP_PARAM_DIM_PER_TENSOR)
-                && (b_zero_point_dim != DLP_PARAM_DIM_PER_CHANNEL)
-                && (b_zero_point_dim != DLP_PARAM_DIM_PER_GROUP)) {
-                dlp_print_msg("Invalid zero-point granularity for B matrix. "
-                              "Exiting..",
-                              __FILE__, __LINE__);
-                return DLP_CLSC_NOT_SUPPORTED;
-            }
-
-            if ((b_zero_point_dim == DLP_PARAM_DIM_PER_GROUP)
-                && (b_zp_ptr->zero_point_len != (n * num_groups))) {
-                dlp_print_msg(
-                    " Invalid B zero point length for PER_GROUP. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_INVALID_ZP_LEN;
-            } else if ((b_zero_point_dim == DLP_PARAM_DIM_PER_CHANNEL)
-                       && (b_zp_ptr->zero_point_len != (n))) {
-                dlp_print_msg(
-                    " Invalid B zero point length for PER_CHANNEL. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_INVALID_ZP_LEN;
-            } else if ((b_zero_point_dim == DLP_PARAM_DIM_PER_TENSOR)
-                       && (b_zp_ptr->zero_point_len != (1))) {
-                dlp_print_msg(
-                    " Invalid B zero point length for PER_TENSOR. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_INVALID_ZP_LEN;
-            }
-
-            b_zp_stor_type = dlp_gemm_get_stor_type(b_zp_ptr->zero_point_type);
-            if (b_zp_stor_type != DLP_BF16 && b_zp_stor_type != DLP_S8) {
-                dlp_print_msg(
-                    " B zero point type must be BF16 or S8. Exiting..",
-                    __FILE__, __LINE__);
-                return DLP_CLSC_NOT_SUPPORTED;
-            }
-        }
-
-        dlp_gemm_set_pre_ops_node_params(
-            (pre_op_list + i), group_size, b_scale_factor_dim, b_zero_point_dim,
-            (b_zp_ptr == NULL) ? NULL : b_zp_ptr->zero_point,
-            (b_scl_ptr == NULL) ? NULL : b_scl_ptr->scale_factor,
-            (b_zp_ptr == NULL) ? 0 : b_zp_ptr->zero_point_len,
-            (b_scl_ptr == NULL) ? 0 : b_scl_ptr->scale_factor_len,
-            b_sf_stor_type, b_zp_stor_type);
-
-        (pre_op_list + i)->next = NULL;
+    DLP_TYPE stor_type = dlp_gemm_get_stor_type(zero_point->stor_type);
+    if ((stor_type != DLP_BF16) && (stor_type != DLP_S8)) {
+        return DLP_CLSC_NOT_SUPPORTED;
     }
-
     return DLP_CLSC_SUCCESS;
+}
+
+dlp_clsc_err_t
+dlp_gemm_validate_woq_quant_op(const dlp_quant_op_t* b_quant_op,
+                               md_t                  n,
+                               md_t                  k,
+                               bool                  require_zero_point)
+{
+    dlp_clsc_err_t err = dlp_gemm_validate_weight_quant_op(b_quant_op, n, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+    if ((b_quant_op->quant_op_kind != DLP_QUANT_OP_DEQUANTIZE)
+        && (b_quant_op->quant_op_kind != DLP_QUANT_OP_EXPAND)) {
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    md_t group_size = (b_quant_op->group_size == 0) ? k
+                                                    : b_quant_op->group_size;
+    if ((group_size < 0) || (group_size > k)
+        || ((group_size != k) && ((group_size % 2) != 0))) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    DLP_TYPE scale_type =
+        dlp_gemm_get_stor_type(b_quant_op->dequant_scale_factors->stor_type);
+    if ((scale_type != DLP_BF16) && (scale_type != DLP_F32)) {
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    // validate zero point if required (for bf16u4)
+    if (require_zero_point) {
+        md_t num_groups = (k + group_size - 1) / group_size;
+        return dlp_gemm_validate_woq_zero_point(b_quant_op->zero_point, n,
+                                                num_groups);
+    }
+    return (b_quant_op->zero_point == NULL) ? DLP_CLSC_SUCCESS
+                                            : DLP_CLSC_NOT_SUPPORTED;
+}
+
+void
+dlp_gemm_fill_woq_pre_op_attr(dlp_gemm_pre_op_attr* attr,
+                              const dlp_quant_op_t* b_quant_op,
+                              md_t                  n,
+                              md_t                  k)
+{
+    const dlp_qparam_t* sf = b_quant_op->dequant_scale_factors;
+    const dlp_qparam_t* zp = b_quant_op->zero_point;
+
+    attr->scale_factor      = sf->data;
+    attr->scale_factor_len  = sf->len;
+    attr->scale_factor_type = dlp_gemm_get_stor_type(sf->stor_type);
+    attr->scale_factor_dim  = sf->outer_dim;
+    attr->zero_point        = (zp == NULL) ? NULL : zp->data;
+    attr->zero_point_len    = (zp == NULL) ? 0 : zp->len;
+    attr->zero_point_type =
+        (zp == NULL) ? DLP_INVALID : dlp_gemm_get_stor_type(zp->stor_type);
+    attr->zero_point_dim = (zp == NULL) ? DLP_PARAM_DIM_INVALID : zp->outer_dim;
+    attr->pre_op_b_i     = 0;
+    attr->pre_op_b_j     = 0;
+    attr->group_size     = (b_quant_op->group_size == 0) ? k
+                                                         : b_quant_op->group_size;
+    attr->pre_op_ld      = n;
 }
 
 // Identity scale used when a MATRIX_ADD / MATRIX_MUL post-op carries no scale
@@ -569,90 +549,91 @@ dlp_gemm_set_node_params(dlp_gemm_post_op*     post_op_node,
 }
 
 dlp_clsc_err_t
-dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
-                                      dlp_gemm_post_op* post_op_list,
-                                      void*             meta_arg,
-                                      md_t              m)
+dlp_gemm_validate_dynamic_quant_op(const dlp_quant_op_t* a_quant_op,
+                                   md_t                  m,
+                                   md_t                  k)
 {
-    // Step 1: Validate metadata and A quantization parameters.
-    if (metadata == NULL || post_op_list == NULL || metadata->a_quant_op == NULL
-        || metadata->a_quant_op->quant_scale_factors == NULL
-        || metadata->a_quant_op->dequant_scale_factors == NULL) {
-        dlp_print_msg("One or more required A quantization parameters are "
-                      "NULL. Exiting..",
-                      __FILE__, __LINE__);
-        return DLP_CLSC_NULL_POINTER;
+    dlp_clsc_err_t err = dlp_gemm_validate_src_quant_op(a_quant_op, m, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
     }
 
-    if (metadata->a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE) {
-        dlp_print_msg(
-            " a_quant_op quant metadata must use DLP_QUANT_OP_QUANTIZE. "
-            "Exiting..",
-            __FILE__, __LINE__);
+    if (a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE) {
         return DLP_CLSC_NOT_SUPPORTED;
     }
 
-    dlp_qparam_t* a_dequant_scl = metadata->a_quant_op->dequant_scale_factors;
-    dlp_qparam_t* a_zp          = metadata->a_quant_op->zero_point;
+    err = dlp_gemm_validate_scale_factors(a_quant_op->quant_scale_factors,
+                                          a_quant_op->group_size, k, m);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
 
-    // --- Step 2: Validate scale factor ---
-    if ((a_dequant_scl->len > 0) && (a_dequant_scl->data == NULL)) {
-        dlp_print_msg(" a_quant_op.dequant_scale_factors data is NULL. "
-                      "Exiting..",
+    // The F32/BF16 -> S8 quantizers have no F16 load and would read it as
+    // F32. dequant_scale_factors goes to the JIT, which loads F16.
+    if (a_quant_op->quant_scale_factors->stor_type == DLP_F16) {
+        dlp_print_msg(" F16 quant scale factors are not supported. Exiting..",
                       __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    DLP_PARAM_DIM_TYPE quant_dim = a_quant_op->quant_scale_factors->outer_dim;
+    DLP_PARAM_DIM_TYPE dequant_dim =
+        a_quant_op->dequant_scale_factors->outer_dim;
+    if (((quant_dim != DLP_PARAM_DIM_PER_TENSOR)
+         && (quant_dim != DLP_PARAM_DIM_PER_TOKEN))
+        || ((dequant_dim != DLP_PARAM_DIM_PER_TENSOR)
+            && (dequant_dim != DLP_PARAM_DIM_PER_TOKEN))) {
+        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+    }
+
+    if (a_quant_op->zero_point == NULL) {
+        return DLP_CLSC_SUCCESS;
+    }
+
+    // validate zero point if not NULL
+    const dlp_qparam_t* zero_point = a_quant_op->zero_point;
+    if ((zero_point->outer_dim != DLP_PARAM_DIM_PER_TENSOR)
+        && (zero_point->outer_dim != DLP_PARAM_DIM_PER_TOKEN)) {
+        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+    }
+    if ((zero_point->len > 0) && (zero_point->data == NULL)) {
         return DLP_CLSC_NULL_POINTER;
     }
-    if ((a_dequant_scl->len != 1) && (a_dequant_scl->len < m)) {
-        dlp_print_msg(" a_quant_op.dequant_scale_factors len is < m. "
-                      "Exiting..",
-                      __FILE__, __LINE__);
+    md_t required_len = (zero_point->outer_dim == DLP_PARAM_DIM_PER_TENSOR) ? 1
+                                                                            : m;
+    if (zero_point->len != required_len) {
         return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
     }
-
-    // --- Step 3: Validate zero-point ---
-    if ((a_zp != NULL) && (a_zp->len > 0) && (a_zp->data == NULL)) {
-        dlp_print_msg(" a_quant_op.zero_point data is NULL. Exiting..",
-                      __FILE__, __LINE__);
-        return DLP_CLSC_NULL_POINTER;
+    // The quantizers also read the zero point, and have no F16 load.
+    DLP_TYPE zp_type = dlp_gemm_get_stor_type(zero_point->stor_type);
+    if ((zp_type == DLP_INVALID) || (zp_type == DLP_F16)) {
+        return DLP_CLSC_NOT_SUPPORTED;
     }
-    if ((a_zp != NULL) && (a_zp->len != 1) && (a_zp->len < m)) {
-        dlp_print_msg(" a_quant_op.zero_point len is < m. Exiting..", __FILE__,
-                      __LINE__);
-        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
-    }
+    return DLP_CLSC_SUCCESS;
+}
 
-    // --- Step 4: Extract storage types ---
-    DLP_TYPE tmp_zp_stor_type = a_zp ? dlp_gemm_get_stor_type(a_zp->stor_type)
-                                     : DLP_INVALID;
-    DLP_TYPE tmp_sf_stor_type =
-        dlp_gemm_get_stor_type(a_dequant_scl->stor_type);
+void
+dlp_gemm_fill_adquantize_post_op(const dlp_metadata_t* metadata,
+                                 dlp_gemm_post_op*     post_op_list,
+                                 void*                 meta_arg)
+{
+    const dlp_quant_op_t* a_quant_op    = metadata->a_quant_op;
+    dlp_qparam_t*         a_dequant_scl = a_quant_op->dequant_scale_factors;
+    dlp_qparam_t*         a_zp          = a_quant_op->zero_point;
 
-    // --- Step 5: Validate outer_dim ---
-    if ((a_dequant_scl->outer_dim != DLP_PARAM_DIM_PER_TENSOR)
-        && (a_dequant_scl->outer_dim != DLP_PARAM_DIM_PER_TOKEN)) {
-        dlp_print_msg(" a_quant_op.dequant_scale_factors outer_dim must be "
-                      "PER_TENSOR or PER_TOKEN for ADQUANTIZE. Exiting..",
-                      __FILE__, __LINE__);
-        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
-    }
-
-    // --- Step 6: Setup zero-point length pointer ---
-    // For symmetric quantization (no zero-point), use zero_zp_len = 0
     static md_t zero_zp_len        = 0;
     md_t*       zero_point_len_ptr = a_zp ? &(a_zp->len) : &zero_zp_len;
-
-    // --- Step 7: Create ADQUANTIZE node at post_op_list[0] ---
     dlp_gemm_set_node_params(
         post_op_list, POST_OPS_ADQUANTIZE, a_zp ? a_zp->data : NULL, meta_arg,
         zero_point_len_ptr, a_dequant_scl->data, a_dequant_scl->len, NULL, 0,
-        DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type,
+        DLP_INVALID,
+        a_zp ? dlp_gemm_get_stor_type(a_zp->stor_type) : DLP_INVALID,
+        dlp_gemm_get_stor_type(a_dequant_scl->stor_type),
         a_dequant_scl->outer_dim);
 
-    // --- Step 8: Link to seq_vector post-ops (filled at post_op_list+1) ---
     if (metadata->seq_length > 0) {
         (post_op_list)->next = (post_op_list + 1);
     }
-    return DLP_CLSC_SUCCESS;
 }
 
 dlp_clsc_err_t

@@ -168,54 +168,16 @@ aocl_gemm_s8s4s32obf16(const char      order,
         mtag_a = PACK;
     }
 
-    // Add early returns for NULL group quantization parameters.
-    if (metadata == NULL || metadata->a_quant_op == NULL
-        || metadata->b_quant_op == NULL
-        || metadata->a_quant_op->dequant_scale_factors == NULL
-        || metadata->b_quant_op->dequant_scale_factors == NULL) {
+    if (metadata == NULL) {
         dlp_print_msg(
-            "Required parameters for symmetric quantized GEMM missing."
-            " Exiting..",
+            " Required parameters for sym quant GEMM through metadata are "
+            "missing. Exiting..",
             __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
         goto err_hndl;
     }
 
-    // Validate scale-factor granularity up front. A (M x K) varies over rows
-    // and is grouped along K, so PER_TOKEN / PER_GROUP are valid but
-    // PER_CHANNEL (a column/N concept) and PER_TENSOR are not. B (K x N)
-    // varies over columns, so PER_CHANNEL / PER_GROUP are valid but PER_TOKEN
-    // (a row/M concept) and PER_TENSOR are not. Reject cross-assigned dims
-    // instead of silently coercing them to PER_GROUP. (s8s4 is row-major only,
-    // so the column-major scale swap/transpose used by s8s8 is intentionally
-    // not needed here.)
-    {
-        DLP_PARAM_DIM_TYPE a_dim =
-            metadata->a_quant_op->dequant_scale_factors->outer_dim;
-        DLP_PARAM_DIM_TYPE b_dim =
-            metadata->b_quant_op->dequant_scale_factors->outer_dim;
-        if ((a_dim != DLP_PARAM_DIM_PER_TOKEN)
-            && (a_dim != DLP_PARAM_DIM_PER_GROUP)) {
-            dlp_print_msg(" A scale factor outer_dim must be PER_TOKEN or "
-                          "PER_GROUP for sym_quant. Exiting..",
-                          __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-            goto err_hndl;
-        }
-        if ((b_dim != DLP_PARAM_DIM_PER_CHANNEL)
-            && (b_dim != DLP_PARAM_DIM_PER_GROUP)) {
-            dlp_print_msg(" B scale factor outer_dim must be PER_CHANNEL or "
-                          "PER_GROUP for sym_quant. Exiting..",
-                          __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-            goto err_hndl;
-        }
-    }
-
-    // convert group-level post-op struct to linked list format.
-    dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
-    dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
-        metadata->a_quant_op, metadata->b_quant_op, grp_post_op_list, m, n, k);
+    dlp_clsc_err_t err = dlp_gemm_validate_sym_quant_ops(
+        metadata->a_quant_op, metadata->b_quant_op, m, n, k);
 
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
@@ -261,10 +223,8 @@ aocl_gemm_s8s4s32obf16(const char      order,
 
     // n==1 GEMV keeps the old align, so KC stays divisible by the group.
     // The wide path keeps the table KC for a single group.
-    md_t group_size = grp_post_op_list[0].group_size;
-    if ((group_size == 0) || (group_size > k)) {
-        group_size = k;
-    }
+    md_t group_size = dlp_gemm_get_quant_group_size(
+        metadata->a_quant_op->group_size, metadata->b_quant_op->group_size, k);
     md_t base_kc     = lcntx_g.blksz.KC;
     lcntx_g.blksz.KC = ((n == 1) || (group_size != k))
                            ? dlp_gemm_align_kc_to_group(base_kc, group_size)
@@ -286,8 +246,8 @@ aocl_gemm_s8s4s32obf16(const char      order,
     rntm_g.ic_ways = lcntx_g.thread_info.ic_ways;
     rntm_g.jc_ways = lcntx_g.thread_info.jc_ways;
 
-    dlp_gemm_ops_bundle_t ops =
-        DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
+    dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_QUANT_AB(
+        metadata->a_quant_op, metadata->b_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
     if (dlp_is_single_thread(&rntm_g) == FALSE) {

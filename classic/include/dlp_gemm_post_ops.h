@@ -32,24 +32,8 @@
 #include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 
-// Used as an internal structure
-typedef struct dlp_gemm_group_post_op_t
-{
-    md_t                             group_size;
-    DLP_PARAM_DIM_TYPE               a_scale_factor_dim;
-    DLP_PARAM_DIM_TYPE               b_scale_factor_dim;
-    void*                            a_scale_factor;
-    md_t                             a_scale_factor_len;
-    void*                            a_zp;
-    md_t                             a_zp_len;
-    void*                            b_scale_factor;
-    md_t                             b_scale_factor_len;
-    void*                            b_zp;
-    md_t                             b_zp_len;
-    DLP_TYPE                         sf_stor_type;
-    DLP_TYPE                         zp_stor_type;
-    struct dlp_gemm_group_post_op_t* next;
-} dlp_gemm_group_post_op;
+struct dlp_gemm_quant_op_attr_t;
+struct dlp_gemm_pre_op_attr_t;
 
 /* Terminal GLU op (GatedSwiglu / GatedSwigluAndMul) translator. This should
  * be the last node in the post-op list, and its expected post_op_list[last]
@@ -76,28 +60,69 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                                     md_t              m,
                                     md_t              n);
 
-/* ADQUANTIZE at post_op_list[0]; pass post_op_list+1 to
- * translate_to_post_ops_list. */
+/* A-side dynamic quantization used by bf16s8/f32s8 APIs. */
 dlp_clsc_err_t
-dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
-                                      dlp_gemm_post_op* post_op_list,
-                                      void*             meta_arg,
-                                      md_t              m);
+dlp_gemm_validate_dynamic_quant_op(const dlp_quant_op_t* a_quant_op,
+                                   md_t                  m,
+                                   md_t                  k);
 
-dlp_clsc_err_t
-dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
-                                   dlp_gemm_pre_op* pre_op_list,
-                                   md_t             m,
-                                   md_t             n,
-                                   md_t             k);
+/* ADQUANTIZE at post_op_list[0]; validation must run first. */
+void
+dlp_gemm_fill_adquantize_post_op(const dlp_metadata_t* metadata,
+                                 dlp_gemm_post_op*     post_op_list,
+                                 void*                 meta_arg);
 
+/* B-side WOQ validation. require_zero_point selects U4 (true) vs S4 (false). */
 dlp_clsc_err_t
-dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
-                                         dlp_quant_op_t*         b_quant_op,
-                                         dlp_gemm_group_post_op* post_op_list,
-                                         md_t                    m,
-                                         md_t                    n,
-                                         md_t                    k);
+dlp_gemm_validate_woq_quant_op(const dlp_quant_op_t* b_quant_op,
+                               md_t                  n,
+                               md_t                  k,
+                               bool                  require_zero_point);
+
+/* Copies validated WOQ metadata into the existing pack-kernel attribute. */
+void
+dlp_gemm_fill_woq_pre_op_attr(struct dlp_gemm_pre_op_attr_t* attr,
+                              const dlp_quant_op_t*          b_quant_op,
+                              md_t                           n,
+                              md_t                           k);
+
+/* Source operand for s8 sym-quant. group_size 0 means full K and is left
+ * unchanged. Passes dequant_scale_factors to dlp_gemm_validate_scale_factors,
+ * then rejects PER_CHANNEL. Does not check kind or zero-point. */
+dlp_clsc_err_t
+dlp_gemm_validate_src_quant_op(const dlp_quant_op_t* src_quant_op,
+                               md_t                  m,
+                               md_t                  k);
+
+/* Weight operand for s8 sym-quant. group_size 0 means full K and is left
+ * unchanged. Passes dequant_scale_factors to dlp_gemm_validate_scale_factors,
+ * then rejects PER_TOKEN. Does not check kind or zero-point. */
+dlp_clsc_err_t
+dlp_gemm_validate_weight_quant_op(const dlp_quant_op_t* weight_quant_op,
+                                  md_t                  n,
+                                  md_t                  k);
+
+/* s8s8 sym-quant and s8s4. Calls the two operand checks, then applies
+ * kind, zero-point, the multiple-of-4 group, and A/B agreement. */
+dlp_clsc_err_t
+dlp_gemm_validate_sym_quant_ops(const dlp_quant_op_t* a_quant_op,
+                                const dlp_quant_op_t* b_quant_op,
+                                md_t                  m,
+                                md_t                  n,
+                                md_t                  k);
+
+/* 0 means full K. Returns the smaller of the two sizes. */
+md_t
+dlp_gemm_get_quant_group_size(md_t a_group_size, md_t b_group_size, md_t k);
+
+/* Copies scale-array pointers into the execution attribute. */
+void
+dlp_gemm_fill_quant_op_attr(struct dlp_gemm_quant_op_attr_t* attr,
+                            const dlp_quant_op_t*            a_quant_op,
+                            const dlp_quant_op_t*            b_quant_op,
+                            md_t                             group_size,
+                            md_t                             k,
+                            md_t                             n);
 
 dlp_clsc_err_t
 dlp_gemm_translate_to_group_op_list(const dlp_metadata_t* metadata,

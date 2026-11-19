@@ -38,8 +38,8 @@
  * etc.) into a single parameter for simplified function signatures.
  *
  * Thread Safety: Thread-safe if all pointed-to structures are thread-safe
- * Memory: Typically stack-allocated (32 bytes on 64-bit systems)
- * Performance: Negligible overhead (<0.01% for typical GEMMs)
+ * Memory: Typically stack-allocated (24 bytes on 64-bit systems: three
+ * pointers) Performance: Negligible overhead (<0.01% for typical GEMMs)
  *
  * @note Unused fields must be set to NULL.
  * @note The structure is designed to be stack-allocated with minimal overhead.
@@ -48,11 +48,9 @@
 typedef struct dlp_gemm_ops_bundle_t
 {
     dlp_gemm_post_op*
-        post_op_list; ///< Post-operations (most common, all variants)
-    dlp_gemm_pre_op* pre_op_list; ///< Pre-operations (MP variants)
-    dlp_gemm_group_post_op*
-        grp_post_op_list;       ///< Grouped post-ops (symmetric quantization)
+        post_op_list;           ///< Post-operations (most common, all variants)
     dlp_quant_op_t* a_quant_op; ///< A matrix quantization metadata
+    dlp_quant_op_t* b_quant_op; ///< B matrix quantization metadata
 } dlp_gemm_ops_bundle_t;
 
 /**
@@ -60,32 +58,25 @@ typedef struct dlp_gemm_ops_bundle_t
  * @param post_ops Pointer to post-operations list (can be NULL)
  */
 #define DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_ops)                            \
-    { .post_op_list     = (post_ops),                                          \
-      .pre_op_list      = NULL,                                                \
-      .grp_post_op_list = NULL,                                                \
-      .a_quant_op       = NULL }
+    { .post_op_list = (post_ops), .a_quant_op = NULL, .b_quant_op = NULL }
 
 /**
- * @brief Initialize ops bundle for MP variant (pre-ops + post-ops)
- * @param pre_ops Pointer to pre-operations list (can be NULL)
+ * @brief Initialize ops bundle for B-side weight-only quantization.
+ * @param b_quant Pointer to validated B quantization metadata.
  * @param post_ops Pointer to post-operations list (can be NULL)
  */
-#define DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_ops, post_ops)                         \
-    { .post_op_list     = (post_ops),                                          \
-      .pre_op_list      = (pre_ops),                                           \
-      .grp_post_op_list = NULL,                                                \
-      .a_quant_op       = NULL }
+#define DLP_GEMM_OPS_BUNDLE_INIT_WOQ(b_quant, post_ops)                        \
+    { .post_op_list = (post_ops), .a_quant_op = NULL, .b_quant_op = (b_quant) }
 
 /**
- * @brief Initialize ops bundle for grouped post-ops (symmetric quantization)
- * @param grp_post_ops Pointer to grouped post-operations list (can be NULL)
- * @param post_ops Pointer to post-operations list (can be NULL)
+ * @brief A and B quant ops for grouped s8xs8 and s8xs4.
+ *
+ * The 5-loop reads these pointers and fills the group attribute from them.
  */
-#define DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_ops, post_ops)                   \
-    { .post_op_list     = (post_ops),                                          \
-      .pre_op_list      = NULL,                                                \
-      .grp_post_op_list = (grp_post_ops),                                      \
-      .a_quant_op       = NULL }
+#define DLP_GEMM_OPS_BUNDLE_INIT_QUANT_AB(a_quant, b_quant, post_ops)          \
+    { .post_op_list = (post_ops),                                              \
+      .a_quant_op   = (a_quant),                                               \
+      .b_quant_op   = (b_quant) }
 
 /**
  * @brief Initialize ops bundle for quantization variant
@@ -93,19 +84,13 @@ typedef struct dlp_gemm_ops_bundle_t
  * @param post_ops Pointer to post-operations list (can be NULL)
  */
 #define DLP_GEMM_OPS_BUNDLE_INIT_QUANT(quant_op, post_ops)                     \
-    { .post_op_list     = (post_ops),                                          \
-      .pre_op_list      = NULL,                                                \
-      .grp_post_op_list = NULL,                                                \
-      .a_quant_op       = (quant_op) }
+    { .post_op_list = (post_ops), .a_quant_op = (quant_op), .b_quant_op = NULL }
 
 /**
  * @brief Initialize empty ops bundle (no operations)
  */
 #define DLP_GEMM_OPS_BUNDLE_INIT_EMPTY()                                       \
-    { .post_op_list     = NULL,                                                \
-      .pre_op_list      = NULL,                                                \
-      .grp_post_op_list = NULL,                                                \
-      .a_quant_op       = NULL }
+    { .post_op_list = NULL, .a_quant_op = NULL, .b_quant_op = NULL }
 
 /**
  * @brief Extract operations from bundle into local non-const variables.
@@ -131,9 +116,8 @@ typedef struct dlp_gemm_ops_bundle_t
  * @endcode
  */
 #define DLP_GEMM_OPS_EXTRACT(ops)                                              \
-    dlp_gemm_post_op*       post_op_list     = (ops)->post_op_list;            \
-    dlp_gemm_pre_op*        pre_op_list      = (ops)->pre_op_list;             \
-    dlp_gemm_group_post_op* grp_post_op_list = (ops)->grp_post_op_list;        \
-    dlp_quant_op_t*         a_quant_op       = (ops)->a_quant_op
+    dlp_gemm_post_op* post_op_list = (ops)->post_op_list;                      \
+    dlp_quant_op_t*   a_quant_op   = (ops)->a_quant_op;                        \
+    dlp_quant_op_t*   b_quant_op   = (ops)->b_quant_op
 
 #endif // DLP_GEMM_OPS_BUNDLE_H

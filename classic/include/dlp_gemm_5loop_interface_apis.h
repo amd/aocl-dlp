@@ -186,7 +186,7 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
         const AOCL_DLP_MEMORY_TAG mtag_b, float* c, const md_t rs_c,           \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
         dlp_rntm_t* rntm, dlp_gemm_thrinfo_t* thread, dlp_gemm_cntx_t* lcntx,  \
-        dlp_gemm_group_post_op* grp_post_op_list,                              \
+        dlp_quant_op_t* a_quant_op, dlp_quant_op_t* b_quant_op,                \
         dlp_gemm_post_op* post_op_list, DLP_TYPE c_downscale)
 
 DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);

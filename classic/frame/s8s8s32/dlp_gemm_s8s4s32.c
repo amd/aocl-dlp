@@ -189,34 +189,12 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
     // NC-wide reorder panel handed to the s8 GEMV kernel (n == 1 needs none).
     int8_t* b_panel_widen = NULL;
 
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
+    dlp_gemm_quant_op_attr quant_op_attr = { 0 };
 
-    md_t group_size = grp_post_op_list->group_size;
-
-    grp_post_ops_attr.a_scale_factor     = grp_post_op_list->a_scale_factor;
-    grp_post_ops_attr.a_scale_factor_len = grp_post_op_list->a_scale_factor_len;
-    grp_post_ops_attr.b_scale_factor     = grp_post_op_list->b_scale_factor;
-    grp_post_ops_attr.b_scale_factor_len = grp_post_op_list->b_scale_factor_len;
-    grp_post_ops_attr.a_zp               = grp_post_op_list->a_zp;
-    grp_post_ops_attr.b_zp               = grp_post_op_list->b_zp;
-    grp_post_ops_attr.a_zp_len           = grp_post_op_list->a_zp_len;
-    grp_post_ops_attr.b_zp_len           = grp_post_op_list->b_zp_len;
-    grp_post_ops_attr.group_size         = group_size;
-    grp_post_ops_attr.sf_stor_type       = grp_post_op_list->sf_stor_type;
-    grp_post_ops_attr.zp_stor_type       = grp_post_op_list->zp_stor_type;
-
-    md_t num_groups = (k + group_size - 1) / group_size;
-    grp_post_ops_attr.a_grp_mul =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 0
-                                                                          : 1;
-    grp_post_ops_attr.b_grp_mul =
-        (grp_post_op_list->b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 0
-                                                                            : 1;
-    grp_post_ops_attr.grp_post_op_lda =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN)
-            ? 1
-            : num_groups;
-    grp_post_ops_attr.grp_post_op_ldb = n;
+    md_t group_size = dlp_gemm_get_quant_group_size(a_quant_op->group_size,
+                                                    b_quant_op->group_size, k);
+    dlp_gemm_fill_quant_op_attr(&quant_op_attr, a_quant_op, b_quant_op,
+                                group_size, k, n);
 
     dlp_task_id_t thread_jc;
     dlp_task_id_t thread_ic;
@@ -238,9 +216,9 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
         thread_ic.work_id = thread->tid;
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-        grp_post_ops_attr.grp_post_op_k = 0;
+        quant_op_attr.grp_post_op_k = 0;
         for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
-            grp_post_ops_attr.grp_post_op_i = ic;
+            quant_op_attr.grp_post_op_i = ic;
 
             md_t mc0 = dlp_min((ic_end - ic), MC);
 
@@ -284,7 +262,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
                 rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use, 0, 0,
                 (void*)c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
                 post_op_list, post_ops_attr, (dlp_gemm_pre_op_attr){ 0 },
-                grp_post_ops_attr);
+                quant_op_attr);
         }
 
         if ((mtag_a == PACK) && (pack_a_buffer != NULL)) {
@@ -351,9 +329,9 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
             }
         }
 
-        grp_post_ops_attr.grp_post_op_k = 0;
+        quant_op_attr.grp_post_op_k = 0;
         for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
-            grp_post_ops_attr.grp_post_op_j = jc;
+            quant_op_attr.grp_post_op_j = jc;
 
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc;
@@ -383,7 +361,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
             // Column sums live (uncompressed) after the compact weights.
             post_ops_attr.b_col_sum_vec =
                 ((int32_t*)(((const int8_t*)b) + compact_weight_bytes)) + jc;
-            grp_post_ops_attr.grp_post_op_sum_ld = n_updated;
+            quant_op_attr.grp_post_op_sum_ld = n_updated;
 
             post_ops_attr.post_op_c_i    = 0;
             post_ops_attr.post_op_c_j    = jc;
@@ -397,7 +375,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
                 rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use,
                 n_sub_updated, jc_cur_loop_rem, (void*)c_use, rs_c, cs_c,
                 (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr,
-                (dlp_gemm_pre_op_attr){ 0 }, grp_post_ops_attr);
+                (dlp_gemm_pre_op_attr){ 0 }, quant_op_attr);
 
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
@@ -440,7 +418,6 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
 {
     // Extract operations from bundle into local variables.
     DLP_GEMM_OPS_EXTRACT(ops);
-    (void)pre_op_list;
     (void)rntm;
 
     md_t NC = lcntx->blksz.NC;
@@ -448,12 +425,12 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
 
-    md_t table_kc = dlp_gemm_get_global_cntx_obj(S8S8S32OS32)->blksz.KC;
-    md_t gs_raw   = grp_post_op_list->group_size;
-    md_t gs_norm  = ((gs_raw == 0) || (gs_raw > k)) ? k : gs_raw;
+    md_t table_kc   = dlp_gemm_get_global_cntx_obj(S8S8S32OS32)->blksz.KC;
+    md_t group_size = dlp_gemm_get_quant_group_size(a_quant_op->group_size,
+                                                    b_quant_op->group_size, k);
     // A full-K group keeps the table KC. n==1 and multi-group still align.
-    md_t KC = ((n == 1) || (gs_norm != k))
-                  ? dlp_gemm_align_kc_to_group(table_kc, gs_norm)
+    md_t KC = ((n == 1) || (group_size != k))
+                  ? dlp_gemm_align_kc_to_group(table_kc, group_size)
                   : table_kc;
 
     // Only reordered or runtime-packed B is supported for the s8s4 path.
@@ -466,14 +443,12 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     // sym-quant GEMV driver, mirroring the s8s8 sym-quant frame. Quantized GEMV
     // is supported iff k and the (unadjusted) KC are divisible by group_size
     // and B is reordered; otherwise fall through to the GEMM path.
-    if ((grp_post_op_list->group_size > 0)
-        && ((k % grp_post_op_list->group_size) == 0)
-        && ((KC % grp_post_op_list->group_size) == 0) && (mtag_b == REORDERED)
-        && ((m == 1) || (n == 1))) {
+    if (((k % group_size) == 0) && ((KC % group_size) == 0)
+        && (mtag_b == REORDERED) && ((m == 1) || (n == 1))) {
 
         dlp_gemv_rowvar_s8s4s32o32(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
                                    cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
-                                   rntm, thread, lcntx, grp_post_op_list,
+                                   rntm, thread, lcntx, a_quant_op, b_quant_op,
                                    post_op_list, c_downscale);
 
         return;
@@ -546,8 +521,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     bool is_last_k  = FALSE;
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr     post_ops_attr     = { 0 };
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
+    dlp_gemm_post_op_attr  post_ops_attr = { 0 };
+    dlp_gemm_quant_op_attr quant_op_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -562,38 +537,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
         post_ops_attr.buf_downscale = NULL;
     }
 
-    md_t group_size = grp_post_op_list->group_size;
-
-    grp_post_ops_attr.a_scale_factor     = grp_post_op_list->a_scale_factor;
-    grp_post_ops_attr.a_scale_factor_len = grp_post_op_list->a_scale_factor_len;
-    grp_post_ops_attr.b_scale_factor     = grp_post_op_list->b_scale_factor;
-    grp_post_ops_attr.b_scale_factor_len = grp_post_op_list->b_scale_factor_len;
-    grp_post_ops_attr.a_zp               = grp_post_op_list->a_zp;
-    grp_post_ops_attr.b_zp               = grp_post_op_list->b_zp;
-    grp_post_ops_attr.a_zp_len           = grp_post_op_list->a_zp_len;
-    grp_post_ops_attr.b_zp_len           = grp_post_op_list->b_zp_len;
-    grp_post_ops_attr.group_size         = group_size;
-    grp_post_ops_attr.sf_stor_type       = grp_post_op_list->sf_stor_type;
-    grp_post_ops_attr.zp_stor_type       = grp_post_op_list->zp_stor_type;
-
-    // Derive per-matrix group strides from each matrix's scale-factor dim.
-    //   A PER_TOKEN:   A has one scale per row    (lda=1, a_grp_mul=0).
-    //   B PER_CHANNEL: B has one scale per column (b_grp_mul=0).
-    //   otherwise:     stride by group (legacy per-group behaviour).
-    // Mirrors dlp_gemm_s8s8s32_sym_quant.c; s8s4 reuses the same sym-quant
-    // micro-kernel, which reads a_grp_mul/b_grp_mul/grp_post_op_lda.
-    md_t num_groups = (k + group_size - 1) / group_size;
-    grp_post_ops_attr.a_grp_mul =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 0
-                                                                          : 1;
-    grp_post_ops_attr.b_grp_mul =
-        (grp_post_op_list->b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 0
-                                                                            : 1;
-    grp_post_ops_attr.grp_post_op_lda =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN)
-            ? 1
-            : num_groups;
-    grp_post_ops_attr.grp_post_op_ldb = n;
+    dlp_gemm_fill_quant_op_attr(&quant_op_attr, a_quant_op, b_quant_op,
+                                group_size, k, n);
 
     // Generate thrinfo objects for jc and ic loops.
     dlp_task_id_t thread_jc;
@@ -670,7 +615,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
             int32_t beta0 = (pc == 0) ? beta : 1;
             md_t    kc0   = dlp_min((k - pc), KC);
 
-            grp_post_ops_attr.grp_post_op_k = pc;
+            quant_op_attr.grp_post_op_k = pc;
 
             md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
@@ -862,8 +807,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                                    &thread->comm[jc_work_id]);
                 b_use = pack_b_buffer_s8s4s32o32;
 
-                post_ops_attr.b_col_sum_vec          = pack_b_column_sum;
-                grp_post_ops_attr.grp_post_op_sum_ld = nc0_updated;
+                post_ops_attr.b_col_sum_vec      = pack_b_column_sum;
+                quant_op_attr.grp_post_op_sum_ld = nc0_updated;
             } else {
                 // REORDERED: compact s4 weights, widened per-panel below.
                 b_s8_pc_base = b_s8_panel_base + (n_sub_updated * pc)
@@ -877,13 +822,13 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                 post_ops_attr.b_col_sum_vec =
                     ((int32_t*)(b_compact + compact_weight_bytes))
                     + (sum_panel * n_updated) + jc;
-                grp_post_ops_attr.grp_post_op_sum_ld = n_updated;
+                quant_op_attr.grp_post_op_sum_ld = n_updated;
             }
 
             for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
-                grp_post_ops_attr.grp_post_op_i = ic;
+                quant_op_attr.grp_post_op_i = ic;
 
                 if (c_downscale < DLP_F32) {
                     c_use_ic = dlp_offset_or_null_f32(
@@ -929,7 +874,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                     post_ops_attr.post_op_c_j    = (jc + jr);
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
-                    grp_post_ops_attr.grp_post_op_j = jc + jr;
+                    quant_op_attr.grp_post_op_j = jc + jr;
 
                     const int8_t* b_kernel;
                     if (mtag_b == REORDERED) {
@@ -979,7 +924,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
                         (void*)dlp_offset_or_null_f32(c_use_ic, jr), rs_c_use,
                         1, (void*)&alpha, (void*)&beta0, post_op_list,
                         post_ops_attr, (dlp_gemm_pre_op_attr){ 0 },
-                        grp_post_ops_attr);
+                        quant_op_attr);
 
                     post_ops_attr.b_sum_offset += NR;
                 }
@@ -1037,8 +982,9 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     (void)thread;
     (void)lcntx;
     (void)c_downscale;
+    (void)a_quant_op;
+    (void)b_quant_op;
     (void)post_op_list;
-    (void)grp_post_op_list;
     (void)NC;
     (void)MC;
     (void)NR;

@@ -187,6 +187,21 @@ aocl_gemm_f32s8s32_impl(const char        order,
         goto err_hndl;
     }
 
+    if (metadata == NULL) {
+        dlp_print_msg(
+            " Required parameters for A quant GEMM through metadata are "
+            "missing. Exiting..",
+            __FILE__, __LINE__);
+        goto err_hndl;
+    }
+
+    dlp_clsc_err_t err =
+        dlp_gemm_validate_dynamic_quant_op(metadata->a_quant_op, m, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
     // Dequantization support is through the ADQUANTIZE post-op right now, and
     // beta != 0 is not supported with it.
     if (beta != 0) {
@@ -266,12 +281,7 @@ aocl_gemm_f32s8s32_impl(const char        order,
     // ADQUANTIZE first, then seq_vector ops via
     // translate_to_post_ops_list(post_op_list+1).
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS + 1];
-    dlp_clsc_err_t   err = dlp_gemm_translate_adquantize_post_op(
-        metadata, post_op_list, (void*)(&order), m);
-    if (err != DLP_CLSC_SUCCESS) {
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
+    dlp_gemm_fill_adquantize_post_op(metadata, post_op_list, (void*)(&order));
     err = dlp_gemm_translate_to_post_ops_list(metadata, post_op_list + 1,
                                               (void*)c, (void*)(&order), m, n);
 

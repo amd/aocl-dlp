@@ -145,7 +145,7 @@ typedef struct dlp_gemm_post_op_attr_t
     uint64_t ld_d;
 } dlp_gemm_post_op_attr;
 
-typedef struct dlp_gemm_grp_post_op_attr_t
+typedef struct dlp_gemm_quant_op_attr_t
 {
     void*    a_scale_factor;
     uint64_t a_scale_factor_len;
@@ -166,12 +166,13 @@ typedef struct dlp_gemm_grp_post_op_attr_t
     uint64_t grp_post_op_sum_ld;
     DLP_TYPE sf_stor_type;
     DLP_TYPE zp_stor_type;
-} dlp_gemm_grp_post_op_attr;
+} dlp_gemm_quant_op_attr;
 
-// Runtime B-side WOQ scale / zp tile state for the quant execute path.
-// bf16×{s4,u4} frames fill this today (packsclb / classic in-kernel); a future
-// in-kernel JIT widen will consume the same struct. s8 group-quant callers
-// pass a zeroed value.
+// TODO: try and check by using same struct for sym-quant and WOQ post JIT
+// implementation. Runtime B-side WOQ scale / zp tile state for the quant
+// execute path. bf16×{s4,u4} frames fill this today (packsclb / classic
+// in-kernel); a future in-kernel JIT widen will consume the same struct. s8
+// group-quant callers pass a zeroed value.
 typedef struct dlp_gemm_pre_op_attr_t
 {
     void*              scale_factor;
@@ -475,7 +476,7 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                               dlp_gemm_post_op*             post_ops_list,
                               dlp_gemm_post_op_attr         post_ops_attr,
                               dlp_gemm_pre_op_attr          pre_ops_attr,
-                              dlp_gemm_grp_post_op_attr     grp_post_ops_attr);
+                              dlp_gemm_quant_op_attr        quant_op_attr);
 
 // S8-generated INT8 kernels require col_sum and accumulate
 // 128 * sum_k B[k, n] into it. F32, BF16, and U8-generated kernels pass NULL

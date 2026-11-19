@@ -116,15 +116,18 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
             goto err_hndl;
         }
 
-        // Validate required quantization metadata.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->a_quant_op == NULL
-            || metadata[gc_i]->a_quant_op->quant_scale_factors == NULL
-            || metadata[gc_i]->a_quant_op->dequant_scale_factors == NULL) {
+        if (metadata[gc_i] == NULL) {
             dlp_print_msg(
-                "One or more required A quantization parameters are NULL. "
-                "Exiting..",
+                " Required parameters for A quant batch GEMM through metadata "
+                "are missing. Exiting..",
                 __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
+            goto err_hndl;
+        }
+
+        dlp_clsc_err_t err = dlp_gemm_validate_dynamic_quant_op(
+            metadata[gc_i]->a_quant_op, m[gc_i], k[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -159,12 +162,8 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
 
         // ADQUANTIZE first, then seq_vector ops via
         // translate_to_post_ops_list(post_op_list+1).
-        dlp_clsc_err_t err = dlp_gemm_translate_adquantize_post_op(
-            metadata[gc_i], post_op_list, (void*)((order + gc_i)), m[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
+        dlp_gemm_fill_adquantize_post_op(metadata[gc_i], post_op_list,
+                                         (void*)((order + gc_i)));
         err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list + 1, (void*)c[gc_i],
             (void*)((order + gc_i)), m[gc_i], n[gc_i]);

@@ -1923,18 +1923,19 @@ class quantS8FamilyDEBackendBase : public iQuantDEBackend
             return false;
         }
 
-        // a/b_quant_op point at the caller's metadata, where group_size 0
-        // means one group spanning the full K. The frame compares against the
-        // already-normalised value, so normalise identically before testing.
-        md_t group_size = 0;
-        if (a_quant_op != nullptr) {
-            group_size = a_quant_op->group_size;
-        } else if (b_quant_op != nullptr) {
-            group_size = b_quant_op->group_size;
+        // Callers reject a null quant op before this gate, and the
+        // sym-quant API has already validated both. Same rule as
+        // dlp_gemm_get_quant_group_size: group_size 0 is one group over K,
+        // and the frame uses the smaller of the two.
+        md_t a_group_size = a_quant_op->group_size;
+        md_t b_group_size = b_quant_op->group_size;
+        if (a_group_size == 0) {
+            a_group_size = k;
         }
-        if ((group_size == 0) || (group_size > k)) {
-            group_size = k;
+        if (b_group_size == 0) {
+            b_group_size = k;
         }
+        const md_t group_size = std::min(a_group_size, b_group_size);
 
         return ((group_size > 0) && ((k % group_size) == 0)
                 && ((kc_hint % group_size) == 0));

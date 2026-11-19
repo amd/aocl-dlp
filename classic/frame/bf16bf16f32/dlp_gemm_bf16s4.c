@@ -55,7 +55,8 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
 
-    md_t group_size = pre_op_list->group_size;
+    md_t group_size = (b_quant_op->group_size == 0) ? k
+                                                    : b_quant_op->group_size;
 
     const int16_t* a_use          = NULL;
     md_t           cs_a_use       = cs_a;
@@ -96,9 +97,9 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
     // To decide whether to use original s8 C or temp buffer for beta scale.
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr     post_ops_attr     = { 0 };
-    dlp_gemm_pre_op_attr      pre_ops_attr      = { 0 };
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
+    dlp_gemm_post_op_attr  post_ops_attr = { 0 };
+    dlp_gemm_pre_op_attr   pre_ops_attr  = { 0 };
+    dlp_gemm_quant_op_attr quant_op_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -113,13 +114,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
         post_ops_attr.buf_downscale = NULL;
     }
 
-    // Initialize group scaling and zero-point params
-    pre_ops_attr.scale_factor      = pre_op_list->scale_factor;
-    pre_ops_attr.scale_factor_len  = pre_op_list->scale_factor_len;
-    pre_ops_attr.scale_factor_type = pre_op_list->scale_factor_type;
-    pre_ops_attr.scale_factor_dim  = pre_op_list->scale_factor_dim;
-    pre_ops_attr.group_size        = group_size;
-    pre_ops_attr.pre_op_ld         = n;
+    dlp_gemm_fill_woq_pre_op_attr(&pre_ops_attr, b_quant_op, n, k);
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;
@@ -379,7 +374,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                             a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
                             cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
                             (void*)&alpha, (void*)&beta0, post_op_list,
-                            post_ops_attr, pre_ops_attr, grp_post_ops_attr);
+                            post_ops_attr, pre_ops_attr, quant_op_attr);
                     } else if (mtag_b_use == PACK_KC) {
                         bfloat16* b_use_jr =
                             (bfloat16*)b_use + (jr * kc0_updated);
@@ -391,7 +386,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                             a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
                             cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
                             (void*)&alpha, (void*)&beta0, post_op_list,
-                            post_ops_attr, pre_ops_attr, grp_post_ops_attr);
+                            post_ops_attr, pre_ops_attr, quant_op_attr);
                     }
 #if (defined(DLP_KERNELS_ZEN4))
                     else // mtag_b_use == UNPACKED

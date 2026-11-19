@@ -37,6 +37,15 @@
 
 namespace {
 
+// PER_TENSOR is one scale for the whole matrix. These fixtures use
+// group_size 0, so every other granularity is a single group and its
+// length is the outer count (m for A, n for B).
+md_t
+scale_len_for_dim(DLP_PARAM_DIM_TYPE dim, md_t outer_count)
+{
+    return (dim == DLP_PARAM_DIM_PER_TENSOR) ? 1 : outer_count;
+}
+
 struct QuantSetup
 {
     dlp_metadata_t     md;
@@ -61,12 +70,12 @@ struct QuantSetup
         std::memset(&b_sf, 0, sizeof(b_sf));
 
         a_sf.data      = a_scale.data();
-        a_sf.len       = m;
+        a_sf.len       = scale_len_for_dim(a_dim, m);
         a_sf.stor_type = DLP_F32;
         a_sf.outer_dim = a_dim;
 
         b_sf.data      = b_scale.data();
-        b_sf.len       = n;
+        b_sf.len       = scale_len_for_dim(b_dim, n);
         b_sf.stor_type = DLP_F32;
         b_sf.outer_dim = b_dim;
 
@@ -199,4 +208,116 @@ TEST(SymQuantGranularity, S8S4Obf16RejectsAPerTensor)
     aocl_gemm_s8s4s32obf16('R', 'N', 'N', m, n, k, 1, A.data(), k, 'n',
                            B.data(), n, 'n', 0, C.data(), n, &bad.md);
     EXPECT_EQ(bad.md.error_hndl.error_code, DLP_CLSC_NOT_SUPPORTED);
+}
+
+namespace {
+
+// One side of a grouped setup: granularity, group size (0 is full K) and the
+// scale count that granularity needs for k = 32.
+struct GroupSide
+{
+    DLP_PARAM_DIM_TYPE dim;
+    md_t               group_size;
+    md_t               len;
+};
+
+struct GroupedSetup
+{
+    dlp_metadata_t     md;
+    dlp_quant_op_t     a_quant;
+    dlp_quant_op_t     b_quant;
+    dlp_qparam_t       a_sf;
+    dlp_qparam_t       b_sf;
+    std::vector<float> a_scale;
+    std::vector<float> b_scale;
+
+    GroupedSetup(const GroupSide& a, const GroupSide& b)
+        : a_scale(static_cast<size_t>(a.len), 1.0f)
+        , b_scale(static_cast<size_t>(b.len), 1.0f)
+    {
+        std::memset(&md, 0, sizeof(md));
+        std::memset(&a_quant, 0, sizeof(a_quant));
+        std::memset(&b_quant, 0, sizeof(b_quant));
+        std::memset(&a_sf, 0, sizeof(a_sf));
+        std::memset(&b_sf, 0, sizeof(b_sf));
+
+        a_sf.data      = a_scale.data();
+        a_sf.len       = a.len;
+        a_sf.stor_type = DLP_F32;
+        a_sf.outer_dim = a.dim;
+        b_sf.data      = b_scale.data();
+        b_sf.len       = b.len;
+        b_sf.stor_type = DLP_F32;
+        b_sf.outer_dim = b.dim;
+
+        a_quant.quant_op_kind         = DLP_QUANT_OP_QUANTIZE;
+        a_quant.src_type              = DLP_S8;
+        a_quant.dst_type              = DLP_S8;
+        a_quant.group_size            = a.group_size;
+        a_quant.dequant_scale_factors = &a_sf;
+        b_quant.quant_op_kind         = DLP_QUANT_OP_QUANTIZE;
+        b_quant.src_type              = DLP_S8;
+        b_quant.dst_type              = DLP_S8;
+        b_quant.group_size            = b.group_size;
+        b_quant.dequant_scale_factors = &b_sf;
+
+        md.a_quant_op            = &a_quant;
+        md.b_quant_op            = &b_quant;
+        md.error_hndl.error_code = DLP_CLSC_SUCCESS;
+    }
+};
+
+dlp_clsc_err_t
+runGrouped(const GroupSide& a, const GroupSide& b)
+{
+    const md_t          m = 8, n = 16, k = 32;
+    std::vector<int8_t> A((size_t)m * k, 1);
+    std::vector<int8_t> B((size_t)k * n, 1);
+    std::vector<float>  C((size_t)m * n, 0.0f);
+
+    GroupedSetup s(a, b);
+    aocl_gemm_s8s8s32of32_sym_quant('R', 'N', 'N', m, n, k, 1, A.data(), k, 'n',
+                                    B.data(), n, 'n', 0, C.data(), n, &s.md);
+    return s.md.error_hndl.error_code;
+}
+
+// m = 8, n = 16, k = 32. Group size 16 gives two groups over K.
+const GroupSide kAPerToken     = { DLP_PARAM_DIM_PER_TOKEN, 0, 8 };
+const GroupSide kAGroupFullK   = { DLP_PARAM_DIM_PER_GROUP, 0, 8 };
+const GroupSide kAGroup16      = { DLP_PARAM_DIM_PER_GROUP, 16, 16 };
+const GroupSide kBGroupFullK   = { DLP_PARAM_DIM_PER_GROUP, 0, 16 };
+const GroupSide kBGroup16      = { DLP_PARAM_DIM_PER_GROUP, 16, 32 };
+const GroupSide kBChannelFullK = { DLP_PARAM_DIM_PER_CHANNEL, 0, 16 };
+const GroupSide kBChannel16    = { DLP_PARAM_DIM_PER_CHANNEL, 16, 16 };
+
+} // namespace
+
+// A and B group sizes must be equal. A mismatch overreads the scales of the
+// full-K side or disagrees with the B-only reorder.
+TEST(SymQuantGroupAgreement, RejectsMismatchedGroupSizes)
+{
+    if (isIsaSkip(runGrouped(kAGroup16, kBGroup16))) {
+        GTEST_SKIP() << "s8s8s32of32_sym_quant not supported on this processor";
+    }
+
+    EXPECT_EQ(runGrouped(kAGroupFullK, kBGroup16),
+              DLP_CLSC_INVALID_GROUP_DIMENSION);
+    EXPECT_EQ(runGrouped(kAGroup16, kBGroupFullK),
+              DLP_CLSC_INVALID_GROUP_DIMENSION);
+    EXPECT_EQ(runGrouped(kAGroup16, kBChannelFullK),
+              DLP_CLSC_INVALID_GROUP_DIMENSION);
+    EXPECT_EQ(runGrouped(kAPerToken, kBGroup16),
+              DLP_CLSC_INVALID_GROUP_DIMENSION);
+}
+
+TEST(SymQuantGroupAgreement, AcceptsEqualGroupSizes)
+{
+    if (isIsaSkip(runGrouped(kAGroup16, kBGroup16))) {
+        GTEST_SKIP() << "s8s8s32of32_sym_quant not supported on this processor";
+    }
+
+    EXPECT_EQ(runGrouped(kAGroup16, kBGroup16), DLP_CLSC_SUCCESS);
+    EXPECT_EQ(runGrouped(kAGroup16, kBChannel16), DLP_CLSC_SUCCESS);
+    EXPECT_EQ(runGrouped(kAGroupFullK, kBGroupFullK), DLP_CLSC_SUCCESS);
+    EXPECT_EQ(runGrouped(kAPerToken, kBChannelFullK), DLP_CLSC_SUCCESS);
 }

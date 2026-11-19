@@ -105,7 +105,7 @@ DLP_GEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m);
         const md_t rs_a, const md_t cs_a, const md_t ps_a, const B_type* b,    \
         const md_t rs_b, const md_t cs_b, float* c, const md_t rs_c,           \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
-        dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
+        dlp_gemm_quant_op_attr grp_post_ops_attr,                              \
         dlp_gemm_post_op* post_ops_list, dlp_gemm_post_op_attr post_ops_attr)
 
 DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant);
@@ -245,7 +245,7 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64);
         const md_t k0, const A_type* a, const md_t rs_a, const md_t cs_a,      \
         const B_type* b, const md_t rs_b, const md_t cs_b, float* c,           \
         const md_t rs_c, const C_type alpha, const C_type beta,                \
-        dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
+        dlp_gemm_quant_op_attr grp_post_ops_attr,                              \
         dlp_gemm_post_op* post_ops_list, dlp_gemm_post_op_attr post_ops_attr)
 
 DLP_GEMM_M_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x64_sym_quant);
@@ -305,7 +305,7 @@ DLP_GEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x48m);
         const md_t m0, const md_t k0, const A_type* a, const md_t rs_a,        \
         const md_t cs_a, const md_t ps_a, const B_type* b, const md_t rs_b,    \
         const md_t cs_b, float* c, const md_t rs_c, const C_type alpha,        \
-        const C_type beta, dlp_gemm_grp_post_op_attr grp_post_ops_attr,        \
+        const C_type beta, dlp_gemm_quant_op_attr grp_post_ops_attr,           \
         dlp_gemm_post_op* post_ops_list, dlp_gemm_post_op_attr post_ops_attr)
 
 DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant);
@@ -318,7 +318,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant);
         const md_t cs_a, const md_t ps_a, const B_type* b, const md_t rs_b,    \
         const md_t cs_b, float* c, const md_t rs_c, const C_type alpha,        \
         const C_type beta, const md_t n0_rem,                                  \
-        dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
+        dlp_gemm_quant_op_attr grp_post_ops_attr,                              \
         dlp_gemm_post_op* post_ops_list, dlp_gemm_post_op_attr post_ops_attr)
 
 DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
@@ -461,7 +461,7 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x48);
         const md_t k0, const A_type* a, const md_t rs_a, const md_t cs_a,      \
         const B_type* b, const md_t rs_b, const md_t cs_b, float* c,           \
         const md_t rs_c, const C_type alpha, const C_type beta,                \
-        dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
+        dlp_gemm_quant_op_attr grp_post_ops_attr,                              \
         dlp_gemm_post_op* post_ops_list, dlp_gemm_post_op_attr post_ops_attr)
 
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x48_sym_quant);
@@ -574,7 +574,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1xlt16);
         const md_t k0, const A_type* a, const md_t rs_a, const md_t cs_a,      \
         const B_type* b, const md_t rs_b, const md_t cs_b, float* c,           \
         const md_t rs_c, const C_type alpha, const C_type beta,                \
-        const md_t n0_rem, dlp_gemm_grp_post_op_attr grp_post_ops_attr,        \
+        const md_t n0_rem, dlp_gemm_quant_op_attr grp_post_ops_attr,           \
         dlp_gemm_post_op* post_ops_list, dlp_gemm_post_op_attr post_ops_attr)
 
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
@@ -623,8 +623,7 @@ DLP_GEMV_M_EQ1_KERN(float16, float16, float16, f16f16f16of16);
         md_t rs_b, const md_t cs_b, const AOCL_DLP_MEMORY_TAG mtag_b,          \
         float* c, const md_t rs_c, const md_t cs_c, const C_type alpha,        \
         const C_type beta, md_t NR, const md_t KC, const md_t n_sub_updated,   \
-        const md_t                jc_cur_loop_rem,                             \
-        dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
+        const md_t jc_cur_loop_rem, dlp_gemm_quant_op_attr grp_post_ops_attr,  \
         dlp_gemm_post_op* post_op, dlp_gemm_post_op_attr* post_op_attr)
 
 DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
@@ -653,8 +652,8 @@ DLP_GEMV_N_EQ1_KERN(float16, float16, float16, f16f16f16of16);
         const md_t rs_b, const md_t cs_b, const AOCL_DLP_MEMORY_TAG mtag_b,    \
         float* c, const md_t rs_c, const md_t cs_c, const C_type alpha,        \
         const C_type beta, const md_t MR, const md_t KC,                       \
-        dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
-        dlp_gemm_post_op* post_op, dlp_gemm_post_op_attr* post_op_attr)
+        dlp_gemm_quant_op_attr grp_post_ops_attr, dlp_gemm_post_op* post_op,   \
+        dlp_gemm_post_op_attr* post_op_attr)
 
 DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
 

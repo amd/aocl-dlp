@@ -160,7 +160,9 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
     // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
     // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
     // and GEMM panel boundaries diverge.
-    KC = dlp_gemm_align_kc_to_group(KC, grp_post_op_list->group_size);
+    md_t group_size = dlp_gemm_get_quant_group_size(a_quant_op->group_size,
+                                                    b_quant_op->group_size, k);
+    KC              = dlp_gemm_align_kc_to_group(KC, group_size);
 
     // Strides are updated based on matrix packing/reordering.
     int8_t* a_use    = (int8_t*)a;
@@ -194,46 +196,10 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 
     int8_t* pack_a_buffer_s8s8s32os32 = NULL;
 
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
+    dlp_gemm_quant_op_attr quant_op_attr = { 0 };
 
-    md_t group_size = grp_post_op_list->group_size;
-
-    // Normalize group_size == 0 (no grouping) and group_size >= k to a single
-    // group over the full K, so num_groups == 1 and the frame/kernel agree on
-    // grp_post_op_lda. Also avoids the div-by-zero in num_groups below.
-    if ((group_size == 0) || (group_size > k)) {
-        group_size = k;
-    }
-
-    // Initialize group post ops attributes.
-    grp_post_ops_attr.a_scale_factor     = grp_post_op_list->a_scale_factor;
-    grp_post_ops_attr.a_scale_factor_len = grp_post_op_list->a_scale_factor_len;
-    grp_post_ops_attr.b_scale_factor     = grp_post_op_list->b_scale_factor;
-    grp_post_ops_attr.b_scale_factor_len = grp_post_op_list->b_scale_factor_len;
-    grp_post_ops_attr.a_zp               = grp_post_op_list->a_zp;
-    grp_post_ops_attr.b_zp               = grp_post_op_list->b_zp;
-    grp_post_ops_attr.a_zp_len           = grp_post_op_list->a_zp_len;
-    grp_post_ops_attr.b_zp_len           = grp_post_op_list->b_zp_len;
-    grp_post_ops_attr.group_size         = group_size;
-    grp_post_ops_attr.sf_stor_type       = grp_post_op_list->sf_stor_type;
-    grp_post_ops_attr.zp_stor_type       = grp_post_op_list->zp_stor_type;
-
-    // Derive per-matrix group strides from each matrix's scale-factor dim.
-    //   A PER_TOKEN:   A has one scale per row    (lda=1, a_grp_mul=0).
-    //   B PER_CHANNEL: B has one scale per column (b_grp_mul=0).
-    //   otherwise:     stride by group (legacy behaviour).
-    md_t num_groups = (k + group_size - 1) / group_size;
-    grp_post_ops_attr.a_grp_mul =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 0
-                                                                          : 1;
-    grp_post_ops_attr.b_grp_mul =
-        (grp_post_op_list->b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 0
-                                                                            : 1;
-    grp_post_ops_attr.grp_post_op_lda =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN)
-            ? 1
-            : num_groups;
-    grp_post_ops_attr.grp_post_op_ldb = n;
+    dlp_gemm_fill_quant_op_attr(&quant_op_attr, a_quant_op, b_quant_op,
+                                group_size, k, n);
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;
@@ -263,9 +229,9 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         thread_ic.work_id = thread->tid;
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-        grp_post_ops_attr.grp_post_op_k = 0;
+        quant_op_attr.grp_post_op_k = 0;
         for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
-            grp_post_ops_attr.grp_post_op_i = ic;
+            quant_op_attr.grp_post_op_i = ic;
 
             md_t mc0 = dlp_min((ic_end - ic), MC);
 
@@ -307,13 +273,13 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                     rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use, 0,
                     0, (void*)c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
                     post_op_list, post_ops_attr, (dlp_gemm_pre_op_attr){ 0 },
-                    grp_post_ops_attr);
+                    quant_op_attr);
             } else {
                 // Call dlp_gemv_n_one kernel
                 dlp_gemv_n_one_s8s8s32os32_sym_quant(
                     mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
                     cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
-                    grp_post_ops_attr, post_op_list, &post_ops_attr);
+                    quant_op_attr, post_op_list, &post_ops_attr);
             }
         }
 
@@ -361,13 +327,13 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
             a_use = pack_a_buffer_s8s8s32os32;
         }
 
-        grp_post_ops_attr.grp_post_op_k = 0;
+        quant_op_attr.grp_post_op_k = 0;
         // m == 1 on this path, so the output row origin is always 0. It has to
         // be assigned rather than left at whatever the stack held: the kernel
         // indexes the A scales from grp_post_op_i * grp_post_op_lda.
-        grp_post_ops_attr.grp_post_op_i = 0;
+        quant_op_attr.grp_post_op_i = 0;
         for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
-            grp_post_ops_attr.grp_post_op_j = jc;
+            quant_op_attr.grp_post_op_j = jc;
 
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc;
@@ -388,7 +354,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                 post_ops_attr.b_col_sum_vec =
                     ((int32_t*)(b + (k_updated * n_updated))) + jc;
 
-                grp_post_ops_attr.grp_post_op_sum_ld = n_updated;
+                quant_op_attr.grp_post_op_sum_ld = n_updated;
             } else if (mtag_b == PACK) {
                 // Unreordered B not supported.
                 return;
@@ -410,13 +376,13 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                     rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use,
                     n_sub_updated, jc_cur_loop_rem, (void*)c_use, rs_c, cs_c,
                     (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr,
-                    (dlp_gemm_pre_op_attr){ 0 }, grp_post_ops_attr);
+                    (dlp_gemm_pre_op_attr){ 0 }, quant_op_attr);
             } else {
                 dlp_gemv_m_one_s8s8s32os32_sym_quant(
                     nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
                     cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
-                    n_sub_updated, jc_cur_loop_rem, grp_post_ops_attr,
-                    post_op_list, &post_ops_attr);
+                    n_sub_updated, jc_cur_loop_rem, quant_op_attr, post_op_list,
+                    &post_ops_attr);
             }
 
             if (mtag_b == REORDERED) {
@@ -439,6 +405,9 @@ DLP_GEMM_5LOOP_UNIFIED(
     // Extract operations from bundle into local variables
     DLP_GEMM_OPS_EXTRACT(ops);
 
+    md_t group_size = dlp_gemm_get_quant_group_size(a_quant_op->group_size,
+                                                    b_quant_op->group_size, k);
+
     md_t NC = lcntx->blksz.NC;
     md_t MC = lcntx->blksz.MC;
     md_t NR = lcntx->blksz.NR;
@@ -448,14 +417,12 @@ DLP_GEMM_5LOOP_UNIFIED(
     // to K must not stick: reorder used the table value and wrote one column
     // sum per panel.
     md_t table_kc = dlp_gemm_get_global_cntx_obj(S8S8S32OS32)->blksz.KC;
-    md_t gs_raw   = grp_post_op_list->group_size;
-    md_t gs_norm  = ((gs_raw == 0) || (gs_raw > k)) ? k : gs_raw;
     // n==1 keeps the grown KC: that reorder is the tight single-column
     // layout, and the GEMV gate needs KC divisible by the group. m==1 with
     // a wide B uses the same per-panel sums as the m>1 path, so KC stays
     // at the table value and the GEMV gate falls through to this 5-loop.
-    md_t KC = ((n == 1) || (gs_norm != k))
-                  ? dlp_gemm_align_kc_to_group(table_kc, gs_norm)
+    md_t KC = ((n == 1) || (group_size != k))
+                  ? dlp_gemm_align_kc_to_group(table_kc, group_size)
                   : table_kc;
 
     if (mtag_b == UNPACKED) {
@@ -467,13 +434,12 @@ DLP_GEMM_5LOOP_UNIFIED(
     // Invoke sym_quant gemv kernels for m = 1 or n = 1.
     // Quantized GEMV is supported iff K and KC are divisible by group_size.
     // Fall back to GEMM path otherwise.
-    if (((k % grp_post_op_list->group_size) == 0)
-        && ((KC % grp_post_op_list->group_size) == 0) && (mtag_b == REORDERED)
-        && ((m == 1) || (n == 1))) {
+    if (((k % group_size) == 0) && ((KC % group_size) == 0)
+        && (mtag_b == REORDERED) && ((m == 1) || (n == 1))) {
 
         dlp_gemv_rowvar_s8s8s32o32_sym_quant(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, rntm, thread, lcntx, grp_post_op_list,
+            cs_c, alpha, beta, rntm, thread, lcntx, a_quant_op, b_quant_op,
             post_op_list, c_downscale);
 
         return;
@@ -525,8 +491,8 @@ DLP_GEMM_5LOOP_UNIFIED(
     // To decide whether to use original s8 C or temp buffer for beta scale.
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr     post_ops_attr     = { 0 };
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
+    dlp_gemm_post_op_attr  post_ops_attr = { 0 };
+    dlp_gemm_quant_op_attr quant_op_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -541,44 +507,8 @@ DLP_GEMM_5LOOP_UNIFIED(
         post_ops_attr.buf_downscale = NULL;
     }
 
-    md_t group_size = grp_post_op_list->group_size;
-
-    // Normalize group_size == 0 (no grouping) and group_size >= k to a single
-    // group over the full K, so num_groups == 1 and the frame/kernel agree on
-    // grp_post_op_lda. Also avoids the div-by-zero in num_groups below.
-    if ((group_size == 0) || (group_size > k)) {
-        group_size = k;
-    }
-
-    // Initialize group post ops attributes.
-    grp_post_ops_attr.a_scale_factor     = grp_post_op_list->a_scale_factor;
-    grp_post_ops_attr.a_scale_factor_len = grp_post_op_list->a_scale_factor_len;
-    grp_post_ops_attr.b_scale_factor     = grp_post_op_list->b_scale_factor;
-    grp_post_ops_attr.b_scale_factor_len = grp_post_op_list->b_scale_factor_len;
-    grp_post_ops_attr.a_zp               = grp_post_op_list->a_zp;
-    grp_post_ops_attr.b_zp               = grp_post_op_list->b_zp;
-    grp_post_ops_attr.a_zp_len           = grp_post_op_list->a_zp_len;
-    grp_post_ops_attr.b_zp_len           = grp_post_op_list->b_zp_len;
-    grp_post_ops_attr.group_size         = group_size;
-    grp_post_ops_attr.sf_stor_type       = grp_post_op_list->sf_stor_type;
-    grp_post_ops_attr.zp_stor_type       = grp_post_op_list->zp_stor_type;
-
-    // Derive per-matrix group strides from each matrix's scale-factor dim.
-    //   A PER_TOKEN:   A has one scale per row    (lda=1, a_grp_mul=0).
-    //   B PER_CHANNEL: B has one scale per column (b_grp_mul=0).
-    //   otherwise:     stride by group (legacy behaviour).
-    md_t num_groups = (k + group_size - 1) / group_size;
-    grp_post_ops_attr.a_grp_mul =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 0
-                                                                          : 1;
-    grp_post_ops_attr.b_grp_mul =
-        (grp_post_op_list->b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 0
-                                                                            : 1;
-    grp_post_ops_attr.grp_post_op_lda =
-        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN)
-            ? 1
-            : num_groups;
-    grp_post_ops_attr.grp_post_op_ldb = n;
+    dlp_gemm_fill_quant_op_attr(&quant_op_attr, a_quant_op, b_quant_op,
+                                group_size, k, n);
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;
@@ -645,7 +575,7 @@ DLP_GEMM_5LOOP_UNIFIED(
             int32_t beta0 = (pc == 0) ? beta : 1;
             md_t    kc0   = dlp_min((k - pc), KC);
 
-            grp_post_ops_attr.grp_post_op_k = pc;
+            quant_op_attr.grp_post_op_k = pc;
 
             // kc0 needs to be a multiple of 4 so that it can be
             // used with vpdpbusd instruction. Padding is added in
@@ -837,8 +767,8 @@ DLP_GEMM_5LOOP_UNIFIED(
                                    &thread->comm[jc_work_id]);
                 b_use = pack_b_buffer_s8s8s32o32;
 
-                post_ops_attr.b_col_sum_vec          = pack_b_column_sum;
-                grp_post_ops_attr.grp_post_op_sum_ld = nc0_updated;
+                post_ops_attr.b_col_sum_vec      = pack_b_column_sum;
+                quant_op_attr.grp_post_op_sum_ld = nc0_updated;
 
             } else if (mtag_b == REORDERED) {
                 // In multi-threaded scenarios, an extra offset into a given
@@ -856,7 +786,7 @@ DLP_GEMM_5LOOP_UNIFIED(
                 post_ops_attr.b_col_sum_vec =
                     ((int32_t*)(b + (k_updated * n_updated)))
                     + (sum_panel * n_updated) + jc;
-                grp_post_ops_attr.grp_post_op_sum_ld = n_updated;
+                quant_op_attr.grp_post_op_sum_ld = n_updated;
             } else {
                 // Unpacked B not supported.
                 return;
@@ -865,7 +795,7 @@ DLP_GEMM_5LOOP_UNIFIED(
             for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
-                grp_post_ops_attr.grp_post_op_i = ic;
+                quant_op_attr.grp_post_op_i = ic;
 
                 // Only per thread C matrix is stored in temp buffer, so both
                 // per thread jc and ic start should be normalized to zero.
@@ -920,7 +850,7 @@ DLP_GEMM_5LOOP_UNIFIED(
                     post_ops_attr.post_op_c_j    = (jc + jr);
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
-                    grp_post_ops_attr.grp_post_op_j = jc + jr;
+                    quant_op_attr.grp_post_op_j = jc + jr;
 
 #ifdef DLP_KERNELS_ZEN4
                     if (lcntx->dlp_quant_kernel_hndl.kernel_base != NULL) {
@@ -932,13 +862,13 @@ DLP_GEMM_5LOOP_UNIFIED(
                             (void*)dlp_offset_or_null_f32(c_use_ic, jr),
                             rs_c_use, 1, (void*)&alpha, (void*)&beta0,
                             post_op_list, post_ops_attr,
-                            (dlp_gemm_pre_op_attr){ 0 }, grp_post_ops_attr);
+                            (dlp_gemm_pre_op_attr){ 0 }, quant_op_attr);
                     } else {
                         dlp_gemm_rowvar_s8s8s32os32_6x64m_sym_quant(
                             mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
                             a_block_stride, (b_use + (jr * kc0_updated)),
                             rs_b_use, cs_b_use, (c_use_ic + jr), rs_c_use, 1,
-                            alpha, beta0, grp_post_ops_attr, post_op_list,
+                            alpha, beta0, quant_op_attr, post_op_list,
                             post_ops_attr);
                     }
 #endif

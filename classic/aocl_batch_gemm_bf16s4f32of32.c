@@ -108,22 +108,18 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
             goto err_hndl;
         }
 
-        // Add early returns for NULL pointers.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->b_quant_op == NULL
-            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
+        if (metadata[gc_i] == NULL) {
             dlp_print_msg(
-                "Required parameters for symmetric woq missing. Exiting..",
+                " Required parameters for WOQ batch GEMM through metadata are "
+                "missing. Exiting..",
                 __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
             goto err_hndl;
         }
 
-        // Note: b_zp is not required for this kernel.
-        if (metadata[gc_i]->b_quant_op->zero_point != NULL) {
-            dlp_print_msg(" zero-point is not required, asymmetric woq not "
-                          "supported. Exiting..",
-                          __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+        dlp_clsc_err_t err = dlp_gemm_validate_woq_quant_op(
+            metadata[gc_i]->b_quant_op, n[gc_i], k[gc_i], false);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -140,16 +136,6 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
         AOCL_DLP_MEMORY_TAG mtag_b;
 
         dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
-        dlp_gemm_pre_op  pre_op_list[AOCL_DLP_MAX_PRE_OPS];
-
-        // Convert pre op struct to pre op linked list format.
-        dlp_clsc_err_t err = dlp_gemm_translate_to_pre_ops_list(
-            metadata[gc_i]->b_quant_op, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
-
         // Convert post op struct to post op linked list format.
         err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list, (void*)c[gc_i],
@@ -256,17 +242,9 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
 
         dlp_gemm_cntx_t lcntx_g =
             *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
-        // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for 'R' B.
-        if (pre_op_list->group_size != (uint64_t)k_local) {
-            lcntx_g.blksz.KC = dlp_gemm_align_kc_to_group(
-                lcntx_g.blksz.KC, pre_op_list->group_size);
-        }
-        // No quant DE on batch yet: force in-kernel widen so the 5-loop takes
-        // the classic UNPACKED path (packed BF16 JIT is single-GEMM only).
-        lcntx_g.dlp_quant_kernel_hndl.nibble_widen_site =
-            DLP_NIBBLE_WIDEN_IN_KERNEL;
-        dlp_gemm_ops_bundle_t ops =
-            DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+
+        dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_WOQ(
+            metadata[gc_i]->b_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
         batch_dlp_gemm_bf16s4f32of32_openmp_thread_decorator(
@@ -360,22 +338,18 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
             goto err_hndl;
         }
 
-        // Add early returns for NULL pointers.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->b_quant_op == NULL
-            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
+        if (metadata[gc_i] == NULL) {
             dlp_print_msg(
-                "Required parameters for symmetric woq missing. Exiting..",
+                " Required parameters for WOQ batch GEMM through metadata are "
+                "missing. Exiting..",
                 __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
             goto err_hndl;
         }
 
-        // Note: b_zp is not required for this kernel.
-        if (metadata[gc_i]->b_quant_op->zero_point != NULL) {
-            dlp_print_msg(" zero-point is not required, asymmetric woq not "
-                          "supported. Exiting..",
-                          __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+        dlp_clsc_err_t err = dlp_gemm_validate_woq_quant_op(
+            metadata[gc_i]->b_quant_op, n[gc_i], k[gc_i], false);
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 
@@ -396,16 +370,6 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
         md_t             m_local, n_local, k_local;
 
         dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
-        dlp_gemm_pre_op  pre_op_list[AOCL_DLP_MAX_PRE_OPS];
-
-        // Convert pre op struct to pre op linked list format.
-        dlp_clsc_err_t err = dlp_gemm_translate_to_pre_ops_list(
-            metadata[gc_i]->b_quant_op, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
-
         // Convert post op struct to post op linked list format.
         err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list, (void*)c[gc_i],
@@ -508,17 +472,9 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
 
         dlp_gemm_cntx_t lcntx_g =
             *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
-        // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for 'R' B.
-        if (pre_op_list->group_size != (uint64_t)k_local) {
-            lcntx_g.blksz.KC = dlp_gemm_align_kc_to_group(
-                lcntx_g.blksz.KC, pre_op_list->group_size);
-        }
-        // No quant DE on batch yet: force in-kernel widen so the 5-loop takes
-        // the classic UNPACKED path (packed BF16 JIT is single-GEMM only).
-        lcntx_g.dlp_quant_kernel_hndl.nibble_widen_site =
-            DLP_NIBBLE_WIDEN_IN_KERNEL;
-        dlp_gemm_ops_bundle_t ops =
-            DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+
+        dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_WOQ(
+            metadata[gc_i]->b_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
         batch_dlp_gemm_bf16s4f32of32_openmp_thread_decorator(

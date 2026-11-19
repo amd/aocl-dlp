@@ -945,7 +945,7 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                               dlp_gemm_post_op*             post_ops_list,
                               dlp_gemm_post_op_attr         post_ops_attr,
                               dlp_gemm_pre_op_attr          pre_ops_attr,
-                              dlp_gemm_grp_post_op_attr     grp_post_ops_attr)
+                              dlp_gemm_quant_op_attr        quant_op_attr)
 {
     if (!kernel_hndl || !kernel_hndl->kernel_base) {
         return;
@@ -975,7 +975,7 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                                      beta,
                                      post_ops_list,
                                      post_ops_attr,
-                                     grp_post_ops_attr,
+                                     quant_op_attr,
                                      pre_ops_attr };
         kB->operator()(std::addressof(gemvM1ParamsIn));
     } else if ((kernel_hndl->nr == 1) && (n == 1)) {
@@ -994,7 +994,7 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                                      beta,
                                      post_ops_list,
                                      post_ops_attr,
-                                     grp_post_ops_attr,
+                                     quant_op_attr,
                                      pre_ops_attr };
         kB->operator()(std::addressof(gemvN1ParamsIn));
     } else {
@@ -1020,7 +1020,7 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                                  beta,
                                  post_ops_list,
                                  post_ops_attr,
-                                 grp_post_ops_attr,
+                                 quant_op_attr,
                                  pre_ops_attr };
         kB->operator()(std::addressof(gemmParamsIn));
     }

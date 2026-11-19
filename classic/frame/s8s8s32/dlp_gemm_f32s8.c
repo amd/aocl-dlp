@@ -60,13 +60,6 @@ DLP_GEMV3(float, int8_t, int32_t, f32s8s32os32)
     DLP_TYPE sf_type = a_quant_op->quant_scale_factors->stor_type;
 
     dlp_qparam_t* a_zp_qparam = a_quant_op->zero_point;
-    if ((a_zp_qparam != NULL)
-        && ((a_zp_qparam->data == NULL) || (a_zp_qparam->len == 0))) {
-        dlp_print_msg(" Zero point parameters for A matrix quantization "
-                      "are invalid when asymmetric quantization is used.",
-                      __FILE__, __LINE__);
-        return;
-    }
 
     // Zero-point parameters for A matrix quantization.
     void*    zp_val  = NULL;
@@ -371,15 +364,6 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
         return;
     }
 
-    // Validate quantization parameters.
-    if (a_quant_op == NULL || a_quant_op->quant_scale_factors == NULL
-        || a_quant_op->quant_scale_factors->data == NULL) {
-        dlp_print_msg(
-            " Scale factor parameters for A matrix quantization are missing.",
-            __FILE__, __LINE__);
-        return;
-    }
-
     if (m == 1 || n == 1) {
         dlp_gemv_rowvar_f32s8s32os32(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
                                      cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
@@ -394,13 +378,6 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
     DLP_TYPE sf_type = a_quant_op->quant_scale_factors->stor_type;
 
     dlp_qparam_t* a_zp_qparam = a_quant_op->zero_point;
-    if ((a_zp_qparam != NULL)
-        && ((a_zp_qparam->data == NULL) || (a_zp_qparam->len == 0))) {
-        dlp_print_msg(" Zero point parameters for A matrix quantization "
-                      "are invalid when asymmetric quantization is used.",
-                      __FILE__, __LINE__);
-        return;
-    }
 
     // Zero-point parameters for A matrix quantization.
     // Symmetric quantization: zp = 0 (no zero-point correction needed)

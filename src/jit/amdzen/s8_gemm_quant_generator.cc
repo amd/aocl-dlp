@@ -37,10 +37,10 @@ namespace amdzen::GEMMcodeGenerator {
 
 using namespace Xbyak;
 
-// Byte offset of a dlp_gemm_grp_post_op_attr field within gemmParams.
+// Byte offset of a dlp_gemm_quant_op_attr field within gemmParams.
 #define GRP_ATTR_OFF(field)                                                    \
     (offsetof(dlp::kernels::gemmParams, grpKernelOpsAttr)                      \
-     + offsetof(dlp_gemm_grp_post_op_attr, field))
+     + offsetof(dlp_gemm_quant_op_attr, field))
 
 template<utils::kernelInstrType KType>
 jitGEMMQuant<KType>::jitGEMMQuant(size_t maxSize)

@@ -93,7 +93,7 @@ class jitGEMMQuant : public Xbyak::CodeGenerator
         dlp::kernel_frame::DataType::invalid;
 
     // Whether each scale array is tiled along K. Mirrors a_grp_mul / b_grp_mul
-    // in dlp_gemm_grp_post_op_attr_t: A PER_TOKEN holds one scale per row and B
+    // in dlp_gemm_quant_op_attr_t: A PER_TOKEN holds one scale per row and B
     // PER_CHANNEL one per column, both of which collapse the K axis. When false
     // the K-group index contributes no offset to that operand's scale address
     // and its running pointer must not advance between groups. Baked in here

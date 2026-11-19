@@ -205,57 +205,24 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         mtag_b = PACK;
     }
 
-    // Add early returns for NULL group quantization parameters.
-    if (metadata == NULL || metadata->a_quant_op == NULL
-        || metadata->b_quant_op == NULL
-        || metadata->a_quant_op->dequant_scale_factors == NULL
-        || metadata->b_quant_op->dequant_scale_factors == NULL) {
-        dlp_print_msg(
-            "Required parameters for symmetric quantized GEMM missing."
-            " Exiting..",
-            __FILE__, __LINE__);
+    if (metadata == NULL) {
+        dlp_print_msg(" Required parameters for sym quant GEMM through "
+                      "metadata are missing. Exiting..",
+                      __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
         goto err_hndl;
     }
 
-    // Validate scale-factor granularity up front. A (M x K) varies over rows
-    // and is grouped along K, so PER_TOKEN / PER_GROUP are valid but
-    // PER_CHANNEL (a column/N concept) and PER_TENSOR are not. B (K x N)
-    // varies over columns, so PER_CHANNEL / PER_GROUP are valid but PER_TOKEN
-    // (a row/M concept) and PER_TENSOR are not. Reject cross-assigned dims
-    // instead of silently coercing them to PER_GROUP.
-    {
-        DLP_PARAM_DIM_TYPE a_dim =
-            metadata->a_quant_op->dequant_scale_factors->outer_dim;
-        DLP_PARAM_DIM_TYPE b_dim =
-            metadata->b_quant_op->dequant_scale_factors->outer_dim;
-        if ((a_dim != DLP_PARAM_DIM_PER_TOKEN)
-            && (a_dim != DLP_PARAM_DIM_PER_GROUP)) {
-            dlp_print_msg(" A scale factor outer_dim must be PER_TOKEN or "
-                          "PER_GROUP for sym_quant. Exiting..",
-                          __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-            goto err_hndl;
-        }
-        if ((b_dim != DLP_PARAM_DIM_PER_CHANNEL)
-            && (b_dim != DLP_PARAM_DIM_PER_GROUP)) {
-            dlp_print_msg(" B scale factor outer_dim must be PER_CHANNEL or "
-                          "PER_GROUP for sym_quant. Exiting..",
-                          __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-            goto err_hndl;
-        }
-    }
-
-    // convert group-level post-op struct to linked list format.
-    dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
-    dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
-        metadata->a_quant_op, metadata->b_quant_op, grp_post_op_list, m, n, k);
+    dlp_clsc_err_t err = dlp_gemm_validate_sym_quant_ops(
+        metadata->a_quant_op, metadata->b_quant_op, m, n, k);
 
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
+
+    md_t group_size = dlp_gemm_get_quant_group_size(
+        metadata->a_quant_op->group_size, metadata->b_quant_op->group_size, k);
 
     // For column-major, the kernel swaps A and B matrices.
     // Consequentially, the scale factor arrays must also be swapped and
@@ -264,88 +231,39 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
     // Kernel expects:   a_scale (n, num_groups), b_scale (num_groups, m)
     // Each swap is essentially a matrix transpose.
     if (is_column_major == TRUE) {
-        md_t group_size = grp_post_op_list[0].group_size;
-
-        md_t num_groups = (k + group_size - 1) / group_size;
+        const dlp_qparam_t* a_sf = metadata->a_quant_op->dequant_scale_factors;
+        const dlp_qparam_t* b_sf = metadata->b_quant_op->dequant_scale_factors;
+        md_t                num_groups = (k + group_size - 1) / group_size;
 
         // Per-matrix group counts. A PER_TOKEN collapses A to a single group
         // (one scale per row); B PER_CHANNEL collapses B to a single group (one
         // scale per column). Otherwise both stay per-group.
-        md_t a_ng =
-            (grp_post_op_list[0].a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN)
-                ? 1
-                : num_groups;
-        md_t b_ng = (grp_post_op_list[0].b_scale_factor_dim
-                     == DLP_PARAM_DIM_PER_CHANNEL)
-                        ? 1
-                        : num_groups;
+        md_t a_ng = (a_sf->outer_dim == DLP_PARAM_DIM_PER_TOKEN) ? 1
+                                                                 : num_groups;
+        md_t b_ng = (b_sf->outer_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 1
+                                                                   : num_groups;
 
-        // Element size depends on the scale factor storage type.
-        size_t sf_elem_size = (grp_post_op_list[0].sf_stor_type == DLP_BF16)
-                                  ? sizeof(int16_t)
-                                  : sizeof(float);
+        size_t sf_elem_size = (a_sf->stor_type == DLP_BF16) ? sizeof(int16_t)
+                                                            : sizeof(float);
 
-        // Transpose original b_scale (b_ng, n) to a_scale (n, b_ng)
-        // for the kernel.
-        if (grp_post_op_list[0].b_scale_factor != NULL) {
-            dlp_clsc_err_t ret_err;
-            msz_t          mem_a_buf_size_req = b_ng * n * sf_elem_size;
-            colmaj_a_scale_buf =
-                dlp_malloc_page_aligned(mem_a_buf_size_req, &ret_err);
+        // Validation already required a non-NULL scale array whose length
+        // covers the matrix. Transpose original b_scale (b_ng, n) into the
+        // kernel's A scale, and original a_scale (m, a_ng) into the kernel's
+        // B scale.
+        dlp_clsc_err_t ret_err;
+        colmaj_a_scale_buf =
+            dlp_malloc_page_aligned((msz_t)b_ng * n * sf_elem_size, &ret_err);
+        if (colmaj_a_scale_buf == NULL)
+            goto err_hndl;
+        dlp_transpose_scale_2d(colmaj_a_scale_buf, b_sf->data, b_ng, n,
+                               sf_elem_size);
 
-            if (colmaj_a_scale_buf == NULL)
-                goto err_hndl;
-
-            dlp_transpose_scale_2d(colmaj_a_scale_buf,
-                                   grp_post_op_list[0].b_scale_factor, b_ng, n,
-                                   sf_elem_size);
-        }
-
-        // Transpose original a_scale (m, a_ng) to b_scale (a_ng, m)
-        // for the kernel.
-        if (grp_post_op_list[0].a_scale_factor != NULL) {
-            dlp_clsc_err_t ret_err;
-            msz_t          mem_b_buf_size_req = a_ng * m * sf_elem_size;
-            colmaj_b_scale_buf =
-                dlp_malloc_page_aligned(mem_b_buf_size_req, &ret_err);
-
-            if (colmaj_b_scale_buf == NULL)
-                goto err_hndl;
-
-            dlp_transpose_scale_2d(colmaj_b_scale_buf,
-                                   grp_post_op_list[0].a_scale_factor, m, a_ng,
-                                   sf_elem_size);
-        }
-
-        // Swap scale factor pointers to transposed buffers.
-        grp_post_op_list[0].a_scale_factor = colmaj_a_scale_buf;
-        grp_post_op_list[0].b_scale_factor = colmaj_b_scale_buf;
-
-        // Swap scale factor lengths.
-        md_t tmp_sf_len = grp_post_op_list[0].a_scale_factor_len;
-        grp_post_op_list[0].a_scale_factor_len =
-            grp_post_op_list[0].b_scale_factor_len;
-        grp_post_op_list[0].b_scale_factor_len = tmp_sf_len;
-
-        // Swap zero-point pointers and lengths.
-        void* tmp_zp                 = grp_post_op_list[0].a_zp;
-        md_t  tmp_zp_len             = grp_post_op_list[0].a_zp_len;
-        grp_post_op_list[0].a_zp     = grp_post_op_list[0].b_zp;
-        grp_post_op_list[0].a_zp_len = grp_post_op_list[0].b_zp_len;
-        grp_post_op_list[0].b_zp     = tmp_zp;
-        grp_post_op_list[0].b_zp_len = tmp_zp_len;
-
-        // A and B swap roles under transpose, so their scale-factor dims swap
-        // too: an A PER_TOKEN scale (one per row) becomes a B PER_CHANNEL scale
-        // (one per column) and vice versa.
-        DLP_PARAM_DIM_TYPE old_a_dim = grp_post_op_list[0].a_scale_factor_dim;
-        DLP_PARAM_DIM_TYPE old_b_dim = grp_post_op_list[0].b_scale_factor_dim;
-        grp_post_op_list[0].a_scale_factor_dim =
-            (old_b_dim == DLP_PARAM_DIM_PER_CHANNEL) ? DLP_PARAM_DIM_PER_TOKEN
-                                                     : DLP_PARAM_DIM_PER_GROUP;
-        grp_post_op_list[0].b_scale_factor_dim =
-            (old_a_dim == DLP_PARAM_DIM_PER_TOKEN) ? DLP_PARAM_DIM_PER_CHANNEL
-                                                   : DLP_PARAM_DIM_PER_GROUP;
+        colmaj_b_scale_buf =
+            dlp_malloc_page_aligned((msz_t)a_ng * m * sf_elem_size, &ret_err);
+        if (colmaj_b_scale_buf == NULL)
+            goto err_hndl;
+        dlp_transpose_scale_2d(colmaj_b_scale_buf, a_sf->data, m, a_ng,
+                               sf_elem_size);
     }
 
     // Convert post op struct to post op linked list format.
@@ -405,9 +323,8 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         kernel_a_scale_factors = *(metadata->b_quant_op->dequant_scale_factors);
         kernel_b_scale_factors = *(metadata->a_quant_op->dequant_scale_factors);
 
-        // Re-label the granularities exactly as the grp_post_op_list swap
-        // above does: one scale per row of the original A is one scale per
-        // column of the kernel's B, and vice versa.
+        // One scale per row of the original A is one scale per column of the
+        // kernel's B, and vice versa.
         kernel_a_scale_factors.outer_dim =
             (metadata->b_quant_op->dequant_scale_factors->outer_dim
              == DLP_PARAM_DIM_PER_CHANNEL)
@@ -419,6 +336,8 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
                 ? DLP_PARAM_DIM_PER_CHANNEL
                 : DLP_PARAM_DIM_PER_GROUP;
 
+        kernel_a_scale_factors.data             = colmaj_a_scale_buf;
+        kernel_b_scale_factors.data             = colmaj_b_scale_buf;
         kernel_a_quant_op.dequant_scale_factors = &kernel_a_scale_factors;
         kernel_b_quant_op.dequant_scale_factors = &kernel_b_scale_factors;
 
@@ -426,11 +345,6 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         b_quant_op = &kernel_b_quant_op;
     }
 
-    // Align KC to group_size
-    md_t group_size = grp_post_op_list[0].group_size;
-    if ((group_size == 0) || (group_size > k)) {
-        group_size = k;
-    }
     // n==1 (after the column-major swap) still grows KC for the tight GEMV
     // layout. The wide path keeps the table KC.
     md_t base_kc     = lcntx_l.blksz.KC;
@@ -451,16 +365,13 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
             post_op_list, a_quant_op, b_quant_op, &lcntx_l, DLP_F32);
     }
 
-    // The GEMM path is required to run on the JIT kernel. A NULL handle would
-    // otherwise let the 5-loop fall back to the classic micro-kernel per tile,
-    // which is not the intended coverage, so refuse the call instead.
     if (lcntx_l.dlp_quant_kernel_hndl.kernel_base == NULL) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         goto err_hndl;
     }
 
     dlp_gemm_ops_bundle_t ops =
-        DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
+        DLP_GEMM_OPS_BUNDLE_INIT_QUANT_AB(a_quant_op, b_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
     if (dlp_is_single_thread(&rntm_g) == FALSE) {

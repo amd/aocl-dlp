@@ -105,33 +105,33 @@ struct gemmParams : public kernelParams
     // Quantization scaling fields
     void* quantScale; // Per-tensor or per-channel scale factor
 
-    dlp_gemm_post_op*         kernelOpsList;
-    dlp_gemm_post_op_attr     kernelOpsAttr;
-    dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+    dlp_gemm_post_op*      kernelOpsList;
+    dlp_gemm_post_op_attr  kernelOpsAttr;
+    dlp_gemm_quant_op_attr grpKernelOpsAttr;
     // WOQ / in-kernel nibble widen: scale+ZP tile state. Plain GEMM leaves
     // this zeroed; future in-kernel JIT reads it like classic packsclb.
     dlp_gemm_pre_op_attr preKernelOpsAttr;
 
-    gemmParams(void*                     A,
-               void*                     B,
-               void*                     C_acc,
-               md_t                      _m,
-               md_t                      _n,
-               md_t                      _k,
-               md_t                      rs_a,
-               md_t                      cs_a,
-               md_t                      ps_a,
-               md_t                      rs_b,
-               md_t                      cs_b,
-               md_t                      ps_b,
-               md_t                      rs_c,
-               md_t                      cs_c,
-               void*                     alpha_acc,
-               void*                     beta_acc,
-               dlp_gemm_post_op*         kernelOpsList,
-               dlp_gemm_post_op_attr     kernelOpsAttr,
-               dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {},
-               dlp_gemm_pre_op_attr      preKernelOpsAttr = {})
+    gemmParams(void*                  A,
+               void*                  B,
+               void*                  C_acc,
+               md_t                   _m,
+               md_t                   _n,
+               md_t                   _k,
+               md_t                   rs_a,
+               md_t                   cs_a,
+               md_t                   ps_a,
+               md_t                   rs_b,
+               md_t                   cs_b,
+               md_t                   ps_b,
+               md_t                   rs_c,
+               md_t                   cs_c,
+               void*                  alpha_acc,
+               void*                  beta_acc,
+               dlp_gemm_post_op*      kernelOpsList,
+               dlp_gemm_post_op_attr  kernelOpsAttr,
+               dlp_gemm_quant_op_attr grpKernelOpsAttr = {},
+               dlp_gemm_pre_op_attr   preKernelOpsAttr = {})
         : a(A)
         , b(B)
         , c(C_acc)
@@ -546,30 +546,30 @@ struct gemvN1Params : public kernelParams
 
     // Group-quantization state, consumed only by the quant GEMV kernels.
     // non-quant callers leave all three zeroed.
-    md_t                      num_groups;  // K-groups covered by this call
-    md_t                      group_start; // index of the first K-group
-    dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+    md_t                   num_groups;  // K-groups covered by this call
+    md_t                   group_start; // index of the first K-group
+    dlp_gemm_quant_op_attr grpKernelOpsAttr;
     // WOQ / in-kernel nibble widen pre-op state (see gemmParams).
     dlp_gemm_pre_op_attr preKernelOpsAttr;
 
     // Constructor
-    gemvN1Params(void*                     A,
-                 void*                     X,
-                 void*                     Y,
-                 md_t                      M,
-                 md_t                      K,
-                 md_t                      rs_a,
-                 md_t                      cs_a,
-                 md_t                      rs_b,
-                 md_t                      cs_b,
-                 md_t                      rs_c,
-                 md_t                      cs_c,
-                 void*                     alpha_acc,
-                 void*                     beta_acc,
-                 dlp_gemm_post_op*         kernelOps        = nullptr,
-                 dlp_gemm_post_op_attr     kernelOpsAttr    = {},
-                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {},
-                 dlp_gemm_pre_op_attr      preKernelOpsAttr = {})
+    gemvN1Params(void*                  A,
+                 void*                  X,
+                 void*                  Y,
+                 md_t                   M,
+                 md_t                   K,
+                 md_t                   rs_a,
+                 md_t                   cs_a,
+                 md_t                   rs_b,
+                 md_t                   cs_b,
+                 md_t                   rs_c,
+                 md_t                   cs_c,
+                 void*                  alpha_acc,
+                 void*                  beta_acc,
+                 dlp_gemm_post_op*      kernelOps        = nullptr,
+                 dlp_gemm_post_op_attr  kernelOpsAttr    = {},
+                 dlp_gemm_quant_op_attr grpKernelOpsAttr = {},
+                 dlp_gemm_pre_op_attr   preKernelOpsAttr = {})
         : a(A)
         , x(X)
         , y(Y)
@@ -805,30 +805,30 @@ struct gemvM1Params : public kernelParams
     md_t group_start;       // index of the first K-group
     md_t groups_per_panel;  // K-groups in a full KC panel
     md_t groups_last_panel; // K-groups in the trailing partial KC panel
-    dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+    dlp_gemm_quant_op_attr grpKernelOpsAttr;
     // WOQ / in-kernel nibble widen pre-op state (see gemmParams).
     dlp_gemm_pre_op_attr preKernelOpsAttr;
 
     // Constructor
-    gemvM1Params(void*                     X,
-                 void*                     B,
-                 void*                     Y,
-                 md_t                      N,
-                 md_t                      K,
-                 md_t                      rs_x,
-                 md_t                      cs_x,
-                 md_t                      rs_b,
-                 md_t                      cs_b,
-                 md_t                      rs_y,
-                 md_t                      cs_y,
-                 md_t                      n_sub_updated,
-                 md_t                      jc_cur_loop_rem,
-                 void*                     alpha_acc,
-                 void*                     beta_acc,
-                 dlp_gemm_post_op*         kernelOps        = nullptr,
-                 dlp_gemm_post_op_attr     kernelOpsAttr    = {},
-                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {},
-                 dlp_gemm_pre_op_attr      preKernelOpsAttr = {})
+    gemvM1Params(void*                  X,
+                 void*                  B,
+                 void*                  Y,
+                 md_t                   N,
+                 md_t                   K,
+                 md_t                   rs_x,
+                 md_t                   cs_x,
+                 md_t                   rs_b,
+                 md_t                   cs_b,
+                 md_t                   rs_y,
+                 md_t                   cs_y,
+                 md_t                   n_sub_updated,
+                 md_t                   jc_cur_loop_rem,
+                 void*                  alpha_acc,
+                 void*                  beta_acc,
+                 dlp_gemm_post_op*      kernelOps        = nullptr,
+                 dlp_gemm_post_op_attr  kernelOpsAttr    = {},
+                 dlp_gemm_quant_op_attr grpKernelOpsAttr = {},
+                 dlp_gemm_pre_op_attr   preKernelOpsAttr = {})
         : x(X)
         , b(B)
         , y(Y)

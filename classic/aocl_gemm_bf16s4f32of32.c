@@ -104,22 +104,18 @@ aocl_gemm_bf16s4f32of32(const char      order,
         goto err_hndl;
     }
 
-    // Add early returns for NULL pointers.
-    if (metadata == NULL || metadata->b_quant_op == NULL
-        || metadata->b_quant_op->dequant_scale_factors == NULL) {
+    if (metadata == NULL) {
         dlp_print_msg(
-            "Required parameters for symmetric woq missing. Exiting..",
+            " Required parameters for WOQ GEMM through metadata are missing. "
+            "Exiting..",
             __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
         goto err_hndl;
     }
 
-    // Note: b zero-point is not required for this kernel.
-    if (metadata->b_quant_op->zero_point != NULL) {
-        dlp_print_msg(" zero-point is not required, asymmetric woq not "
-                      "supported. Exiting..",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+    dlp_clsc_err_t err =
+        dlp_gemm_validate_woq_quant_op(metadata->b_quant_op, n, k, false);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
 
@@ -184,17 +180,6 @@ aocl_gemm_bf16s4f32of32(const char      order,
         goto err_hndl;
     }
 
-    // Convert pre op struct to pre op linked list format.
-    dlp_gemm_pre_op pre_op_list[AOCL_DLP_MAX_PRE_OPS];
-    dlp_clsc_err_t  err = dlp_gemm_translate_to_pre_ops_list(
-        metadata->b_quant_op, pre_op_list, m, n, k);
-    if (err != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to translate pre ops list. Invalid pre ops.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
-
     // Convert post op struct to post op linked list format.
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
     err = dlp_gemm_translate_to_post_ops_list(metadata, post_op_list, (void*)c,
@@ -213,9 +198,13 @@ aocl_gemm_bf16s4f32of32(const char      order,
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
     // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for mem_format_b 'R'.
-    if (pre_op_list->group_size != (uint64_t)k) {
-        lcntx_l.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC,
-                                                      pre_op_list->group_size);
+    // Validation accepts 0 as full K but leaves the field unchanged.
+    md_t woq_group_size = (metadata->b_quant_op->group_size == 0)
+                              ? k
+                              : metadata->b_quant_op->group_size;
+    if (woq_group_size != k) {
+        lcntx_l.blksz.KC =
+            dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC, woq_group_size);
     }
 
     // Seed ways for the DE; it publishes the resolved IC/JC split back into
@@ -260,7 +249,7 @@ aocl_gemm_bf16s4f32of32(const char      order,
     }
 
     dlp_gemm_ops_bundle_t ops =
-        DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+        DLP_GEMM_OPS_BUNDLE_INIT_WOQ(metadata->b_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
 
@@ -328,22 +317,18 @@ aocl_gemm_bf16s4f32obf16(const char      order,
         goto err_hndl;
     }
 
-    // Add early returns for NULL pointers.
-    if (metadata == NULL || metadata->b_quant_op == NULL
-        || metadata->b_quant_op->dequant_scale_factors == NULL) {
+    if (metadata == NULL) {
         dlp_print_msg(
-            "Required parameters for symmetric woq missing. Exiting..",
+            " Required parameters for WOQ GEMM through metadata are missing. "
+            "Exiting..",
             __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
         goto err_hndl;
     }
 
-    // Note: b zero-point is not required for this kernel.
-    if (metadata->b_quant_op->zero_point != NULL) {
-        dlp_print_msg(" zero-point is not required, asymmetric woq not "
-                      "supported. Exiting..",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+    dlp_clsc_err_t err =
+        dlp_gemm_validate_woq_quant_op(metadata->b_quant_op, n, k, false);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
 
@@ -409,18 +394,6 @@ aocl_gemm_bf16s4f32obf16(const char      order,
         mtag_a = PACK;
     }
 
-    // Convert pre op struct to pre op linked list format.
-    dlp_gemm_pre_op pre_op_list[AOCL_DLP_MAX_PRE_OPS];
-    dlp_clsc_err_t  err = dlp_gemm_translate_to_pre_ops_list(
-        metadata->b_quant_op, pre_op_list, m, n, k);
-
-    if (err != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to translate pre ops list. Invalid pre ops.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
-
     // Convert post op struct to post op linked list format.
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
     err = dlp_gemm_translate_to_post_ops_list(metadata, post_op_list, (void*)c,
@@ -440,9 +413,13 @@ aocl_gemm_bf16s4f32obf16(const char      order,
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
     // Same group-aligned KC as aocl_reorder_bf16s4f32of32 for mem_format_b 'R'.
-    if (pre_op_list->group_size != (uint64_t)k) {
-        lcntx_l.blksz.KC = dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC,
-                                                      pre_op_list->group_size);
+    // Validation accepts 0 as full K but leaves the field unchanged.
+    md_t woq_group_size = (metadata->b_quant_op->group_size == 0)
+                              ? k
+                              : metadata->b_quant_op->group_size;
+    if (woq_group_size != k) {
+        lcntx_l.blksz.KC =
+            dlp_gemm_align_kc_to_group(lcntx_l.blksz.KC, woq_group_size);
     }
 
     // Seed ways for the DE; it publishes the resolved IC/JC split back into
@@ -487,7 +464,7 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     }
 
     dlp_gemm_ops_bundle_t ops =
-        DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+        DLP_GEMM_OPS_BUNDLE_INIT_WOQ(metadata->b_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
     dlp_gemm_bf16s4f32of32_openmp_thread_decorator(

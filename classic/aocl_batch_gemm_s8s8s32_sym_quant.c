@@ -124,24 +124,17 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
         const int8_t **a_local, **b_local;
         md_t           m_local, n_local, k_local;
 
-        // Add early returns for NULL group quantization parameters.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->a_quant_op == NULL
-            || metadata[gc_i]->b_quant_op == NULL
-            || metadata[gc_i]->a_quant_op->dequant_scale_factors == NULL
-            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
+        if (metadata[gc_i] == NULL) {
             dlp_print_msg(
-                "Required parameters for symmetric quantized GEMM missing."
-                " Exiting..",
+                " Required parameters for sym quant batch GEMM through "
+                "metadata are missing. Exiting..",
                 __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
             goto err_hndl;
         }
 
-        // convert group-level post-op struct to linked list format.
-        dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
-        dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
-            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op,
-            grp_post_op_list, m[gc_i], n[gc_i], k[gc_i]);
+        dlp_clsc_err_t err = dlp_gemm_validate_sym_quant_ops(
+            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op, m[gc_i],
+            n[gc_i], k[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -321,10 +314,9 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
 
         // n==1 GEMV keeps the old align, so KC stays divisible by the group.
         // The wide path keeps the table KC for a single group.
-        md_t group_size_kc = grp_post_op_list[0].group_size;
-        if ((group_size_kc == 0) || (group_size_kc > k[gc_i])) {
-            group_size_kc = k[gc_i];
-        }
+        md_t group_size_kc = dlp_gemm_get_quant_group_size(
+            metadata[gc_i]->a_quant_op->group_size,
+            metadata[gc_i]->b_quant_op->group_size, k[gc_i]);
         {
             md_t base_kc = dlp_gemm_get_global_cntx_obj(S8S8S32OS32)->blksz.KC;
             lcntx_l.blksz.KC =
@@ -334,8 +326,9 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
         }
 
         // Create ops bundle for GRP GEMM (group post-ops + post-ops)
-        dlp_gemm_ops_bundle_t ops =
-            DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
+        dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_QUANT_AB(
+            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op,
+            post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
         batch_dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
@@ -443,24 +436,17 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
         const int8_t **a_local, **b_local;
         md_t           m_local, n_local, k_local;
 
-        // Add early returns for NULL group quantization parameters.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->a_quant_op == NULL
-            || metadata[gc_i]->b_quant_op == NULL
-            || metadata[gc_i]->a_quant_op->dequant_scale_factors == NULL
-            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
+        if (metadata[gc_i] == NULL) {
             dlp_print_msg(
-                "Required parameters for symmetric quantized GEMM missing."
-                " Exiting..",
+                " Required parameters for sym quant batch GEMM through "
+                "metadata are missing. Exiting..",
                 __FILE__, __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
             goto err_hndl;
         }
 
-        // convert group-level post-op struct to linked list format.
-        dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
-        dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
-            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op,
-            grp_post_op_list, m[gc_i], n[gc_i], k[gc_i]);
+        dlp_clsc_err_t err = dlp_gemm_validate_sym_quant_ops(
+            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op, m[gc_i],
+            n[gc_i], k[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -623,10 +609,9 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
 
         // n==1 GEMV keeps the old align, so KC stays divisible by the group.
         // The wide path keeps the table KC for a single group.
-        md_t group_size_kc = grp_post_op_list[0].group_size;
-        if ((group_size_kc == 0) || (group_size_kc > k[gc_i])) {
-            group_size_kc = k[gc_i];
-        }
+        md_t group_size_kc = dlp_gemm_get_quant_group_size(
+            metadata[gc_i]->a_quant_op->group_size,
+            metadata[gc_i]->b_quant_op->group_size, k[gc_i]);
         {
             md_t base_kc = dlp_gemm_get_global_cntx_obj(S8S8S32OS32)->blksz.KC;
             lcntx_l.blksz.KC =
@@ -636,8 +621,9 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
         }
 
         // Create ops bundle for GRP GEMM (group post-ops + post-ops)
-        dlp_gemm_ops_bundle_t ops =
-            DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
+        dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_QUANT_AB(
+            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op,
+            post_op_list);
 
         // The sym_quant 5-loop takes float* c. For bf16 output, the
         // c_downscale parameter (DLP_BF16) tells the micro-kernel to
